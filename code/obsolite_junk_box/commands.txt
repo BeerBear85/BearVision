@@ -1,0 +1,107 @@
+ffprobe -show_format -pretty -loglevel quiet "%~n1"
+
+Extract in certain timespan:
+ffmpeg -ss 00:00:30 -i orginalfile -t 00:00:05 -vcodec copy -acodec copy newfile
+ffmpeg -i [input_file] -ss [start_seconds] -t [duration_seconds] [output_file]
+More info: https://askubuntu.com/questions/59383/extract-part-of-a-video-with-a-one-line-command
+
+Resizing:
+ffmpeg -i [input_file] -vf scale=480:270 [output_file]
+
+Chopping:
+ffmpeg -i in.mp4 -filter:v "crop=out_w:out_h:x:y" out.mp4
+-out_w is the width of the output rectangle
+-out_h is the height of the output rectangle
+-x and y specify the top left corner of the output rectangle
+More on chopping:
+https://video.stackexchange.com/questions/4563/how-can-i-crop-a-video-with-ffmpeg
+
+Resize, reframe and chop:
+echo %time% & ffmpeg -i [input_file] -vf "crop=out_w:out_h:x:y, scale=iw:ih" -an -r 10 [output_file] & echo %time%
+
+
+Få fuld GPS datafil:
+ffmpeg -y -i ..\test_video\with_GPS.MP4 -codec copy -map 0:m:handler_name:"	GoPro MET" -f rawvideo ..\test_video\with_GPS.bin
+gopro2json -i ..\test_video\with_GPS.bin -o ..\test_video\with_GPS.json
+
+ ./ffmpeg -hwaccel cuvid -c:v h264_cuvid -i ..\test_video\with_GPS.MP4 -c:v h264_nvenc -preset slow output.MP4
+ ./ffmpeg -y -hwaccel cuvid -c:v h264_cuvid -i ..\test_video\with_GPS.MP4 -vf scale=270x481 -r 60 -c:v h264_nvenc -preset fast output.MP4
+
+..\test_video\with_GPS.MP4
+270x481
+2704x1520
+
+..\..\video\2017\sep_27\GP020491.MP4
+
+
+	
+	ffmpeg reads from an arbitrary number of input "files" (which can be regular files, pipes, network streams, grabbing devices, etc.), specified by the -i option, and writes to an arbitrary number of output "files", which are specified by a plain output url. Anything found on the command line which cannot be interpreted as an option is considered to be an output url.
+	Each input or output url can, in principle, contain any number of streams of different types (video/audio/subtitle/attachment/data). The allowed number and/or types of streams may be limited by the container format. Selecting which streams from which inputs will go into which output is either done automatically or with the -map option (see the Stream selection chapter).
+	
+	4 Stream selection
+	By default, ffmpeg includes only one stream of each type (video, audio, subtitle) present in the input files and adds them to each output file. It picks the "best" of each based upon the following criteria: for video, it is the stream with the highest resolution, for audio, it is the stream with the most channels, for subtitles, it is the first subtitle stream. In the case where several streams of the same type rate equally, the stream with the lowest index is chosen.
+	You can disable some of those defaults by using the -vn/-an/-sn/-dn options. For full manual control, use the -map option, which disables the defaults just described.
+	
+	-y: Overwrite output files without asking.
+	-i: Input file
+	-codec[:stream_specifier] codec (input/output,per-stream) same as: (-c[:stream_specifier] codec (input/output,per-stream))
+	-map: select stream
+	-f: Force input or output file format. The format is normally auto detected for input files and guessed from the file extension for output files, so this option is not needed in most cases.
+		rawvideo: Raw video demuxer.
+		
+		
+		
+		
+		
+		
+		
+		
+ffprobe version 3.3.3 Copyright (c) 2007-2017 the FFmpeg developers
+  built with gcc 7.1.0 (GCC)
+  configuration: --enable-gpl --enable-version3 --enable-cuda --enable-cuvid --enable-d3d11va --enable-dxva2 --enable-libmfx --enable-nvenc --enable-avisynth --enable-bzlib --enable-fontconfig --enable-frei0r --enable-gnutls --enable-iconv --enable-libass --enable-libbluray --enable-libbs2b --enable-libcaca --enable-libfreetype --enable-libgme --enable-libgsm --enable-libilbc --enable-libmodplug --enable-libmp3lame --enable-libopencore-amrnb --enable-libopencore-amrwb --enable-libopenh264 --enable-libopenjpeg --enable-libopus --enable-librtmp --enable-libsnappy --enable-libsoxr --enable-libspeex --enable-libtheora --enable-libtwolame --enable-libvidstab --enable-libvo-amrwbenc --enable-libvorbis --enable-libvpx --enable-libwavpack --enable-libwebp --enable-libx264 --enable-libx265 --enable-libxavs --enable-libxvid --enable-libzimg --enable-lzma --enable-zlib
+  libavutil      55. 58.100 / 55. 58.100
+  libavcodec     57. 89.100 / 57. 89.100
+  libavformat    57. 71.100 / 57. 71.100
+  libavdevice    57.  6.100 / 57.  6.100
+  libavfilter     6. 82.100 /  6. 82.100
+  libswscale      4.  6.100 /  4.  6.100
+  libswresample   2.  7.100 /  2.  7.100
+  libpostproc    54.  5.100 / 54.  5.100
+[mov,mp4,m4a,3gp,3g2,mj2 @ 00000000007e2560] Using non-standard frame rate 59/1
+Input #0, mov,mp4,m4a,3gp,3g2,mj2, from '..\test_video\with_GPS.MP4':
+  Metadata:
+    major_brand     : mp41
+    minor_version   : 538120216
+    compatible_brands: mp41
+    creation_time   : 2017-09-17T18:48:46.000000Z
+    location        : +55.6878+012.5374/
+    location-eng    : +55.6878+012.5374/
+    firmware        : HD5.02.02.51.00
+  Duration: 00:00:05.03, start: 0.000000, bitrate: 36643 kb/s
+    Stream #0:0(eng): Video: h264 (High) (avc1 / 0x31637661), yuvj420p(pc, bt709), 2704x1520 [SAR 1:1 DAR 169:95], 36544 kb/s, 59.94 fps, 59.94 tbr, 60k tbn, 119.88 tbc (default)
+    Metadata:
+      creation_time   : 2017-09-17T18:48:46.000000Z
+      handler_name    :         GoPro AVC
+      encoder         : GoPro AVC encoder
+      timecode        : 19:06:46:11
+    Stream #0:1(eng): Audio: aac (LC) (mp4a / 0x6134706D), 48000 Hz, stereo, fltp, 128 kb/s (default)
+    Metadata:
+      creation_time   : 2017-09-17T18:48:46.000000Z
+      handler_name    :         GoPro AAC
+      timecode        : 19:06:46:11
+    Stream #0:2(eng): Data: none (tmcd / 0x64636D74), 0 kb/s (default)
+    Metadata:
+      creation_time   : 2017-09-17T18:48:46.000000Z
+      handler_name    :         GoPro TCD
+      timecode        : 19:06:46:11
+    Stream #0:3(eng): Data: none (gpmd / 0x646D7067), 38 kb/s (default)
+    Metadata:
+      creation_time   : 2017-09-17T18:48:46.000000Z
+      handler_name    :         GoPro MET
+    Stream #0:4(eng): Data: none (fdsc / 0x63736466), 14 kb/s (default)
+    Metadata:
+      creation_time   : 2017-09-17T18:48:46.000000Z
+      handler_name    :         GoPro SOS
+Unsupported codec with id 0 for input stream 2
+Unsupported codec with id 0 for input stream 3
+Unsupported codec with id 0 for input stream 4

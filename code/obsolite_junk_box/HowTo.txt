@@ -1,0 +1,51 @@
+1. Download Anaconda Env. (https://www.anaconda.com/download/#windows)
+2. Run install command from Anaconda Prompt: "conda install -c conda-forge opencv" (https://anaconda.org/conda-forge/opencv)
+
+For Matlab: https://github.com/kyamagu/mexopencv/
+
+
+A cut specification:
+Contains the info about how to extract a trick-clip
+For instance, it contains the video file name, the start time and duration (track age).
+It also contains the coordinates for the bounding box for every frame of the duration.
+
+Detector:
+The MATLAB script that runs through the original video and detects motion that can be classified as a object moving through the screen.
+The output of the detector is a "cut specifiaction", which is placed in the inbox of the "Clip extractor"
+
+Clip extractor:
+Continously looks for a "cut specification" in the inbox.
+If a new specification is avaliable, a clip is extracted and the result is placed in the output directory.
+The timestamp saved in the meta data of the original video file (UTC time from the GoPro GPS) is extrated during this process.
+The filename of the clip consists of the extracted UTC time and original filename. 
+When the extraction of a clip is complete, the "cut specification" is renamed to the same name as the resulting video clip file and moved to the output folder.
+
+User handling:
+The task of this part is to identify if one of the registred users are in some of the detected clips.
+The users has been wearing a GPS logger during the session and the log file has been uploaded.
+This log file from the users, contains info about the location at a range of UTC times.
+The log file needs to be converted to the special "vision bear" format before use in the Python scripts.
+As the GoPro is also equiped with a GPS (and "tilhørende" correct UTC time), this is possible to be done with a high confidance.
+So in the "User handling", the times of avaliable video clip is extracted from the video file names.
+For each file, it is then checked if a registred use is within a certain range at this time.
+If this requirement is fulfilled, the video clip is moved to the users personal video folder.
+
+
+Preprocessor folder:
+First part of an atempt to make a better python based version of "Detector".
+The preprocessor only looked at a small part of the frame to detect if a large object entered.
+The output is full framesized video clips with a fixed duration.
+The idea was to have a fast preprocessor to detect possible interesting times in the video before matching this tho the GPS data of the registred user.
+That would mean that we did not have to extract all the many clips with persons who are out of interest.
+
+
+
+
+
+
+
+
+
+
+
+
