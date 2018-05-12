@@ -251,15 +251,15 @@
      inkscape:pageopacity="0.0"
      inkscape:pageshadow="2"
      inkscape:zoom="0.7"
-     inkscape:cx="524.36598"
+     inkscape:cx="271.50884"
      inkscape:cy="418.49411"
      inkscape:document-units="px"
      inkscape:current-layer="layer1"
      showgrid="false"
      inkscape:window-width="1920"
-     inkscape:window-height="1137"
-     inkscape:window-x="-8"
-     inkscape:window-y="-8"
+     inkscape:window-height="1001"
+     inkscape:window-x="-9"
+     inkscape:window-y="-9"
      inkscape:window-maximized="1" />
   <metadata
      id="metadata7">
@@ -269,7 +269,7 @@
         <dc:format>image/svg+xml</dc:format>
         <dc:type
            rdf:resource="http://purl.org/dc/dcmitype/StillImage" />
-        <dc:title></dc:title>
+        <dc:title />
       </cc:Work>
     </rdf:RDF>
   </metadata>
@@ -387,15 +387,15 @@
          sodipodi:role="line"
          x="71.720825"
          y="870.0592"
-         id="tspan4241">      /GPS_files</tspan><tspan
+         id="tspan4241">      /location_info</tspan><tspan
          sodipodi:role="line"
          x="71.720825"
          y="891.9342"
-         id="tspan6866">         converted_GPS_files.txt</tspan><tspan
+         id="tspan6866">         converted_files.txt</tspan><tspan
          sodipodi:role="line"
          x="71.720825"
          y="913.8092"
-         id="tspan4243">      /User_database</tspan><tspan
+         id="tspan4243">      /user_database</tspan><tspan
          sodipodi:role="line"
          x="71.720825"
          y="935.6842"
