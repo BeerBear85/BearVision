@@ -11,12 +11,12 @@ class MotionStartDetector:
     def Init(self):
         logging.debug("Init called\n")
 
-    def CreateMotionStartFile(self, arg_input_video_folder):
+    def CreateMotionStartFiles(self, arg_input_video_folder):
         logging.debug("CreateMotionStartFile start\n")
 
         input_video_list          = glob.glob(arg_input_video_folder + "/*.mp4", recursive=True)
         existing_motion_file_list = glob.glob(arg_input_video_folder + "/*motion_start_times.csv", recursive=True)
 
-        print(input_video_list)
-        logging.info(existing_motion_file_list)
-        #TODO get subset list of input_video files which does not have a matching .csv file
+        for input_video_file in input_video_list
+            # TODO check if input_video file already have a matching .csv file
+            logging.info(existing_motion_file_list)
