@@ -65,8 +65,6 @@ class GoproVideo:
         temp_file_name = "temp.bin"
         if os.path.isfile(temp_file_name):
             os.remove(temp_file_name)
-        # else:
-        #    raise ValueError('Something went wrong when extracting meta data from GoPro video!')
 
         # Read .json file and extract first GPS timestamp
         if os.access('temp.json', os.R_OK):
@@ -75,7 +73,7 @@ class GoproVideo:
             textfile.close()
             utc_time = int(re.findall("(?<=\"utc\":)\d+", filetext)[0])
 
-            print("Found UTC time: " + str(utc_time))
+            logging.info("Found UTC time: " + str(utc_time))
             self.creation_time = dt.datetime.utcfromtimestamp(
                 utc_time / 1000000)  # Devide by 1000000 to match the format of datetime
             os.remove("temp.json")
