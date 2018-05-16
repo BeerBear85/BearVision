@@ -11,3 +11,5 @@ print("Starting test!\n")
 
 app_instance = Application.Application()
 app_instance.run(tmp_video_folder, tmp_user_folder)
+
+print("Finished test!\n")

@@ -1,3 +1,4 @@
 *.mp4
 .idea
 test/debug.log
+__pycache__
