@@ -1,5 +1,6 @@
 # File: GoproVideo.py
 # A class for getting the info of a GoPro videofile
+# It can do things as extract the start time from the GPS meta data, set the starting point of the video at a specific frame and read a frame of the video
 
 import re, cv2, subprocess, os, logging, warnings
 import datetime as dt
@@ -71,7 +72,11 @@ class GoproVideo:
             textfile = open('temp.json', 'r')
             filetext = textfile.read()
             textfile.close()
-            utc_time = int(re.findall("(?<=\"utc\":)\d+", filetext)[0])
+            utc_time_match_list = re.findall("(?<=\"utc\":)\d+", filetext)
+            if utc_time_match_list:
+                utc_time = int(utc_time_match_list[0])
+            else:
+                return -1
 
             logging.info("Found UTC time: " + str(utc_time))
             self.creation_time = dt.datetime.utcfromtimestamp(

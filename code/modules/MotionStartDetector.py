@@ -1,5 +1,5 @@
 
-import logging, glob, re, os
+import logging, glob, re, os, cv2
 import GoproVideo
 
 tmp_show_video = True
