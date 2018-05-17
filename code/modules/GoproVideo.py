@@ -5,6 +5,7 @@
 import re, cv2, subprocess, os, logging, warnings
 import datetime as dt
 
+logger = logging.getLogger(__name__)
 # from subprocess import call
 tool_folder = os.path.join('..', 'tools')
 
@@ -42,7 +43,7 @@ class GoproVideo:
         # cmd_line = [ffmpeg_path, '-y', '-i', self.current_filename, '-codec', 'copy', '-map', '0:m:handler_name:\"\tGoPro MET\"', '-f', 'rawvideo', 'temp.bin']
         cmd_line = [ffmpeg_path, '-y', '-i', self.current_filename, '-loglevel', 'error', '-codec', 'copy', '-map',
                     '0:3', '-f', 'rawvideo', 'temp.bin']
-        logging.info("Calling command: " + str(cmd_line))
+        logger.info("Calling command: " + str(cmd_line))
         process = subprocess.Popen(cmd_line, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         out, err = process.communicate()
         if err:
@@ -50,12 +51,12 @@ class GoproVideo:
             print(err.decode('UTF-8'))
         # return -1;
         out_string = out.decode('UTF-8');
-        logging.info('Output: ' + out_string)
+        logger.info('Output: ' + out_string)
 
         # Use tool to convert metadata to json format
         gopro2json_path = os.path.join(tool_folder, 'gopro2json')
         cmd_line = [gopro2json_path, '-i', 'temp.bin', '-o', 'temp.json']
-        logging.info("Calling command: " + str(cmd_line))
+        logger.info("Calling command: " + str(cmd_line))
         process = subprocess.Popen(cmd_line, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         out, err = process.communicate()
         if err:
@@ -64,7 +65,7 @@ class GoproVideo:
             raise ValueError('Something went wrong when extracting meta data from GoPro video!')
         # return -1;
         out_string = out.decode('UTF-8');
-        logging.info('Output: ' + out_string)
+        logger.info('Output: ' + out_string)
         temp_file_name = "temp.bin"
         if os.path.isfile(temp_file_name):
             os.remove(temp_file_name)
@@ -80,7 +81,7 @@ class GoproVideo:
             else:
                 return -1
 
-            logging.info("Found UTC time: " + str(utc_time))
+            logger.info("Found UTC time: " + str(utc_time))
             self.creation_time = dt.datetime.utcfromtimestamp(
                 utc_time / 1000000)  # Devide by 1000000 to match the format of datetime
             os.remove("temp.json")
@@ -122,7 +123,7 @@ class GoproVideo:
         self.current_frame += 1
 
         if (read_return_value == 0) & (self.current_frame < self.frames):
-            logging.debug("Missed frame: " + str(self.current_frame))
+            logger.debug("Missed frame: " + str(self.current_frame))
             self.set_start_point(self.current_frame)
             read_return_value = 20
 

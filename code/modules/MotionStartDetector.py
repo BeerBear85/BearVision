@@ -101,24 +101,23 @@ class MotionStartDetector:
             #cv2.imshow('frame_cut', frame_cut)
             #cv2.imshow('mask', mask)
             #cv2.waitKey(1)
-            if len(motion_start_time_list) >= 5:  #TODO Remove!
-                break
+            #if len(motion_start_time_list) >= 5:
+            #    break
 
-            logger.debug("Finished detection motion in file: " + arg_video_for_process.path)
+        logger.debug("Finished detection motion in file: " + arg_video_for_process.path)
         return motion_start_time_list
 
     def __write_motion_file(self, arg_video_file, arg_motion_start_times_list):
         output_filename_short = os.path.splitext(arg_video_file.name)[0] + motion_file_ending + ".csv"
         output_filename = os.path.join(os.path.dirname(arg_video_file.path), output_filename_short)
 
-        logger.debug("Writing motion file for: " + output_filename)
+        logger.debug("Writing motion file: " + output_filename + "with " + str(len(arg_motion_start_times_list)) + " entries")
         csv_file = open(output_filename, 'w', newline='')
         output_writer = csv.writer(csv_file)
 
         for start_time in arg_motion_start_times_list:
             start_time_str = str(start_time)
-            print("start_time_str " + start_time_str)
-            print(start_time_str)
             output_writer.writerow([start_time_str])
 
+        logger.debug("Finished writing motion file: " + output_filename)
         return
