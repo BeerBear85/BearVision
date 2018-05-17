@@ -15,4 +15,4 @@ class Application:
 
     def run(self, arg_input_video_folder, arg_user_folder):
         logging.debug("Running Application with video folder: " + arg_input_video_folder + " user folder: " + arg_user_folder + "\n")
-        self.motion_start_detector.CreateMotionStartFiles(arg_input_video_folder)
+        self.motion_start_detector.CreateMotionStartFile(arg_input_video_folder)
