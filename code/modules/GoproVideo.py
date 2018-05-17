@@ -18,6 +18,7 @@ class GoproVideo:
         self.height = 0
         self.fps = 0
         self.frames = 0  # total number of frames
+        self.current_frame = 0
 
     def init(self, arg_video_filename):
         if (arg_video_filename != self.current_filename):  # Only initilise if it is a new file
@@ -27,6 +28,7 @@ class GoproVideo:
             self.videoreader_obj = cv2.VideoCapture(arg_video_filename)
             self.extract_video_spec()
             self.extract_creation_date()
+            self.current_frame = 1
 
     def extract_creation_date(self):
         return_code = self.extract_creation_date_from_file_gps()
@@ -111,11 +113,19 @@ class GoproVideo:
 
     def set_start_point(self, arg_start_frame):
         self.videoreader_obj.set(cv2.CAP_PROP_POS_FRAMES, arg_start_frame)
+        self.current_frame = arg_start_frame
         return
 
     # Consider using VideoStream for increased speed
     def read_frame(self):
         read_return_value, frame = self.videoreader_obj.read()
+        self.current_frame += 1
+
+        if (read_return_value == 0) & (self.current_frame < self.frames):
+            logging.debug("Missed frame: " + str(self.current_frame))
+            self.set_start_point(self.current_frame)
+            read_return_value = 20
+
         return read_return_value, frame
 
     def export_video_part(self, arg_output_filename, arg_rel_start_time, arg_duration):
