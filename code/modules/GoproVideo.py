@@ -123,11 +123,12 @@ class GoproVideo:
         self.current_frame += 1
 
         if (read_return_value == 0) & (self.current_frame < self.frames):
-            logger.debug("Missed frame: " + str(self.current_frame))
+            logger.debug("Missed frame: " + str(self.current_frame) + " now skipping a few frames ahead")
+            self.current_frame += 5
             self.set_start_point(self.current_frame)
             read_return_value = 20
 
-        return read_return_value, frame
+        return read_return_value, frame, self.current_frame
 
     def export_video_part(self, arg_output_filename, arg_rel_start_time, arg_duration):
         # ffmpeg -i [input_file] -ss [start_seconds] -t [duration_seconds] [output_file]
