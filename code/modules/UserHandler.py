@@ -17,3 +17,10 @@ class UserHandler:
             if user_folder.is_dir():
                 self.user_list.append( User.User(user_folder) )
         return
+
+    def find_valid_user_match(self,  target_date, target_location):
+        user_match = 0
+        for user in self.user_list:
+            if user.is_close(target_date, target_location):
+                user_match = user
+        return
