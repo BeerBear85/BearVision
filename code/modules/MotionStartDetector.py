@@ -1,5 +1,5 @@
 
-import logging, glob, re, os, cv2, datetime, csv
+import logging, os, cv2, datetime, csv
 import numpy as np
 import GoproVideo
 
