@@ -48,7 +48,7 @@ class User:
         #print("After:  " + (target_date + maximum_time_tolerance).strftime("%Y%m%d_%H_%M_%S_%f"))
 
         if not log_data_within_time_interval.empty:  # not empty
-            [nearest, nearest_time_delta] = self.nearest_date(log_data_within_time_interval.index, target_date)
+            [nearest, nearest_time_delta] = self.__nearest_date(log_data_within_time_interval.index, target_date)
             #print("Nearest: " + str(nearest))
             nearest_location = [log_data_within_time_interval.loc[nearest, 'latitude'],
                                 log_data_within_time_interval.loc[nearest, 'longitude']]
@@ -62,7 +62,7 @@ class User:
                 return True  # maybe also get dataframe row of the 'nearest' element
         return False
 
-    def nearest_date(self, date_list, target_date):  # Quite slow, so should only be used on a limited amount of data
+    def __nearest_date(self, date_list, target_date):  # Quite slow, so should only be used on a limited amount of data
         nearest = min(date_list, key=lambda x: abs(x - target_date))
         timedelta = abs(nearest - target_date)
         return nearest, timedelta
