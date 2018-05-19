@@ -1,7 +1,5 @@
 import logging
-import MotionStartDetector
-import UserHandler
-
+import MotionStartDetector, UserHandler, MotionTimeUserMatching
 
 logging.basicConfig(filename='debug.log',
                     level=logging.DEBUG,
@@ -14,6 +12,7 @@ class Application:
         logger.debug("Appliation created")
         self.motion_start_detector = MotionStartDetector.MotionStartDetector()
         self.user_handler = UserHandler.UserHandler()
+        self.motion_time_user_matching = MotionTimeUserMatching.MotionTimeUserMatching()
 
     def run(self, arg_input_video_folder, arg_user_root_folder):
         logger.debug("Running Application with video folder: " + arg_input_video_folder + " user folder: " + arg_user_root_folder + "\n")
