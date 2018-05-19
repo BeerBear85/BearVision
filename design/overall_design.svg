@@ -250,9 +250,9 @@
      borderopacity="1.0"
      inkscape:pageopacity="0.0"
      inkscape:pageshadow="2"
-     inkscape:zoom="0.7"
-     inkscape:cx="609.8898"
-     inkscape:cy="761.35125"
+     inkscape:zoom="0.98994949"
+     inkscape:cx="656.22403"
+     inkscape:cy="677.88477"
      inkscape:document-units="px"
      inkscape:current-layer="layer1"
      showgrid="false"
@@ -300,22 +300,26 @@
       <text
          sodipodi:linespacing="125%"
          id="text4153"
-         y="142.36217"
-         x="40.714287"
+         y="134.50502"
+         x="42.857143"
          style="font-style:normal;font-weight:normal;font-size:17.5px;line-height:125%;font-family:sans-serif;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
          xml:space="preserve"><tspan
-           y="142.36217"
-           x="40.714287"
+           y="134.50502"
+           x="42.857143"
            id="tspan4155"
            sodipodi:role="line">Full GoPro videos </tspan><tspan
            id="tspan4159"
-           y="164.23717"
-           x="40.714287"
+           y="156.38002"
+           x="42.857143"
            sodipodi:role="line">(with enabled GPS)</tspan><tspan
            id="tspan4157"
-           y="186.11217"
-           x="40.714287"
-           sodipodi:role="line">In local folder </tspan></text>
+           y="178.25502"
+           x="42.857143"
+           sodipodi:role="line">In local folder</tspan><tspan
+           y="200.13002"
+           x="42.857143"
+           sodipodi:role="line"
+           id="tspan4363">+ obstacle_info file </tspan></text>
     </g>
     <g
        id="g4198"
@@ -613,7 +617,7 @@
        y="909.55786" />
     <path
        style="fill:none;fill-rule:evenodd;stroke:#000000;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1;marker-end:url(#Arrow1Lend-6)"
-       d="m 454.98931,247.77297 122.14929,0.78932"
+       d="m 457.00962,246.76282 120.12898,1.79947"
        id="path4251-9"
        inkscape:connector-curvature="0"
        sodipodi:nodetypes="cc" />
