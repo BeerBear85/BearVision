@@ -1,5 +1,5 @@
 
-import logging, glob, re, os, cv2, datetime, csv
+import logging, os, cv2, datetime, csv
 import numpy as np
 import GoproVideo
 
@@ -10,7 +10,8 @@ motion_file_ending = "_motion_start_times"
 morph_open_size = 20
 GMG_initializationFrames = 60
 GMG_decisionThreshold = 0.8
-frame_cut_dimensions = [650, 950, 1, 300]  #[Pix] area to look for motion in
+#frame_cut_dimensions = [650, 950, 1, 300]  #[Pix] area to look for motion in
+frame_cut_dimensions = [600, 1000, 1, 300]  #[Pix] area to look for motion in
 allowed_clip_interval = 5            #[s] Required interval time between valid motion detection
 start_caption_offset = 0.5           #[s] rewind offset for when capturing clip
 motion_frame_counter_threshold = 3   #required number of frames with movement in mask before making a motion conclusion
@@ -88,9 +89,9 @@ class MotionStartDetector:
                     motion_frame_counter = 0
                     next_allowed_motion_frame = frame_number + int(self.MyGoproVideo.fps * allowed_clip_interval)
                     relative_start_time = datetime.timedelta(seconds=int((frame_number - motion_frame_counter_threshold) / self.MyGoproVideo.fps))
-                    logger.debug("Motion detected at frame: " + str(frame_number) + ", corrisponding to relative time: " + str(relative_start_time))
-                    #abs_motion_start_time = self.MyGoproVideo.creation_time + relative_start_time
-                    motion_start_time_list.append(relative_start_time)
+                    abs_motion_start_time = self.MyGoproVideo.creation_time + relative_start_time
+                    logger.debug("Motion detected at frame: " + str(frame_number) + ", corrisponding to relative time: " + str(relative_start_time + ", absolute time: " + abs_motion_start_time.strftime("%Y%m%d_%H_%M_%S"))
+                    motion_start_time_list.append(abs_motion_start_time)
 
             if tmp_show_video_debug:
                 #cv2.imshow('frame', frame)
@@ -112,7 +113,7 @@ class MotionStartDetector:
         output_writer = csv.writer(csv_file)
 
         for start_time in arg_motion_start_times_list:
-            start_time_str = str(start_time)
+            start_time_str = start_time.strftime("%Y%m%d_%H_%M_%S")
             output_writer.writerow([start_time_str])
 
         logger.debug("Finished writing motion file: " + output_filename)
