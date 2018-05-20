@@ -37,7 +37,7 @@ for inbox_entry in os.scandir(inbox_video_directory):
     if inbox_entry.name.endswith('.MP4') and inbox_entry.is_file():
         # print("Checking for GPS matches on file: " + inbox_entry.name)
         stopwatch_start = time.time()
-        inbox_entry_start_time = datetime.datetime.strptime(re.findall("\d+\_\d+\_\d+\_\d+", inbox_entry.name)[0],                                                    "%Y%m%d_%H_%M_%S")
+        inbox_entry_start_time = datetime.datetime.strptime(re.findall("\d+\_\d+\_\d+\_\d+", inbox_entry.name)[0], "%Y%m%d_%H_%M_%S")
 
         #print("Video time: " + inbox_entry_start_time.strftime("%Y%m%d_%H_%M_%S"))
         if test_user.is_close(inbox_entry_start_time + clock_correction, jump_approach_location):

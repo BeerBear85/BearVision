@@ -18,4 +18,5 @@ class Application:
         logger.debug("Running Application with video folder: " + arg_input_video_folder + " user folder: " + arg_user_root_folder + "\n")
         self.motion_start_detector.create_motion_start_files(arg_input_video_folder)
         self.user_handler.init(arg_user_root_folder)
+        self.motion_time_user_matching.match_motion_start_times_with_users(arg_input_video_folder, self.user_handler)
 
