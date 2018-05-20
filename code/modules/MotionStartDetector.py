@@ -2,11 +2,11 @@
 import logging, os, cv2, datetime, csv
 import numpy as np
 import GoproVideo
+from MotionFilesHandler import MotionFilesHandler
 
 logger = logging.getLogger(__name__)
 tmp_show_video_debug = False
 
-motion_file_ending = "_motion_start_times"
 morph_open_size = 20
 GMG_initializationFrames = 60
 GMG_decisionThreshold = 0.8
@@ -35,30 +35,17 @@ class MotionStartDetector:
         return
 
     def __get_list_of_videos_for_processing(self, arg_input_video_folder):
-        input_video_dir_files = os.scandir(arg_input_video_folder) # - other way of lokking in dir
-        input_video_dir_files_copy = os.scandir(arg_input_video_folder)
-        
-        input_video_files = [item for item in input_video_dir_files if os.path.splitext(item)[1] == ".MP4"]
-        existing_motion_files = [item for item in input_video_dir_files_copy if os.path.splitext(item)[1] == ".csv"]
-        
-        new_video_files_for_processing = [] #empty list for the video files which has not been processed
-            
-        for input_video_file in input_video_files:
-            if input_video_file.name.endswith('.MP4') and input_video_file.is_file():
-                logger.debug("Checking if motion file already exists for file: " + input_video_file.name)
-                motion_file_exists = False
-                for motion_file in existing_motion_files: #look through all found motion files for a match
-                    if motion_file.name == os.path.splitext(input_video_file.name)[0] + motion_file_ending + ".csv":
-                        logger.debug(input_video_file.name + " motion file already exists!")
-                        motion_file_exists = True
-                if not motion_file_exists:
-                    new_video_files_for_processing.append(input_video_file)
+        existing_motion_files = MotionFilesHandler.get_motion_file_list(arg_input_video_folder)
+        new_video_files_for_processing = []  # empty list for the video files which has not been processed
 
-        logger.debug("New video files for motion detection processing:")
-        for input_video_file in new_video_files_for_processing:
-            logger.debug(input_video_file.name)
+        for input_video_file in os.scandir(arg_input_video_folder):
+            if input_video_file.name.endswith('.MP4') and input_video_file.is_file():
+                if not MotionFilesHandler.has_associated_motion_file(existing_motion_files, input_video_file):
+                    new_video_files_for_processing.append(input_video_file)
+                    logger.debug(input_video_file.name + " is detected as unprocessed file")
+        return new_video_files_for_processing #list of files
                         
-        return new_video_files_for_processing
+
 
     def __find_motion_start_times(self, arg_video_for_process):
         logger.debug("Finding motion start times for video: " + arg_video_for_process.path)
@@ -90,7 +77,7 @@ class MotionStartDetector:
                     next_allowed_motion_frame = frame_number + int(self.MyGoproVideo.fps * allowed_clip_interval)
                     relative_start_time = datetime.timedelta(seconds=int((frame_number - motion_frame_counter_threshold) / self.MyGoproVideo.fps))
                     abs_motion_start_time = self.MyGoproVideo.creation_time + relative_start_time
-                    logger.debug("Motion detected at frame: " + str(frame_number) + ", corrisponding to relative time: " + str(relative_start_time + ", absolute time: " + abs_motion_start_time.strftime("%Y%m%d_%H_%M_%S"))
+                    logger.debug("Motion detected at frame: " + str(frame_number) + ", corrisponding to relative time: " + str(relative_start_time) + ", absolute time: " + abs_motion_start_time.strftime("%Y%m%d_%H_%M_%S"))
                     motion_start_time_list.append(abs_motion_start_time)
 
             if tmp_show_video_debug:
