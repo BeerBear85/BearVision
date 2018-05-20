@@ -13,5 +13,6 @@ class MotionTimeUserMatching:
         motion_times_files = MotionFilesHandler.get_motion_file_list(arg_input_video_folder)
 
         for motion_file in motion_times_files:
-            MotionFilesHandler.read_motion_file(motion_file)
+            motion_start_times_list = MotionFilesHandler.read_motion_file(motion_file)
+
         return
