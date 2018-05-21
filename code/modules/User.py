@@ -25,34 +25,39 @@ class User:
         self.location_data_folder = os.path.join(self.user_folder, location_data_subpath)
         self.output_video_folder = os.path.join(self.user_folder, output_video_subpath)
 
-        self.data_names = ['time', 'latitude', 'longitude', 'velocity', 'precision', 'satellites']
-        self.data = pd.DataFrame()
+        self.location_data_names = ['time', 'latitude', 'longitude', 'velocity', 'precision', 'satellites']
+        self.location_data = pd.DataFrame()
+
+        self.obstacle_match_data_names = ['time', 'video_file']
+        self.obstacle_match_data = pd.DataFrame()
+
         self.refresh_gps_data()
 
     def refresh_gps_data(self):
-        self.data = pd.DataFrame()  # reset
+        self.location_data = pd.DataFrame()  # reset
         for gps_file in os.scandir(self.location_data_folder):
             if gps_file.name.endswith('.csv') and gps_file.is_file():
                 gps_file_full = os.path.join(self.location_data_folder, gps_file.name)
                 logger.debug("Reading GPS file: " + gps_file_full)
-                file_data = pd.read_csv(gps_file_full, index_col='time', names=self.data_names)
+                file_data = pd.read_csv(gps_file_full, index_col='time', names=self.location_data_names)  # Use time for indexing
                 # If the GPS file does not have this high precision there is a chance to get dublicated entries
                 file_data.index = pd.to_datetime(file_data.index, format="%Y%m%d_%H_%M_%S_%f")
                 # print(file_data)
-                self.data = pd.concat([self.data, file_data]) #concat all the read GPS data
+                self.location_data = pd.concat([self.location_data, file_data]) # concat all the read GPS data
 
         #print('Full data:' + str(self.data))
         return
 
     def is_close(self, target_date, target_location):
         #logger.debug("Types: " + str(type(target_date)) + "  " + str(type(target_location)))
-        log_data_within_time_interval = self.data.truncate(before=target_date - maximum_time_tolerance, after=target_date + maximum_time_tolerance)
+        log_data_within_time_interval = self.location_data.truncate(before=target_date - maximum_time_tolerance, after=target_date + maximum_time_tolerance)
         #print("Before: " + (target_date - maximum_time_tolerance).strftime("%Y%m%d_%H_%M_%S_%f"))
         #print("After:  " + (target_date + maximum_time_tolerance).strftime("%Y%m%d_%H_%M_%S_%f"))
 
         if not log_data_within_time_interval.empty:  # not empty
             [nearest, nearest_time_delta] = self.__nearest_date(log_data_within_time_interval.index, target_date)
             #logger.debug("nearest info: " + str(type(nearest)) + "  " + str(nearest))
+            # Remember that the time is used for indexing the panda "table"
             nearest_location = [log_data_within_time_interval.loc[nearest, 'latitude'],
                                 log_data_within_time_interval.loc[nearest, 'longitude']]
             nearest_velocity = log_data_within_time_interval.loc[nearest, 'velocity']
@@ -67,6 +72,12 @@ class User:
                     nearest_distance) + ' Vel: ' + str(nearest_velocity))
                 return True  # maybe also get dataframe row of the 'nearest' element
         return False
+
+    def add_obstacle_match(self, arg_start_time_entry, arg_video_file):
+        data_entry = [arg_start_time_entry.strftime("%Y%m%d_%H_%M_%S"), arg_video_file.path] # format for panda frame (table)
+        data_entry = pd.DataFrame([data_entry], columns=self.obstacle_match_data_names)
+        self.obstacle_match_data = pd.concat([self.obstacle_match_data, data_entry])   # concat all the match data
+        return
 
     def __nearest_date(self, date_list, target_date):  # Quite slow, so should only be used on a limited amount of data
         nearest = min(date_list, key=lambda x: abs(x - target_date))

@@ -20,8 +20,18 @@ class MotionFilesHandler:
             # logger.debug("Matching: " + motion_file.name + " and " + os.path.splitext(arg_video_file.name)[0] + motion_file_ending + ".csv")
             if motion_file.name == os.path.splitext(arg_video_file.name)[0] + motion_file_ending + ".csv":
                 return True
-
         return False  #Not match found
+
+    @staticmethod
+    def get_associated_video_file(arg_motion_file):
+        logger.debug("Checking if associated video file exists for file: " + arg_motion_file.name)
+        motion_file_dir = os.path.dirname(arg_motion_file.path)
+        video_file_name = arg_motion_file.name.replace(motion_file_ending + ".csv", ".MP4")
+        for dir_file in os.scandir(motion_file_dir):  # Only look for ass. video file in same dir as the motion file
+            #print(dir_file.name + " the same as: " + video_file_name)
+            if dir_file.name == video_file_name:
+                return dir_file
+        return False  # Not match found
 
     @staticmethod
     def get_motion_file_list(arg_input_video_folder):
