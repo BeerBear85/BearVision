@@ -48,7 +48,7 @@ class MotionStartDetector:
 
 
     def __find_motion_start_times(self, arg_video_for_process):
-        logger.debug("Finding motion start times for video: " + arg_video_for_process.path)
+        logger.info("Finding motion start times for video: " + arg_video_for_process.path)
         self.MyGoproVideo.init(arg_video_for_process.path)
         next_allowed_motion_frame = 0
         motion_frame_counter = 0
@@ -58,10 +58,9 @@ class MotionStartDetector:
         for iterator in range(start_frame, int(self.MyGoproVideo.frames)):
             read_return_value, frame, frame_number = self.MyGoproVideo.read_frame()
             if read_return_value == 0:  # end of file
-                print('End of file!!!')
+                logger.debug("End of file: " + arg_video_for_process.path)
                 break
-            if read_return_value == 20:  # GoPro vido error
-                #print('Skipping frame: ' + str(frame_number))
+            if read_return_value == 20:  # GoPro video error
                 continue
 
             frame_cut = frame[frame_cut_dimensions[0]:frame_cut_dimensions[1], frame_cut_dimensions[2]:frame_cut_dimensions[3]]
@@ -88,5 +87,5 @@ class MotionStartDetector:
             #if len(motion_start_time_list) >= 5:
             #    break
 
-        logger.debug("Finished detection motion in file: " + arg_video_for_process.path)
+        logger.info("Finished detection motion in file: " + arg_video_for_process.path)
         return motion_start_time_list

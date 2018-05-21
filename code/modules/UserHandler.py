@@ -20,7 +20,9 @@ class UserHandler:
 
     def find_valid_user_match(self,  target_date, target_location):
         user_match = 0
+        logger.debug("Looking for users at time: " + target_date.strftime("%Y%m%d_%H_%M_%S") + " near location:" + str(target_location))
         for user in self.user_list:
             if user.is_close(target_date, target_location):
                 user_match = user
-        return
+                logger.debug("User match found at time: " + target_date.strftime("%Y%m%d_%H_%M_%S") + " near location:" + str(target_location))
+        return user_match
