@@ -6,7 +6,8 @@ import Application
 
 logger = logging.getLogger(__name__)
 
-tmp_video_folder = os.path.abspath("input_video")
+#tmp_video_folder = os.path.abspath("input_video")
+tmp_video_folder = os.path.abspath("E:/GoPro/Kabelpark/20170927")
 tmp_user_folder  = os.path.abspath("users")
 
 print("Starting test!\n")

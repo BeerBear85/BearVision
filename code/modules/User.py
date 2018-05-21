@@ -19,7 +19,7 @@ maximum_time_tolerance = datetime.timedelta(seconds=10)  # Only accept GPS measu
 
 class User:
     def __init__(self, arg_user_folder):
-        logger.debug("Creating user: " + arg_user_folder.name)
+        logger.info("Creating user: " + arg_user_folder.name)
         self.name = arg_user_folder.name
         self.user_folder = arg_user_folder.path
         self.location_data_folder = os.path.join(self.user_folder, location_data_subpath)
@@ -27,6 +27,7 @@ class User:
 
         self.data_names = ['time', 'latitude', 'longitude', 'velocity', 'precision', 'satellites']
         self.data = pd.DataFrame()
+        self.refresh_gps_data()
 
     def refresh_gps_data(self):
         self.data = pd.DataFrame()  # reset
@@ -35,6 +36,7 @@ class User:
                 gps_file_full = os.path.join(self.location_data_folder, gps_file.name)
                 logger.debug("Reading GPS file: " + gps_file_full)
                 file_data = pd.read_csv(gps_file_full, index_col='time', names=self.data_names)
+                # If the GPS file does not have this high precision there is a chance to get dublicated entries
                 file_data.index = pd.to_datetime(file_data.index, format="%Y%m%d_%H_%M_%S_%f")
                 # print(file_data)
                 self.data = pd.concat([self.data, file_data]) #concat all the read GPS data
@@ -43,21 +45,25 @@ class User:
         return
 
     def is_close(self, target_date, target_location):
+        #logger.debug("Types: " + str(type(target_date)) + "  " + str(type(target_location)))
         log_data_within_time_interval = self.data.truncate(before=target_date - maximum_time_tolerance, after=target_date + maximum_time_tolerance)
         #print("Before: " + (target_date - maximum_time_tolerance).strftime("%Y%m%d_%H_%M_%S_%f"))
         #print("After:  " + (target_date + maximum_time_tolerance).strftime("%Y%m%d_%H_%M_%S_%f"))
 
         if not log_data_within_time_interval.empty:  # not empty
             [nearest, nearest_time_delta] = self.__nearest_date(log_data_within_time_interval.index, target_date)
-            #print("Nearest: " + str(nearest))
+            #logger.debug("nearest info: " + str(type(nearest)) + "  " + str(nearest))
             nearest_location = [log_data_within_time_interval.loc[nearest, 'latitude'],
                                 log_data_within_time_interval.loc[nearest, 'longitude']]
             nearest_velocity = log_data_within_time_interval.loc[nearest, 'velocity']
-            nearest_distance = GPS_Functions.get_distance(target_location[0], target_location[1], nearest_location[0],nearest_location[1])
-            #print("Nearest dist/vel: " + str(nearest_distance) + " " + str(nearest_velocity))
-            if ((nearest_distance <= maximum_distance) and (nearest_velocity >= minimum_velocity)):
+            nearest_distance = GPS_Functions.get_distance(target_location[0], target_location[1], nearest_location[0], nearest_location[1])
+            #logger.debug("Nearest dist/vel: " + str(nearest_distance) + " " + str(nearest_velocity))
+            #logger.debug("nearest_velocity info: " + str(type(nearest_velocity)) + "  " + str(nearest_velocity))
+
+            #  Dublicated entries should be handled better
+            if (nearest_distance <= maximum_distance) and (nearest_velocity >= minimum_velocity):
                 nearest_time_str = nearest.strftime("%Y%m%d_%H_%M_%S")
-                print('Found file at nearest time: ' + nearest_time_str + ' Dist: ' + str(
+                logger.debug('Found file at nearest time: ' + nearest_time_str + ' Dist: ' + str(
                     nearest_distance) + ' Vel: ' + str(nearest_velocity))
                 return True  # maybe also get dataframe row of the 'nearest' element
         return False

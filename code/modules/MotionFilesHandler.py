@@ -36,7 +36,7 @@ class MotionFilesHandler:
 
     @staticmethod
     def read_motion_file(arg_motion_file):
-        logger.debug("Reading motion file: " + arg_motion_file.path)
+        logger.info("Reading motion file: " + arg_motion_file.path)
         csv_file = open(arg_motion_file, 'r', newline='')
         file_reader = csv.reader(csv_file)
         motion_start_times_list = []
@@ -56,7 +56,7 @@ class MotionFilesHandler:
         output_dir = os.path.dirname(arg_video_file.path)
         output_filename = os.path.join(output_dir, output_filename_short)
 
-        logger.debug("Writing motion file: " + output_filename + "with " + str(len(arg_motion_start_times_list)) + " entries")
+        logger.info("Writing motion file: " + output_filename + "with " + str(len(arg_motion_start_times_list)) + " entries")
         csv_file = open(output_filename, 'w', newline='')
         output_writer = csv.writer(csv_file)
 
