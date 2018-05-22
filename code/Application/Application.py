@@ -25,5 +25,5 @@ class Application:
         self.motion_time_user_matching.match_motion_start_times_with_users(arg_input_video_folder, self.user_handler)
         clip_specification_list = self.user_handler.create_full_clip_specifications()
         for clip in clip_specification_list:
-            print(clip.output_video_path)
+            logger.debug("Entry in list of new clip_specification_list" + clip.output_video_path)
 
