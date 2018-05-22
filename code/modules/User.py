@@ -5,6 +5,7 @@ import os, datetime, csv, shutil, logging
 import numpy as np
 import pandas as pd
 import GPS_Functions
+import FullClipSpecification
 
 logger = logging.getLogger(__name__)
 
@@ -74,10 +75,20 @@ class User:
         return False
 
     def add_obstacle_match(self, arg_start_time_entry, arg_video_file):
-        data_entry = [arg_start_time_entry.strftime("%Y%m%d_%H_%M_%S"), arg_video_file.path] # format for panda frame (table)
+        data_entry = [arg_start_time_entry, arg_video_file] # format for panda frame (table)
         data_entry = pd.DataFrame([data_entry], columns=self.obstacle_match_data_names)
         self.obstacle_match_data = pd.concat([self.obstacle_match_data, data_entry])   # concat all the match data
         return
+
+    # Creates a list of FullClipSpecification objects for known matches of the user
+    def create_full_clip_specifications(self):
+        full_clip_spec_list = []
+        for index, row in self.obstacle_match_data.iterrows():
+            time_str = row["time"].strftime("%Y%m%d_%H_%M_%S")
+            output_name = self.name + "_" + time_str
+            full_clip_spec = FullClipSpecification.FullClipSpecification(row["video_file"], row["time"], output_name)
+            full_clip_spec_list.append(full_clip_spec)
+        return full_clip_spec_list
 
     def __nearest_date(self, date_list, target_date):  # Quite slow, so should only be used on a limited amount of data
         nearest = min(date_list, key=lambda x: abs(x - target_date))

@@ -11,6 +11,7 @@ class MotionTimeUserMatching:
     def __init__(self):
         return
 
+    # Updates all the users database of known matches
     def match_motion_start_times_with_users(self, arg_input_video_folder, arg_user_handler):
         motion_times_files = MotionFilesHandler.get_motion_file_list(arg_input_video_folder)
 
@@ -27,6 +28,4 @@ class MotionTimeUserMatching:
                     else:
                         logger.warning("No associated video file found for motion file: " + motion_file.path)
 
-        #TODO Only for initial test!
-        arg_user_handler.user_list[1].obstacle_match_data.to_csv('db_output.csv', index=False, header=False)
         return

@@ -26,3 +26,11 @@ class UserHandler:
                 user_match = user
                 logger.debug("User match found at time: " + target_date.strftime("%Y%m%d_%H_%M_%S") + " near location:" + str(target_location))
         return user_match
+
+    def create_full_clip_specifications(self):
+        logger.debug("Creating specification objects for the found matches")
+        full_list_of_clip_specs = []
+        for user in self.user_list:
+            user_clip_list = user.create_full_clip_specifications()
+            full_list_of_clip_specs.extend(user_clip_list)
+        return full_list_of_clip_specs
