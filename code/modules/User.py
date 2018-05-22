@@ -85,11 +85,12 @@ class User:
         full_clip_spec_list = []
         for index, row in self.obstacle_match_data.iterrows():
             time_str = row["time"].strftime("%Y%m%d_%H_%M_%S")
-            video_output_name_short = self.name + "_" + time_str + ".MP4"
+            video_output_name_short = self.name + "_" + time_str + ".avi"
             video_output_path = os.path.join(self.output_video_folder, video_output_name_short)
             if not os.path.exists(video_output_path):
                 full_clip_spec = FullClipSpecification.FullClipSpecification(row["video_file"], row["time"], video_output_path)
                 full_clip_spec_list.append(full_clip_spec)
+                logger.debug("Entry in list of new clip_specification_list" + full_clip_spec.output_video_path)
         return full_clip_spec_list
 
     def __nearest_date(self, date_list, target_date):  # Quite slow, so should only be used on a limited amount of data
@@ -97,8 +98,8 @@ class User:
         timedelta = abs(nearest - target_date)
         return nearest, timedelta
 
-    def copy_full_clip(self, arg_source_full_path):
-        base_filename = os.path.basename(arg_source_full_path)
-        destination = os.path.join(self.output_video_folder, base_filename)
-        shutil.copy(arg_source_full_path, destination)
+#    def copy_full_clip(self, arg_source_full_path):
+#        base_filename = os.path.basename(arg_source_full_path)
+#        destination = os.path.join(self.output_video_folder, base_filename)
+#        shutil.copy(arg_source_full_path, destination)
 

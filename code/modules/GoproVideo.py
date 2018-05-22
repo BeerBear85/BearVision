@@ -43,7 +43,7 @@ class GoproVideo:
         # cmd_line = [ffmpeg_path, '-y', '-i', self.current_filename, '-codec', 'copy', '-map', '0:m:handler_name:\"\tGoPro MET\"', '-f', 'rawvideo', 'temp.bin']
         cmd_line = [ffmpeg_path, '-y', '-i', self.current_filename, '-loglevel', 'error', '-codec', 'copy', '-map',
                     '0:3', '-f', 'rawvideo', 'temp.bin']
-        logger.info("Calling command: " + str(cmd_line))
+        logger.debug("Calling command: " + str(cmd_line))
         process = subprocess.Popen(cmd_line, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         out, err = process.communicate()
         if err:
@@ -51,12 +51,12 @@ class GoproVideo:
             print(err.decode('UTF-8'))
         # return -1;
         out_string = out.decode('UTF-8');
-        logger.info('Output: ' + out_string)
+        logger.debug('Output: ' + out_string)
 
         # Use tool to convert metadata to json format
         gopro2json_path = os.path.join(tool_folder, 'gopro2json')
         cmd_line = [gopro2json_path, '-i', 'temp.bin', '-o', 'temp.json']
-        logger.info("Calling command: " + str(cmd_line))
+        logger.debug("Calling command: " + str(cmd_line))
         process = subprocess.Popen(cmd_line, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         out, err = process.communicate()
         if err:
@@ -65,7 +65,7 @@ class GoproVideo:
             raise ValueError('Something went wrong when extracting meta data from GoPro video!')
         # return -1;
         out_string = out.decode('UTF-8');
-        logger.info('Output: ' + out_string)
+        logger.debug('Output: ' + out_string)
         temp_file_name = "temp.bin"
         if os.path.isfile(temp_file_name):
             os.remove(temp_file_name)
@@ -81,7 +81,7 @@ class GoproVideo:
             else:
                 return -1
 
-            logger.info("Found UTC time: " + str(utc_time))
+            logger.debug("Found UTC time: " + str(utc_time))
             self.creation_time = dt.datetime.utcfromtimestamp(
                 utc_time / 1000000)  # Devide by 1000000 to match the format of datetime
             os.remove("temp.json")
@@ -106,10 +106,10 @@ class GoproVideo:
         self.creation_time = dt.datetime.strptime(create_time_str, "%Y-%m-%d %H:%M:%S")
 
     def extract_video_spec(self):
-        self.width = self.videoreader_obj.get(cv2.CAP_PROP_FRAME_WIDTH)
-        self.height = self.videoreader_obj.get(cv2.CAP_PROP_FRAME_HEIGHT)
+        self.width = int(self.videoreader_obj.get(cv2.CAP_PROP_FRAME_WIDTH))
+        self.height = int(self.videoreader_obj.get(cv2.CAP_PROP_FRAME_HEIGHT))
         self.fps = self.videoreader_obj.get(cv2.CAP_PROP_FPS)
-        self.frames = self.videoreader_obj.get(cv2.CAP_PROP_FRAME_COUNT)
+        self.frames = int(self.videoreader_obj.get(cv2.CAP_PROP_FRAME_COUNT))
         return
 
     def set_start_point(self, arg_start_frame):

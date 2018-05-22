@@ -20,7 +20,7 @@ class MotionTimeUserMatching:
             for start_time_entry in motion_start_times_list:
                 user = arg_user_handler.find_valid_user_match(start_time_entry, obstacle_approach_location)
                 if user != 0:
-                    print("User match found: " + user.name)
+                    #print("User match found: " + user.name)
                     video_file = MotionFilesHandler.get_associated_video_file(motion_file)
                     if video_file:  # The video file exists
                         user.add_obstacle_match(start_time_entry, video_file) # Add info to user data

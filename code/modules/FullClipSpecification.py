@@ -16,6 +16,12 @@ class FullClipSpecification:
 
     def read_file(self, arg_full_clip_spec_filename):
         logger.error("read_file - Not implemented yet!")
+
+    def write_file(self, arg_full_clip_spec_filename):
+        logger.error("write_file - Not implemented yet!")
+
+
+# Notes for CutSpecificationFile:
         # # Consider using module "configparser"
         # textfile = open(self.spec_filename, 'r') #maybe require "rb"
         # filetext = textfile.read()
@@ -30,7 +36,3 @@ class FullClipSpecification:
         # #Read coordinate vector in the bottom of the file
         # textfile = open(self.spec_filename, 'rb')
         # self.box_coordinates = np.loadtxt(textfile, dtype=int, delimiter=",", skiprows=6)
-
-    def write_file(self, arg_full_clip_spec_filename):
-        logger.error("write_file - Not implemented yet!")
-

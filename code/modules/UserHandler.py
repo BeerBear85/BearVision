@@ -1,8 +1,10 @@
 import logging, os
 import User
+import datetime
 
 logger = logging.getLogger(__name__)
 
+clock_correction = datetime.timedelta(seconds=10)  # GPS - Only for the crappy test data of sep 27 2017
 
 class UserHandler:
     def __init__(self):
@@ -20,9 +22,9 @@ class UserHandler:
 
     def find_valid_user_match(self,  target_date, target_location):
         user_match = 0
-        logger.debug("Looking for users at time: " + target_date.strftime("%Y%m%d_%H_%M_%S") + " near location:" + str(target_location))
+        #logger.debug("Looking for users at time: " + target_date.strftime("%Y%m%d_%H_%M_%S") + " near location:" + str(target_location))
         for user in self.user_list:
-            if user.is_close(target_date, target_location):
+            if user.is_close(target_date + clock_correction, target_location):
                 user_match = user
                 logger.debug("User match found at time: " + target_date.strftime("%Y%m%d_%H_%M_%S") + " near location:" + str(target_location))
         return user_match

@@ -56,7 +56,7 @@ class MotionFilesHandler:
                     #print("Matching entry: " + entry)
                     motion_start_time = datetime.datetime.strptime(entry, "%Y%m%d_%H_%M_%S")
                     motion_start_times_list.append(motion_start_time)
-                    logger.debug("Motion time for readout of file: " + arg_motion_file.path + " : " + motion_start_time.strftime("%Y%m%d_%H_%M_%S"))
+                    #logger.debug("Motion time for readout of file: " + arg_motion_file.path + " : " + motion_start_time.strftime("%Y%m%d_%H_%M_%S"))
 
         return motion_start_times_list  # list of datetimes
 

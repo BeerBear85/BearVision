@@ -1,5 +1,5 @@
 import logging, os
-import MotionStartDetector, UserHandler, MotionTimeUserMatching
+import MotionStartDetector, UserHandler, MotionTimeUserMatching, CutExtractor
 
 logging.basicConfig(filename='debug.log',
                     level=logging.DEBUG,
@@ -13,6 +13,7 @@ class Application:
         self.motion_start_detector = MotionStartDetector.MotionStartDetector()
         self.user_handler = UserHandler.UserHandler()
         self.motion_time_user_matching = MotionTimeUserMatching.MotionTimeUserMatching()
+        self.full_clip_cut_extractor = CutExtractor.CutExtractor()
 
     def run(self, arg_input_video_folder, arg_user_root_folder):
         logger.info("Running Application with video folder: " + arg_input_video_folder + " user folder: " + arg_user_root_folder + "\n")
@@ -24,6 +25,4 @@ class Application:
         self.user_handler.init(arg_user_root_folder)
         self.motion_time_user_matching.match_motion_start_times_with_users(arg_input_video_folder, self.user_handler)
         clip_specification_list = self.user_handler.create_full_clip_specifications()
-        for clip in clip_specification_list:
-            logger.debug("Entry in list of new clip_specification_list" + clip.output_video_path)
-
+        self.full_clip_cut_extractor.extract_full_clip_specifications(clip_specification_list)
