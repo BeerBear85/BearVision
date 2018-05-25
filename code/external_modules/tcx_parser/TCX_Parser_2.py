@@ -1,15 +1,22 @@
 import logging, os, csv, re
+import datetime as dt
 import xml.etree.ElementTree
 import pandas as pd
 
-logger = logging.getLogger(__name__)  #Set logger to reflect the current file
+logger = logging.getLogger(__name__)  # Set logger to reflect the current file
 
 # Note: horizontal_dilution and number of satellites are not present in this file type.
+
+dummy_hdop = 0.1  # [m]
+dummy_satellites = 99  # [-]
+
 
 class TCXParser2:
     def __init__(self, arg_input_file: os.DirEntry):
         tree = xml.etree.ElementTree.parse(arg_input_file.path)
         root = tree.getroot()
+        data_names = ['time', 'latitude', 'longitude', 'speed', 'horizontal_dilution', 'satellites']
+        self.data = pd.DataFrame()
 
         # Namespaces of the XML fields
         root_ns = "{http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2}"
@@ -30,9 +37,11 @@ class TCXParser2:
             for track in lap.iter(root_ns + 'Track'):
                 for trackpoint in track.iter(root_ns + 'Trackpoint'):
                     try:
-                        time = trackpoint.find(root_ns + 'Time').text.strip()
+                        time_str = trackpoint.find(root_ns + 'Time').text.strip()
                     except:
-                        time = ''
+                        time_str = '2000-01-01T00:00:00.000Z'
+                    # Format example: 2018-05-15T15:43:44.000Z
+                    time = dt.datetime.strptime(time_str, "%Y-%m-%dT%H:%M:%S.%fZ")
                     try:
                         latitude = trackpoint.find(root_ns + 'Position').find(root_ns + 'LatitudeDegrees').text.strip()
                     except:
@@ -48,6 +57,8 @@ class TCXParser2:
                         speed = ''
                     #  logger.debug("Speed entry: " + speed)
 
+                    #Add the extracted data to the panda dataframe
+                    data_entry = [time.strftime("%Y%m%d_%H_%M_%S_%f"), latitude, longitude, speed, dummy_hdop, dummy_satellites]  # format for panda frame (table)
+                    data_entry = pd.DataFrame([data_entry], columns=data_names)
+                    self.data = pd.concat([self.data, data_entry])  # I'm sure this is not the smartest way to do this
 
-
-        return

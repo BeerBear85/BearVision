@@ -1,13 +1,14 @@
 import logging, os, csv
 import gpx_parser
-from tcx_parser import tcxparser
 from tcx_parser import TCX_Parser_2
+import pandas as pd
 
-logger = logging.getLogger(__name__)  #Set logger to reflect the current file
+logger = logging.getLogger(__name__)  # Set logger to reflect the current file
 
 output_file_ending = "_bear_vision_GPS_format"
 # The BearVision format (csv):
 # time [YYYYMMDD_HH_mm_SS_FF], latitude [deg], longitude [deg], accuracy [m], speed [m/s], number of satellites [-]
+
 
 class InputGPS_Importer:
     def __init__(self):
@@ -55,12 +56,9 @@ class InputGPS_Importer:
         logger.info("Generating GPS output file: " + arg_output_path + " from input file: " + arg_input_file.path)
         return_value = True
 
-
-        #tcx_data = tcxparser.TCXParser(arg_input_file.path)
-        tcx_data = TCX_Parser_2.TCXParser2(arg_input_file)
-        # Note: horizontal_dilution and number of satellites are not present in this file type.
-
-
+        # Note: horizontal_dilution and number of satellites are not present in this file type, so dummy is inserted
+        tcx_data = TCX_Parser_2.TCXParser2(arg_input_file).data
+        #tcx_data.to_csv(arg_output_path, sep=',', header=False, index=False)
 
         return return_value
 
