@@ -1,8 +1,11 @@
-import logging, os
+import logging, os, csv
+import gpx_parser
 
 logger = logging.getLogger(__name__)  #Set logger to reflect the current file
 
 output_file_ending = "_bear_vision_GPS_format"
+# The BearVision format (csv):
+# time [YYYYMMDD_HH_mm_SS_FF], latitude [deg], longitude [deg], accuracy [m], speed [m/s], number of satellites [-]
 
 class InputGPS_Importer:
     def __init__(self):
@@ -25,8 +28,22 @@ class InputGPS_Importer:
     @staticmethod
     def __generate_from_gpx_file(arg_input_file: os.DirEntry, arg_output_path: str):
         logger.info("Generating GPS output file: " + arg_output_path + " from input file: " + arg_input_file.path)
+        gpx_file_object = open(arg_input_file.path, 'r')
+        gpx_data = gpx_parser.parse(gpx_file_object)
 
-
+        with open(arg_output_path, 'w', newline='') as output_file:
+            output_writer = csv.writer(output_file)
+            for track in gpx_data.tracks:
+                for segment in track.segments:
+                    for point in segment.points:
+                        output_writer.writerow([
+                            point.time.strftime("%Y%m%d_%H_%M_%S_%f"),
+                            point.latitude,
+                            point.longitude,
+                            point.speed,
+                            point.horizontal_dilution,
+                            point.satellites
+                        ])
 
         return True
 
