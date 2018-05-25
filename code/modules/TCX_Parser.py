@@ -11,7 +11,7 @@ dummy_hdop = 0.1  # [m]
 dummy_satellites = 99  # [-]
 
 
-class TCXParser2:
+class TCXParser:
     def __init__(self, arg_input_file: os.DirEntry):
         tree = xml.etree.ElementTree.parse(arg_input_file.path)
         root = tree.getroot()

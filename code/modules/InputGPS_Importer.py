@@ -1,6 +1,6 @@
 import logging, os, csv
 import gpx_parser
-from tcx_parser import TCX_Parser_2
+import TCX_Parser
 import pandas as pd
 
 logger = logging.getLogger(__name__)  # Set logger to reflect the current file
@@ -57,8 +57,8 @@ class InputGPS_Importer:
         return_value = True
 
         # Note: horizontal_dilution and number of satellites are not present in this file type, so dummy is inserted
-        tcx_data = TCX_Parser_2.TCXParser2(arg_input_file).data
-        #tcx_data.to_csv(arg_output_path, sep=',', header=False, index=False)
+        tcx_data = TCX_Parser.TCXParser(arg_input_file).data
+        tcx_data.to_csv(arg_output_path, sep=',', header=False, index=False)
 
         return return_value
 
@@ -68,6 +68,5 @@ class InputGPS_Importer:
             raise ValueError("Output folder is not a valid folder: " + arg_output_folder_path)
 
         output_filename_short = os.path.splitext(arg_input_file.name)[0] + output_file_ending + ".csv"
-        output_dir = os.path.dirname(arg_input_file.path)
         output_path = os.path.join(arg_output_folder_path, output_filename_short)
         return output_path
