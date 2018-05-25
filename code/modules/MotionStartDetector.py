@@ -25,7 +25,7 @@ class MotionStartDetector:
 
     #Main public function:
     def create_motion_start_files(self, arg_input_video_folder):
-        logger.debug("create_motion_start_files() start")
+        logger.info("Processing input video files which does not have a associated motion file")
         process_video_list = self.__get_list_of_videos_for_processing(arg_input_video_folder)
 
         for video_for_process in process_video_list:

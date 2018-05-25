@@ -1,5 +1,7 @@
 import logging, os, csv
 import gpx_parser
+from tcx_parser import tcxparser
+from tcx_parser import TCX_Parser_2
 
 logger = logging.getLogger(__name__)  #Set logger to reflect the current file
 
@@ -28,8 +30,9 @@ class InputGPS_Importer:
     @staticmethod
     def __generate_from_gpx_file(arg_input_file: os.DirEntry, arg_output_path: str):
         logger.info("Generating GPS output file: " + arg_output_path + " from input file: " + arg_input_file.path)
-        gpx_file_object = open(arg_input_file.path, 'r')
-        gpx_data = gpx_parser.parse(gpx_file_object)
+        return_value = True
+        input_file_object = open(arg_input_file.path, 'r')
+        gpx_data = gpx_parser.parse(input_file_object)
 
         with open(arg_output_path, 'w', newline='') as output_file:
             output_writer = csv.writer(output_file)
@@ -44,13 +47,22 @@ class InputGPS_Importer:
                             point.horizontal_dilution,
                             point.satellites
                         ])
-
-        return True
+        return return_value
 
 
     @staticmethod
     def __generate_from_tcx_file(arg_input_file: os.DirEntry, arg_output_path: str):
-        return False
+        logger.info("Generating GPS output file: " + arg_output_path + " from input file: " + arg_input_file.path)
+        return_value = True
+
+
+        #tcx_data = tcxparser.TCXParser(arg_input_file.path)
+        tcx_data = TCX_Parser_2.TCXParser2(arg_input_file)
+        # Note: horizontal_dilution and number of satellites are not present in this file type.
+
+
+
+        return return_value
 
     @staticmethod
     def __create_output_path(arg_input_file: os.DirEntry, arg_output_folder_path: str):
