@@ -6,11 +6,13 @@ import numpy as np
 import pandas as pd
 import GPS_Functions
 import FullClipSpecification
+from InputGPS_Importer import InputGPS_Importer
 
 logger = logging.getLogger(__name__)
 
 # Program start initilisation
 location_data_subpath = 'internal_files/location_info'
+user_GPS_input_files_subpath = 'input_GPS_files'
 output_video_subpath = 'output_video_files'
 
 maximum_distance = 30  # [m]
@@ -23,6 +25,7 @@ class User:
         logger.info("Creating user: " + arg_user_folder.name)
         self.name = arg_user_folder.name
         self.user_folder = arg_user_folder.path
+        self.user_GPS_input_files = os.path.join(self.user_folder, user_GPS_input_files_subpath)
         self.location_data_folder = os.path.join(self.user_folder, location_data_subpath)
         self.output_video_folder = os.path.join(self.user_folder, output_video_subpath)
 
@@ -35,6 +38,7 @@ class User:
         self.refresh_gps_data()
 
     def refresh_gps_data(self):
+        InputGPS_Importer.import_user_format_gps_files(self.user_GPS_input_files, self.location_data_folder)  # creates BearVison formatted GPS files
         self.location_data = pd.DataFrame()  # reset
         for gps_file in os.scandir(self.location_data_folder):
             if gps_file.name.endswith('.csv') and gps_file.is_file():

@@ -2,6 +2,7 @@ import sys,os, logging
 
 sys.path.append('..\code\Modules')
 sys.path.append('..\code\Application')
+sys.path.append('..\code\external_modules')
 import Application
 
 logger = logging.getLogger(__name__)

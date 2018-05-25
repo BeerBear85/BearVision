@@ -2,7 +2,7 @@ import logging, os
 import MotionStartDetector, UserHandler, MotionTimeUserMatching, CutExtractor
 
 logging.basicConfig(filename='debug.log',
-                    level=logging.DEBUG,
+                    level=logging.INFO,
                     format='%(asctime)s:%(levelname)-8s:%(name)s:%(message)s',
                     filemode='w')
 logger = logging.getLogger(__name__)  #Set logger to reflect the current file
