@@ -4,7 +4,8 @@ import datetime
 
 logger = logging.getLogger(__name__)
 
-clock_correction = datetime.timedelta(seconds=10)  # GPS - Only for the crappy test data of sep 27 2017
+#clock_correction = datetime.timedelta(seconds=10)  # GPS - Only for the crappy test data of sep 27 2017
+clock_correction = datetime.timedelta(seconds=0)  # To be deleted
 
 class UserHandler:
     def __init__(self):
