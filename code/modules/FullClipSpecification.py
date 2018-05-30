@@ -4,14 +4,15 @@ import numpy as np
 logger = logging.getLogger(__name__)
 
 
-clip_duration = 10  # [s]
+pa_clip_duration = 6  # [s]
+pa_start_time_offset = 0  # [s]
 
 class FullClipSpecification:
     def __init__(self, arg_input_video_file, arg_start_time: datetime, arg_output_video_path: str):
       
         self.video_file = arg_input_video_file
-        self.start_time = arg_start_time
-        self.duration = datetime.timedelta(seconds=clip_duration)
+        self.start_time = arg_start_time + datetime.timedelta(seconds=pa_start_time_offset)
+        self.duration = datetime.timedelta(seconds=pa_clip_duration)
         self.output_video_path = arg_output_video_path
 
     def read_file(self, arg_full_clip_spec_filename):
