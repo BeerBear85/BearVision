@@ -50,6 +50,7 @@ class User:
                 # print(file_data)
                 self.location_data = pd.concat([self.location_data, file_data]) # concat all the read GPS data
 
+        self.location_data = self.location_data[~self.location_data.index.duplicated(keep='first')]  # Remove multiple entries with the same time stamp
         #print('Full data:' + str(self.data))
         return
 
