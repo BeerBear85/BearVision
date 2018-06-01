@@ -11,13 +11,13 @@ from InputGPS_Importer import InputGPS_Importer
 logger = logging.getLogger(__name__)
 
 # Program start initilisation
-location_data_subpath = 'internal_files/location_info'
-user_GPS_input_files_subpath = 'input_GPS_files'
-output_video_subpath = 'output_video_files'
+pa_location_data_subpath = 'internal_files/location_info'
+pa_user_GPS_input_files_subpath = 'input_GPS_files'
+pa_output_video_subpath = 'output_video_files'
 
-maximum_distance = 30  # [m]
-minimum_velocity = 10 / 3.6  # [m/s]
-maximum_time_tolerance = datetime.timedelta(seconds=10)  # Only accept GPS measurement within this time frame
+pa_maximum_distance = 30  # [m]
+pa_minimum_velocity = 10 / 3.6  # [m/s]
+pa_maximum_time_tolerance = datetime.timedelta(seconds=10)  # Only accept GPS measurement within this time frame
 
 
 class User:
@@ -25,9 +25,9 @@ class User:
         logger.info("Creating user: " + arg_user_folder.name)
         self.name = arg_user_folder.name
         self.user_folder = arg_user_folder.path
-        self.user_GPS_input_files = os.path.join(self.user_folder, user_GPS_input_files_subpath)
-        self.location_data_folder = os.path.join(self.user_folder, location_data_subpath)
-        self.output_video_folder = os.path.join(self.user_folder, output_video_subpath)
+        self.user_GPS_input_files = os.path.join(self.user_folder, pa_user_GPS_input_files_subpath)
+        self.location_data_folder = os.path.join(self.user_folder, pa_location_data_subpath)
+        self.output_video_folder = os.path.join(self.user_folder, pa_output_video_subpath)
 
         self.location_data_names = ['time', 'latitude', 'longitude', 'velocity', 'precision', 'satellites']
         self.location_data = pd.DataFrame()
@@ -56,9 +56,9 @@ class User:
 
     def is_close(self, target_date, target_location):
         #logger.debug("Types: " + str(type(target_date)) + "  " + str(type(target_location)))
-        log_data_within_time_interval = self.location_data.truncate(before=target_date - maximum_time_tolerance, after=target_date + maximum_time_tolerance)
-        #print("Before: " + (target_date - maximum_time_tolerance).strftime("%Y%m%d_%H_%M_%S_%f"))
-        #print("After:  " + (target_date + maximum_time_tolerance).strftime("%Y%m%d_%H_%M_%S_%f"))
+        log_data_within_time_interval = self.location_data.truncate(before=target_date - pa_maximum_time_tolerance, after=target_date + pa_maximum_time_tolerance)
+        #print("Before: " + (target_date - pa_maximum_time_tolerance).strftime("%Y%m%d_%H_%M_%S_%f"))
+        #print("After:  " + (target_date + pa_maximum_time_tolerance).strftime("%Y%m%d_%H_%M_%S_%f"))
 
         if not log_data_within_time_interval.empty:  # not empty
             [nearest, nearest_time_delta] = self.__nearest_date(log_data_within_time_interval.index, target_date)
@@ -72,7 +72,7 @@ class User:
             #logger.debug("nearest_velocity info: " + str(type(nearest_velocity)) + "  " + str(nearest_velocity))
 
             #  Dublicated entries should be handled better
-            if (nearest_distance <= maximum_distance) and (nearest_velocity >= minimum_velocity):
+            if (nearest_distance <= pa_maximum_distance) and (nearest_velocity >= pa_minimum_velocity):
                 nearest_time_str = nearest.strftime("%Y%m%d_%H_%M_%S")
                 logger.debug('Found file at nearest time: ' + nearest_time_str + ' Dist: ' + str(
                     nearest_distance) + ' Vel: ' + str(nearest_velocity))

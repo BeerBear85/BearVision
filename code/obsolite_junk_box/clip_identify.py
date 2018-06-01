@@ -47,7 +47,7 @@ for inbox_entry in os.scandir(inbox_video_directory):
         # duration = (time.time()-float(stopwatch_start))
         # print('Elapsed time:' + str(duration) + ' seconds')
 
-        # if ((nearest_delta <= maximum_time_tolerance) and (video_dist <= maximum_distance) and (video_vel >= minimum_velocity)):
+        # if ((nearest_delta <= pa_maximum_time_tolerance) and (video_dist <= pa_maximum_distance) and (video_vel >= pa_minimum_velocity)):
         #	print('File:' + inbox_entry.name + 'Time:' + str(inbox_entry_start_time) + ' Nearest:' + nearest_str + ' Dist:' + str(video_dist) + ' Vel:' + str(video_vel))
         #	[x_dist, y_dist] = np.array(GPS_Functions.get_relative_coordinates(jump_approach_location[0], jump_approach_location[1], video_lat, video_long))
 

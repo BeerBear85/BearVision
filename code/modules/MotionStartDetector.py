@@ -7,20 +7,20 @@ from MotionFilesHandler import MotionFilesHandler
 logger = logging.getLogger(__name__)
 tmp_show_video_debug = False
 
-morph_open_size = 20
-GMG_initializationFrames = 60
-GMG_decisionThreshold = 0.8
-frame_cut_dimensions = [650, 950, 1, 300]  #[Pix] area to look for motion in
-#frame_cut_dimensions = [600, 1200, 1, 300]  #[Pix] area to look for motion in
-allowed_clip_interval = 5            #[s] Required interval time between valid motion detection
-motion_frame_counter_threshold = 5   #required number of frames with movement in mask before making a motion conclusion
+pa_morph_open_size = 20
+pa_GMG_initializationFrames = 60
+pa_GMG_decisionThreshold = 0.8
+pa_frame_cut_dimensions = [650, 950, 1, 300]  #[Pix] area to look for motion in
+#pa_frame_cut_dimensions = [600, 1200, 1, 300]  #[Pix] area to look for motion in
+pa_allowed_clip_interval = 5            #[s] Required interval time between valid motion detection
+pa_motion_frame_counter_threshold = 5   #required number of frames with movement in mask before making a motion conclusion
 
 class MotionStartDetector:
     def __init__(self):
         logger.debug("MotionStartDetector created")
         self.MyGoproVideo = GoproVideo.GoproVideo()
-        self.foreground_extractor_GMG = cv2.bgsegm.createBackgroundSubtractorGMG(initializationFrames=GMG_initializationFrames, decisionThreshold=GMG_decisionThreshold)
-        self.morph_open_kernel = np.ones((morph_open_size,morph_open_size),np.uint8)
+        self.foreground_extractor_GMG = cv2.bgsegm.createBackgroundSubtractorGMG(initializationFrames=pa_GMG_initializationFrames, decisionThreshold=pa_GMG_decisionThreshold)
+        self.morph_open_kernel = np.ones((pa_morph_open_size, pa_morph_open_size), np.uint8)
 
     #Main public function:
     def create_motion_start_files(self, arg_input_video_folder):
@@ -62,7 +62,7 @@ class MotionStartDetector:
             if read_return_value == 20:  # GoPro video error
                 continue
 
-            frame_cut = frame[frame_cut_dimensions[0]:frame_cut_dimensions[1], frame_cut_dimensions[2]:frame_cut_dimensions[3]]
+            frame_cut = frame[pa_frame_cut_dimensions[0]:pa_frame_cut_dimensions[1], pa_frame_cut_dimensions[2]:pa_frame_cut_dimensions[3]]
             # Resize the frame
             # frame_cut = cv2.resize(frame_cut, None, fx=0.50, fy=0.50, interpolation = cv2.INTER_LINEAR )
             mask = self.foreground_extractor_GMG.apply(frame_cut)
@@ -70,10 +70,10 @@ class MotionStartDetector:
 
             if mask.any() and frame_number > next_allowed_motion_frame:
                 motion_frame_counter += 1
-                if motion_frame_counter >= motion_frame_counter_threshold:
+                if motion_frame_counter >= pa_motion_frame_counter_threshold:
                     motion_frame_counter = 0
-                    next_allowed_motion_frame = frame_number + int(self.MyGoproVideo.fps * allowed_clip_interval)
-                    relative_start_time = datetime.timedelta(seconds=int((frame_number - motion_frame_counter_threshold) / self.MyGoproVideo.fps))
+                    next_allowed_motion_frame = frame_number + int(self.MyGoproVideo.fps * pa_allowed_clip_interval)
+                    relative_start_time = datetime.timedelta(seconds=int((frame_number - pa_motion_frame_counter_threshold) / self.MyGoproVideo.fps))
                     abs_motion_start_time = self.MyGoproVideo.creation_time + relative_start_time
                     logger.debug("Motion detected at frame: " + str(frame_number) + ", corrisponding to relative time: " + str(relative_start_time) + ", absolute time: " + abs_motion_start_time.strftime("%Y%m%d_%H_%M_%S"))
                     motion_start_time_list.append(abs_motion_start_time)
