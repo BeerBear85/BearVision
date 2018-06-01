@@ -10,11 +10,10 @@ tmp_show_video_debug = False
 morph_open_size = 20
 GMG_initializationFrames = 60
 GMG_decisionThreshold = 0.8
-#frame_cut_dimensions = [650, 950, 1, 300]  #[Pix] area to look for motion in
-frame_cut_dimensions = [600, 1200, 1, 300]  #[Pix] area to look for motion in
+frame_cut_dimensions = [650, 950, 1, 300]  #[Pix] area to look for motion in
+#frame_cut_dimensions = [600, 1200, 1, 300]  #[Pix] area to look for motion in
 allowed_clip_interval = 5            #[s] Required interval time between valid motion detection
-start_caption_offset = 0.5           #[s] rewind offset for when capturing clip
-motion_frame_counter_threshold = 3   #required number of frames with movement in mask before making a motion conclusion
+motion_frame_counter_threshold = 5   #required number of frames with movement in mask before making a motion conclusion
 
 class MotionStartDetector:
     def __init__(self):

@@ -6,7 +6,7 @@ import GoproVideo
 logger = logging.getLogger(__name__)  #Set logger to reflect the current file
 
 output_codex = cv2.VideoWriter_fourcc(*'DIVX')
-output_video_speed = 0.5  # 0.5 means that a video clip output should be half speed of input file
+
 
 
 class CutExtractor:
@@ -20,11 +20,13 @@ class CutExtractor:
             self.input_video.init(clip_spec.video_file.path)
 
             start_frame = int(self.input_video.fps * (clip_spec.start_time - self.input_video.creation_time).total_seconds())
-            output_fps = int(self.input_video.fps * output_video_speed)
+            output_fps = int(self.input_video.fps * clip_spec.output_video_relative_speed)
             clip_frame_duration = int(self.input_video.fps * clip_spec.duration.total_seconds())
+            clip_frame_width = int(self.input_video.width * clip_spec.output_video_scale)
+            clip_frame_height = int(self.input_video.height * clip_spec.output_video_scale)
 
             self.input_video.set_start_point(start_frame)  # Set start point of video
-            writer_object = cv2.VideoWriter(clip_spec.output_video_path, output_codex, output_fps, (self.input_video.width, self.input_video.height))
+            writer_object = cv2.VideoWriter(clip_spec.output_video_path, output_codex, output_fps, (clip_frame_width, clip_frame_height))
 
             ### Read frames and write cut_out ###
             for relative_frame_number in range(0, clip_frame_duration):
