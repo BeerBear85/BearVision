@@ -29,11 +29,17 @@ class CutExtractor:
             writer_object = cv2.VideoWriter(clip_spec.output_video_path, output_codex, output_fps, (clip_frame_width, clip_frame_height))
 
             ### Read frames and write cut_out ###
-            for relative_frame_number in range(0, clip_frame_duration):
+            for iterator in range(0, clip_frame_duration):
                 # print("Extracting frame: " + str(relative_frame_number))
                 read_return_value, frame, abs_frame_number = self.input_video.read_frame()
-                if (read_return_value == 0):  # end of file
+                if read_return_value == 0:  # end of file
                     break
+                if read_return_value == 20:  # GoPro video error
+                    continue
+
+                if clip_spec.output_video_scale != 1.0:
+                    frame = cv2.resize(frame, (clip_frame_width, clip_frame_height), 0, 0, interpolation=cv2.INTER_LINEAR)
+
                 writer_object.write(frame)
 
             writer_object.release()

@@ -16,7 +16,7 @@ pa_user_GPS_input_files_subpath = 'input_GPS_files'
 pa_output_video_subpath = 'output_video_files'
 
 pa_maximum_distance = 30  # [m]
-pa_minimum_velocity = 10 / 3.6  # [m/s]
+pa_minimum_velocity = 15 / 3.6  # [m/s]
 pa_maximum_time_tolerance = datetime.timedelta(seconds=10)  # Only accept GPS measurement within this time frame
 
 
