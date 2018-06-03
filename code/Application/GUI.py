@@ -1,14 +1,19 @@
 from tkinter import *
 from tkinter import filedialog
+from tkinter import font
 
 pa_default_input_video_folder = "input_video"
 pa_default_user_folder = "users"
 
+#big_font = font.Font(family='Helvetica', size=36, weight='bold')
+#appHighlightFont = font.Font(family='Helvetica', size=12, weight='bold')
+#font.families()
 
 class MyFirstGUI:
     def __init__(self, master):
         self.master = master
         master.title("BearVision WakeVision")
+        master.geometry("500x500")
 
         self.welcome_label = Label(master, text="Welcome to WakeVison")
         self.welcome_label.pack(side=TOP)
@@ -31,9 +36,18 @@ class MyFirstGUI:
         self.user_folder_button = Button(self.user_folder_frame, text="Select user base folder", command=self.set_user_folder)
         self.user_folder_button.pack( side=LEFT )
 
-        self.check_var_1 = IntVar()
-        self.checkbox_1 = Checkbutton(master, text="Option 1", variable = self.check_var_1)
-        self.checkbox_1.pack()
+        #self.check_var_1 = IntVar()
+        #self.checkbox_1 = Checkbutton(master, text="Option 1", variable = self.check_var_1)
+        #self.checkbox_1.pack()
+
+        self.run_options = Listbox(master, selectmode=MULTIPLE )
+        self.run_options.insert(1, "Generate motion start files")
+        self.run_options.insert(2, "Initialize users")
+        self.run_options.insert(3, "Match user locations to motion files")
+        self.run_options.insert(4, "Generate output videos")
+        self.run_options.pack()
+        #self.run_options.activate(1)
+        #self.run_options.activate(self.run_options.index(3))
 
         self.run_button = Button(master, text="Run", command=self.run)
         self.run_button.pack()
@@ -67,8 +81,12 @@ root.mainloop()
 #        raise ValueError("Video folder is not a valid folder: " + arg_input_video_folder)
 #    if not os.path.exists(arg_user_root_folder):
 #        raise ValueError("User folder is not a valid folder: " + arg_user_root_folder)
+
+
 #    self.motion_start_detector.create_motion_start_files(arg_input_video_folder)
+
 #    self.user_handler.init(arg_user_root_folder)
 #    self.motion_time_user_matching.match_motion_start_times_with_users(arg_input_video_folder, self.user_handler)
 #    clip_specification_list = self.user_handler.create_full_clip_specifications()
+
 #    self.full_clip_cut_extractor.extract_full_clip_specifications(clip_specification_list)
