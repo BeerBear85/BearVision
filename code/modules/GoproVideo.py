@@ -7,7 +7,8 @@ import datetime as dt
 
 logger = logging.getLogger(__name__)
 # from subprocess import call
-tool_folder = os.path.join('..', 'tools')
+#tool_folder = os.path.join('..', 'tools')
+tool_folder = os.path.join('tools')
 
 
 class GoproVideo:
