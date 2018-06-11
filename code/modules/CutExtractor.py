@@ -15,6 +15,7 @@ class CutExtractor:
         return
 
     def extract_full_clip_specifications(self, arg_clip_specification_list: list):
+        logger.info("Extracting full clips from specifications")
         for clip_spec in arg_clip_specification_list:
             logger.info("Creating output file: " + clip_spec.output_video_path)
             self.input_video.init(clip_spec.video_file.path)

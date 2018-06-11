@@ -7,12 +7,17 @@ logger = logging.getLogger(__name__)
 pa_default_input_video_folder = "test/input_video"
 pa_default_user_folder = "test/users"
 
+command_list = ["Generate motion start files",
+                "Initialize users",
+                "Match user locations to motion files",
+                "Generate output videos"]
+
 
 class BearVisionGUI:
     def __init__(self, arg_master, arg_app_ref):
         self.master = arg_master
         self.app_ref = arg_app_ref
-        self.master.title("BearVision WakeVision")
+        self.master.title("BearVision - WakeVision")
         self.master.geometry("500x500")
 
         self.welcome_label = Label(self.master, text="BearVision - WakeVison", bg='red', font=('Helvetica', '20'))
@@ -38,15 +43,19 @@ class BearVisionGUI:
         self.user_folder_button.grid(row=1, column=1, sticky=W+E)
 
         self.run_options = Listbox(self.master, selectmode=MULTIPLE )
-        self.run_options.insert(END, "Generate motion start files")
-        self.run_options.insert(END, "Initialize users")
-        self.run_options.insert(END, "Match user locations to motion files")
-        self.run_options.insert(END, "Generate output videos")
-        #  self.run_options.pack(fill=X, pady=10)
+        for command_entry in command_list:
+            self.run_options.insert(END, command_entry)
+
+        self.run_options.pack(fill=X, pady=10)
         self.run_options.selection_set(0,self.run_options.size())  # select all options
 
         self.run_button = Button(self.master, text="Run", command= self.run, bg='green3', height = 1, width = 10, font=('Helvetica', '20'))
         self.run_button.pack(pady=10)
+
+        self.status_label_text = StringVar()
+        self.status_label_text.set("Ready")
+        self.status_label = Label(self.master, textvariable=self.status_label_text, bg='yellow', font=('Helvetica', '20'))
+        self.status_label.pack(fill=X, side=BOTTOM, pady=10)
 
     def set_input_video_folder(self):
         selected_directory = filedialog.askdirectory()
@@ -60,8 +69,12 @@ class BearVisionGUI:
 
     def run(self):
         logger.debug("run()")
-        self.app_ref.run(self.video_folder_text.get(), self.user_folder_text.get())
-        #print("Running selections: " + str(self.run_options.curselection() ))
+        self.status_label_text.set("Busy")
+        self.status_label.update()
+        # print("Running selections: " + str(self.run_options.curselection()))
+        self.app_ref.run(self.video_folder_text.get(), self.user_folder_text.get(), self.run_options.curselection())
+        self.status_label_text.set("Ready")
+
 
 
 #GUI_root = Tk()

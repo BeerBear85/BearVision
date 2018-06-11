@@ -15,14 +15,22 @@ class Application:
         self.motion_time_user_matching = MotionTimeUserMatching.MotionTimeUserMatching()
         self.full_clip_cut_extractor = CutExtractor.CutExtractor()
 
-    def run(self, arg_input_video_folder, arg_user_root_folder):
+    def run(self, arg_input_video_folder, arg_user_root_folder, arg_selection):
         logger.info("Running Application with video folder: " + arg_input_video_folder + " user folder: " + arg_user_root_folder + "\n")
         if not os.path.exists(arg_input_video_folder):
             raise ValueError("Video folder is not a valid folder: " + arg_input_video_folder)
         if not os.path.exists(arg_user_root_folder):
             raise ValueError("User folder is not a valid folder: " + arg_user_root_folder)
-        self.motion_start_detector.create_motion_start_files(arg_input_video_folder)
-        self.user_handler.init(arg_user_root_folder)
-        self.motion_time_user_matching.match_motion_start_times_with_users(arg_input_video_folder, self.user_handler)
-        clip_specification_list = self.user_handler.create_full_clip_specifications()
-        self.full_clip_cut_extractor.extract_full_clip_specifications(clip_specification_list)
+
+        if 0 in arg_selection:
+            self.motion_start_detector.create_motion_start_files(arg_input_video_folder)
+
+        if 1 in arg_selection:
+            self.user_handler.init(arg_user_root_folder)
+
+        if 2 in arg_selection:
+            self.motion_time_user_matching.match_motion_start_times_with_users(arg_input_video_folder, self.user_handler)
+
+        if 3 in arg_selection:
+            clip_specification_list = self.user_handler.create_full_clip_specifications()
+            self.full_clip_cut_extractor.extract_full_clip_specifications(clip_specification_list)
