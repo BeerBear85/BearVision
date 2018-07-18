@@ -41,9 +41,11 @@ class GoproVideo:
     def extract_creation_date_from_file_gps(self):
         # Use ffmpeg to extract metadata stream (GoPro MET) - stream number 3
         ffmpeg_path = os.path.join(tool_folder, 'ffmpeg')
-        # cmd_line = [ffmpeg_path, '-y', '-i', self.current_filename, '-codec', 'copy', '-map', '0:m:handler_name:\"\tGoPro MET\"', '-f', 'rawvideo', 'temp.bin']
+        temp_file_name_base = os.path.splitext(self.current_filename)[0]
+        temp_bin_file_name = temp_file_name_base + '.bin'
+        temp_json_file_name = temp_file_name_base + '.json'
         cmd_line = [ffmpeg_path, '-y', '-i', self.current_filename, '-loglevel', 'error', '-codec', 'copy', '-map',
-                    '0:3', '-f', 'rawvideo', 'temp.bin']
+                    '0:3', '-f', 'rawvideo', temp_bin_file_name]
         logger.debug("Calling command: " + str(cmd_line))
         process = subprocess.Popen(cmd_line, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         out, err = process.communicate()
@@ -51,12 +53,12 @@ class GoproVideo:
             print("========= error ========")
             print(err.decode('UTF-8'))
         # return -1;
-        out_string = out.decode('UTF-8');
+        out_string = out.decode('UTF-8')
         logger.debug('Output: ' + out_string)
 
         # Use tool to convert metadata to json format
         gopro2json_path = os.path.join(tool_folder, 'gopro2json')
-        cmd_line = [gopro2json_path, '-i', 'temp.bin', '-o', 'temp.json']
+        cmd_line = [gopro2json_path, '-i', temp_bin_file_name, '-o', temp_json_file_name]
         logger.debug("Calling command: " + str(cmd_line))
         process = subprocess.Popen(cmd_line, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         out, err = process.communicate()
@@ -67,13 +69,14 @@ class GoproVideo:
         # return -1;
         out_string = out.decode('UTF-8');
         logger.debug('Output: ' + out_string)
-        temp_file_name = "temp.bin"
-        if os.path.isfile(temp_file_name):
-            os.remove(temp_file_name)
+
+        # Clean up
+        if os.path.isfile(temp_bin_file_name):
+            os.remove(temp_bin_file_name)
 
         # Read .json file and extract first GPS timestamp
-        if os.access('temp.json', os.R_OK):
-            textfile = open('temp.json', 'r')
+        if os.access(temp_json_file_name, os.R_OK):
+            textfile = open(temp_json_file_name, 'r')
             filetext = textfile.read()
             textfile.close()
             utc_time_match_list = re.findall("(?<=\"utc\":)\d+", filetext)
@@ -85,7 +88,7 @@ class GoproVideo:
             logger.debug("Found UTC time: " + str(utc_time))
             self.creation_time = dt.datetime.utcfromtimestamp(
                 utc_time / 1000000)  # Devide by 1000000 to match the format of datetime
-            os.remove("temp.json")
+            os.remove(temp_json_file_name)
         else:
             return -1
 

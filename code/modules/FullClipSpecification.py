@@ -4,8 +4,8 @@ import numpy as np
 logger = logging.getLogger(__name__)
 
 
-pa_clip_duration = 7  # [s]
-pa_start_time_offset = 0  # [s]
+pa_clip_duration = 6  # [s]
+pa_start_time_offset = 0.5  # [s]
 pa_output_video_speed = 0.5  # 0.5 means that a video clip output should be half speed of input file
 pa_output_scale = 0.5  # 0.5 means half the height/width of the original video
 

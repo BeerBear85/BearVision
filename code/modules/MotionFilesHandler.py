@@ -61,18 +61,20 @@ class MotionFilesHandler:
         return motion_start_times_list  # list of datetimes
 
     @staticmethod
-    def write_motion_file(arg_video_file, arg_motion_start_times_list):
-        output_filename_short = os.path.splitext(arg_video_file.name)[0] + motion_file_ending + ".csv"
-        output_dir = os.path.dirname(arg_video_file.path)
+    def write_motion_file(arg_video_file_path, arg_motion_start_times_list):
+        output_filename_short = os.path.splitext(arg_video_file_path)[0] + motion_file_ending + ".csv"
+        output_dir = os.path.dirname(arg_video_file_path)
         output_filename = os.path.join(output_dir, output_filename_short)
 
-        logger.info("Writing motion file: " + output_filename + "with " + str(len(arg_motion_start_times_list)) + " entries")
+        logger.info("Writing motion file: " + output_filename + " with " + str(len(arg_motion_start_times_list)) + " entries")
         csv_file = open(output_filename, 'w', newline='')
         output_writer = csv.writer(csv_file)
+
 
         for start_time in arg_motion_start_times_list:
             start_time_str = start_time.strftime("%Y%m%d_%H_%M_%S")
             output_writer.writerow([start_time_str])
 
         logger.debug("Finished writing motion file: " + output_filename)
+
         return True  # true for success

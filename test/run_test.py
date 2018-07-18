@@ -8,8 +8,8 @@ import Application
 logger = logging.getLogger(__name__)
 
 #tmp_video_folder = os.path.abspath("input_video")
-#tmp_video_folder = os.path.abspath("E:/GoPro/Kabelpark/20170927")
-tmp_video_folder = os.path.abspath("F:/GoPro/Kabelpark/20180529")
+tmp_video_folder = os.path.abspath("F:/GoPro/Kabelpark/20180603")
+#tmp_video_folder = os.path.abspath("E:/DCIM/100GOPRO") #  - very slow to read from SD card using converter and build-in reader
 tmp_user_folder  = os.path.abspath("F:/GoPro/BearVision/users")
 
 print("Starting test!\n")
