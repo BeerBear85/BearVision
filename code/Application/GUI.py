@@ -1,6 +1,7 @@
 from tkinter import *
 from tkinter import filedialog
 import os, logging
+from ConfigurationHandler import ConfigurationHandler
 
 logger = logging.getLogger(__name__)
 
@@ -49,23 +50,30 @@ class BearVisionGUI:
         self.run_options.pack(fill=X, pady=10)
         self.run_options.selection_set(0,self.run_options.size())  # select all options
 
+        self.config_load_button = Button(self.master, text="Load Config", command=self.load_config, bg='green3', height=1, width=10, font=('Helvetica', '20'))
+        #self.run_button.pack(pady=10)
+        self.config_load_button.pack(side=RIGHT)
+
         self.run_button = Button(self.master, text="Run", command= self.run, bg='green3', height = 1, width = 10, font=('Helvetica', '20'))
-        self.run_button.pack(pady=10)
+        # self.run_button.pack(pady=10)
+        self.run_button.pack(side=LEFT)
 
         self.status_label_text = StringVar()
         self.status_label_text.set("Ready")
         self.status_label = Label(self.master, textvariable=self.status_label_text, bg='yellow', font=('Helvetica', '20'))
         self.status_label.pack(fill=X, side=BOTTOM, pady=10)
 
-    def set_input_video_folder(self):
-        selected_directory = filedialog.askdirectory()
-        self.video_folder_text.set(selected_directory)
-        logger.info("Setting input video folder to: " + selected_directory)
+    def set_input_video_folder(self, arg_directory_path=None):
+        if arg_directory_path is None:
+            arg_directory_path = filedialog.askdirectory()
+        self.video_folder_text.set(arg_directory_path)
+        logger.info("Setting input video folder to: " + arg_directory_path)
 
-    def set_user_folder(self):
-        selected_directory = filedialog.askdirectory()
-        self.user_folder_text.set(selected_directory)
-        logger.info("Setting user folder to: " + selected_directory)
+    def set_user_folder(self, arg_directory_path=None):
+        if arg_directory_path is None:
+            arg_directory_path = filedialog.askdirectory()
+        self.user_folder_text.set(arg_directory_path)
+        logger.info("Setting user folder to: " + arg_directory_path)
 
     def run(self):
         logger.debug("run()")
@@ -74,6 +82,18 @@ class BearVisionGUI:
         # print("Running selections: " + str(self.run_options.curselection()))
         self.app_ref.run(self.video_folder_text.get(), self.user_folder_text.get(), self.run_options.curselection())
         self.status_label_text.set("Ready")
+
+    def load_config(self):
+        logger.debug("load_config()")
+        tmp_config_file = filedialog.askopenfilename()
+        tmp_options = ConfigurationHandler.read_config_file(tmp_config_file)
+
+        # update file selection boxes
+        self.set_input_video_folder(tmp_options['GUI']['video_path'])
+        self.set_user_folder(tmp_options['GUI']['user_path'])
+
+
+
 
 
 
