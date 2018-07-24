@@ -54,15 +54,15 @@ class BearVisionGUI:
         self.run_options.selection_set(0,self.run_options.size())  # select all options
 
         self.config_load_button = Button(self.master, text="Load Config", command=self.load_config, bg='green3', height=1, width=10, font=('Helvetica', '20'))
-        #self.run_button.pack(pady=10)
-        self.config_load_button.pack(side=RIGHT)
+        self.config_load_button.pack(side=LEFT)
 
         self.run_button = Button(self.master, text="Run", command= self.run, bg='green3', height = 1, width = 10, font=('Helvetica', '20'))
-        # self.run_button.pack(pady=10)
-        self.run_button.pack(side=LEFT)
+        self.run_button.pack(side=RIGHT)
 
         self.status_label_text = StringVar()
         self.status_label_text.set("Ready")
+        if tmp_options is None:
+            self.status_label_text.set("No parameters")
         self.status_label = Label(self.master, textvariable=self.status_label_text, bg='yellow', font=('Helvetica', '20'))
         self.status_label.pack(fill=X, side=BOTTOM, pady=10)
 
@@ -80,6 +80,10 @@ class BearVisionGUI:
 
     def run(self):
         logger.debug("run()")
+        tmp_options = ConfigurationHandler.get_configuration()
+        if tmp_options is None:
+            self.status_label_text.set("No parameters")
+            return
         self.status_label_text.set("Busy")
         self.status_label.update()
         # print("Running selections: " + str(self.run_options.curselection()))
@@ -91,9 +95,10 @@ class BearVisionGUI:
         tmp_config_file = filedialog.askopenfilename()
         tmp_options = ConfigurationHandler.read_config_file(tmp_config_file)
 
-        # update file selection boxes
+        # update file selection boxes and GUI
         self.set_input_video_folder(tmp_options['GUI']['video_path'])
         self.set_user_folder(tmp_options['GUI']['user_path'])
+        self.status_label_text.set("Ready")
 
 
 
