@@ -2,17 +2,16 @@ import logging, os, csv, re
 import datetime as dt
 import xml.etree.ElementTree
 import pandas as pd
+from ConfigurationHandler import ConfigurationHandler
 
 logger = logging.getLogger(__name__)  # Set logger to reflect the current file
 
 # Note: horizontal_dilution and number of satellites are not present in this file type.
 
-dummy_hdop = 0.1  # [m]
-dummy_satellites = 99  # [-]
-
 
 class TCXParser:
     def __init__(self, arg_input_file: os.DirEntry):
+        tmp_options = ConfigurationHandler.get_configuration()
         tree = xml.etree.ElementTree.parse(arg_input_file.path)
         root = tree.getroot()
         data_names = ['time', 'latitude', 'longitude', 'speed', 'horizontal_dilution', 'satellites']
@@ -58,6 +57,8 @@ class TCXParser:
                     #  logger.debug("Speed entry: " + speed)
 
                     #Add the extracted data to the panda dataframe
+                    dummy_hdop = float(tmp_options['GPS_FILE_PARSING']['TCX_dummy_hdop']) # [m]
+                    dummy_satellites = int(tmp_options['GPS_FILE_PARSING']['TCX_dummy_satellites'])  # [-]
                     data_entry = [time.strftime("%Y%m%d_%H_%M_%S_%f"), latitude, longitude, speed, dummy_hdop, dummy_satellites]  # format for panda frame (table)
                     data_entry = pd.DataFrame([data_entry], columns=data_names)
                     self.data = pd.concat([self.data, data_entry])  # I'm sure this is not the smartest way to do this

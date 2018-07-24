@@ -1,14 +1,14 @@
 import logging, os
 import UserHandler
 from MotionFilesHandler import MotionFilesHandler
+from ConfigurationHandler import ConfigurationHandler
 
 logger = logging.getLogger(__name__)
 
-obstacle_approach_location = [55.682366, 12.623255]  # lat/lon #This info should come from an obstacle_info file
-
-
 class MotionTimeUserMatching:
     def __init__(self):
+        tmp_options = ConfigurationHandler.get_configuration()
+        self.obstacle_approach_location = [float(tmp_options['OBSTACLE']['approach_location_lat']), float(tmp_options['OBSTACLE']['approach_location_long'])]
         return
 
     # Updates all the users database of known matches
@@ -18,7 +18,7 @@ class MotionTimeUserMatching:
         for motion_file in motion_times_files:
             motion_start_times_list = MotionFilesHandler.read_motion_file(motion_file)
             for start_time_entry in motion_start_times_list:
-                user = arg_user_handler.find_valid_user_match(start_time_entry, obstacle_approach_location)
+                user = arg_user_handler.find_valid_user_match(start_time_entry, self.obstacle_approach_location)
                 if user != 0:
                     #print("User match found: " + user.name)
                     video_file = MotionFilesHandler.get_associated_video_file(motion_file)

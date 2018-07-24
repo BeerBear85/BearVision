@@ -1,17 +1,18 @@
 import logging, os, csv
 import gpx_parser
 import TCX_Parser
-import pandas as pd
+from ConfigurationHandler import ConfigurationHandler
 
 logger = logging.getLogger(__name__)  # Set logger to reflect the current file
 
-output_file_ending = "_bear_vision_GPS_format"
 # The BearVision format (csv):
 # time [YYYYMMDD_HH_mm_SS_FF], latitude [deg], longitude [deg], accuracy [m], speed [m/s], number of satellites [-]
 
 
 class InputGPS_Importer:
     def __init__(self):
+        tmp_options = ConfigurationHandler.get_configuration()
+        self.output_file_ending = tmp_options['GPS_FILE_PARSING']['converted_file_ending']
         return
 
     # Should parse all the found different types of GPS files in the input folder and generate GPS files in the BearVision format
@@ -67,6 +68,6 @@ class InputGPS_Importer:
         if not (os.path.isdir(arg_output_folder_path) and os.path.exists(arg_output_folder_path)):
             raise ValueError("Output folder is not a valid folder: " + arg_output_folder_path)
 
-        output_filename_short = os.path.splitext(arg_input_file.name)[0] + output_file_ending + ".csv"
+        output_filename_short = os.path.splitext(arg_input_file.name)[0] + self.output_file_ending + ".csv"
         output_path = os.path.join(arg_output_folder_path, output_filename_short)
         return output_path
