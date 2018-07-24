@@ -5,10 +5,6 @@ import GoproVideo
 
 logger = logging.getLogger(__name__)  #Set logger to reflect the current file
 
-output_codex = cv2.VideoWriter_fourcc(*'DIVX')
-
-
-
 class CutExtractor:
     def __init__(self):
         self.input_video = GoproVideo.GoproVideo()  # Make one GoPro object which is reinitilised if input video changes
@@ -32,6 +28,7 @@ class CutExtractor:
         clip_frame_height = int(self.input_video.height * arg_clip_spec.output_video_scale)
 
         self.input_video.set_start_point(start_frame)  # Set start point of video
+        output_codex = cv2.VideoWriter_fourcc(*'DIVX')
         writer_object = cv2.VideoWriter(arg_clip_spec.output_video_path, output_codex, output_fps,
                                         (clip_frame_width, clip_frame_height))
 

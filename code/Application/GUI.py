@@ -53,11 +53,14 @@ class BearVisionGUI:
         self.run_options.pack(fill=X, pady=10)
         self.run_options.selection_set(0,self.run_options.size())  # select all options
 
-        self.config_load_button = Button(self.master, text="Load Config", command=self.load_config, bg='green3', height=1, width=10, font=('Helvetica', '20'))
+        self.button_frame = Frame(self.master)
+        self.button_frame.pack(fill=X, pady=10)
+
+        self.config_load_button = Button(self.button_frame, text="Load Config", command=self.load_config, bg='green3', height=1, width=10, font=('Helvetica', '20'))
         self.config_load_button.pack(side=LEFT)
 
-        self.run_button = Button(self.master, text="Run", command= self.run, bg='green3', height = 1, width = 10, font=('Helvetica', '20'))
-        self.run_button.pack(side=RIGHT)
+        self.run_button = Button(self.button_frame, text="Run", command= self.run, bg='green3', height = 1, width = 10, font=('Helvetica', '20'))
+        self.run_button.pack(side=RIGHT, pady=10)
 
         self.status_label_text = StringVar()
         self.status_label_text.set("Ready")

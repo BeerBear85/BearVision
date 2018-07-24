@@ -6,7 +6,7 @@ from shutil import copyfile
 
 logger = logging.getLogger(__name__)  # Set logger to reflect the current file
 
-_last_saved_config_filename = "last_used_config.ini"  # Only parameter in code
+_last_saved_config_filename = "last_used_config.ini"  # Should be the only parameter in code
 
 _configuration = None
 
