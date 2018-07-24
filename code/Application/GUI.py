@@ -5,8 +5,8 @@ from ConfigurationHandler import ConfigurationHandler
 
 logger = logging.getLogger(__name__)
 
-pa_default_input_video_folder = "test/input_video"
-pa_default_user_folder = "test/users"
+#pa_default_input_video_folder = "test/input_video"
+#pa_default_user_folder = "test/users"
 
 command_list = ["Generate motion start files",
                 "Initialize users",
@@ -16,6 +16,7 @@ command_list = ["Generate motion start files",
 
 class BearVisionGUI:
     def __init__(self, arg_master, arg_app_ref):
+        tmp_options = ConfigurationHandler.get_configuration()
         self.master = arg_master
         self.app_ref = arg_app_ref
         self.master.title("BearVision - WakeVision")
@@ -30,14 +31,16 @@ class BearVisionGUI:
         self.folder_selection_frame.columnconfigure(1, weight=1)
 
         self.video_folder_text = StringVar()
-        self.video_folder_text.set( os.path.abspath(pa_default_input_video_folder) )
+        if tmp_options is not None:
+            self.video_folder_text.set( os.path.abspath(tmp_options['GUI']['video_path']) )
         self.video_folder_entry = Entry(self.folder_selection_frame, textvariable=self.video_folder_text)
         self.video_folder_entry.grid(row=0, column=0, sticky=W+E)
         self.video_folder_button = Button(self.folder_selection_frame, text="Select input video folder", command=self.set_input_video_folder)
         self.video_folder_button.grid(row=0, column=1, sticky=W+E)
 
         self.user_folder_text = StringVar()
-        self.user_folder_text.set( os.path.abspath(pa_default_user_folder) )
+        if tmp_options is not None:
+            self.user_folder_text.set( os.path.abspath(tmp_options['GUI']['user_path']) )
         self.user_folder_entry = Entry(self.folder_selection_frame, textvariable=self.user_folder_text, width=60)
         self.user_folder_entry.grid(row=1, column=0, sticky=W+E)
         self.user_folder_button = Button(self.folder_selection_frame, text="Select user base folder", command=self.set_user_folder)

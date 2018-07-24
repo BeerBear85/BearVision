@@ -1,7 +1,7 @@
 # File: user.py
 # A class for holder the info releated to a specific user of the system
 
-import os, datetime, csv, shutil, logging
+import os, datetime, csv, logging
 import numpy as np
 import pandas as pd
 import GPS_Functions
@@ -102,9 +102,3 @@ class User:
         nearest = min(date_list, key=lambda x: abs(x - target_date))
         timedelta = abs(nearest - target_date)
         return nearest, timedelta
-
-#    def copy_full_clip(self, arg_source_full_path):
-#        base_filename = os.path.basename(arg_source_full_path)
-#        destination = os.path.join(self.output_video_folder, base_filename)
-#        shutil.copy(arg_source_full_path, destination)
-

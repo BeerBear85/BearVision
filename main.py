@@ -1,6 +1,7 @@
 
 # Make main process create the new file and sub-processes append - probably not the nices way of doing this
 import logging
+
 if __name__ == "__main__":
     write_mode = 'w'
 else:
@@ -18,14 +19,16 @@ if __name__ == "__main__":
     sys.path.append('code\Application')
     sys.path.append('code\external_modules')
 
-    import Application
+    from Application import Application
     from GUI import BearVisionGUI
+    from ConfigurationHandler import ConfigurationHandler
 
     logger = logging.getLogger(__name__)
 
     logger.debug("------------------------Start------------------------------------")
 
-    app_instance = Application.Application()
+    ConfigurationHandler.read_last_used_config_file()
+    app_instance = Application()
 
     #Start GUI
     GUI_root = tkinter.Tk()
