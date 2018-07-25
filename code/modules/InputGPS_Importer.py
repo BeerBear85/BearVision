@@ -11,8 +11,6 @@ logger = logging.getLogger(__name__)  # Set logger to reflect the current file
 
 class InputGPS_Importer:
     def __init__(self):
-        tmp_options = ConfigurationHandler.get_configuration()
-        self.output_file_ending = tmp_options['GPS_FILE_PARSING']['converted_file_ending']
         return
 
     # Should parse all the found different types of GPS files in the input folder and generate GPS files in the BearVision format
@@ -68,6 +66,8 @@ class InputGPS_Importer:
         if not (os.path.isdir(arg_output_folder_path) and os.path.exists(arg_output_folder_path)):
             raise ValueError("Output folder is not a valid folder: " + arg_output_folder_path)
 
-        output_filename_short = os.path.splitext(arg_input_file.name)[0] + self.output_file_ending + ".csv"
+        tmp_options = ConfigurationHandler.get_configuration()
+        tmp_output_file_ending = tmp_options['GPS_FILE_PARSING']['converted_file_ending']
+        output_filename_short = os.path.splitext(arg_input_file.name)[0] + tmp_output_file_ending + ".csv"
         output_path = os.path.join(arg_output_folder_path, output_filename_short)
         return output_path

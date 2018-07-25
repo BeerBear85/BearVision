@@ -1,9 +1,12 @@
 import logging, os, re, csv, datetime
+from ConfigurationHandler import ConfigurationHandler
 
 
 logger = logging.getLogger(__name__)
 
-motion_file_ending = "_motion_start_times"
+tmp_options = ConfigurationHandler.get_configuration()
+#motion_file_ending = tmp_options['MOTION_DETECTION']['motion_file_ending']
+motion_file_ending = '_motion_start_times'
 motion_file_ending_regex = re.compile(".+" + motion_file_ending + "\.csv$")
 
 motion_start_time_entry_regex = re.compile("\d{8}\_\d{2}\_\d{2}\_\d{2}")
