@@ -2,15 +2,13 @@
 import logging, os, cv2, datetime, csv
 import numpy as np
 import GoproVideo
+import ast
+from functools import partial
 from MotionFilesHandler import MotionFilesHandler
 from multiprocessing.pool import Pool
 from ConfigurationHandler import ConfigurationHandler
 
 logger = logging.getLogger(__name__)
-
-
-pa_frame_cut_dimensions = [650, 950, 1, 300]  # [Pix] area to look for motion in
-# pa_frame_cut_dimensions = [600, 1200, 1, 300]  #[Pix] area to look for motion in
 
 class MotionStartDetector:
     def __init__(self):
@@ -21,6 +19,7 @@ class MotionStartDetector:
     # Main public function:
     def create_motion_start_files(self, arg_input_video_folder):
         logger.info("Processing input video files which does not have a associated motion file")
+        tmp_options = ConfigurationHandler.get_configuration()
         process_video_list = self.__get_list_of_videos_for_processing(arg_input_video_folder)
 
         process_video_path_list = []
@@ -33,7 +32,7 @@ class MotionStartDetector:
 
         # multiprocess
         with Pool(processes=self.number_of_process_workers) as pool:
-            pool.map(MotionStartDetector.process_video, process_video_path_list)
+            pool.map(partial(MotionStartDetector.process_video, tmp_options), process_video_path_list)
 
         return
 
@@ -50,22 +49,31 @@ class MotionStartDetector:
         return new_video_files_for_processing #list of files
 
     @staticmethod
-    def find_motion_start_times(arg_video_for_process_path):
+    def find_motion_start_times(arg_option_obj, arg_video_for_process_path):
         logger.info("Finding motion start times for video: " + arg_video_for_process_path)
 
-        tmp_options = ConfigurationHandler.get_configuration()
-        tmp_show_video_debug = bool(tmp_options['MOTION_DETECTION']['show_video_debug'])
-        tmp_morph_open_size = int(tmp_options['MOTION_DETECTION']['morph_open_size'])
-        tmp_GMG_initializationFrames = int(tmp_options['MOTION_DETECTION']['GMG_initializationFrames'])
-        tmp_GMG_decisionThreshold = float(tmp_options['MOTION_DETECTION']['GMG_decisionThreshold'])
-        tmp_allowed_clip_interval = float(tmp_options['MOTION_DETECTION']['allowed_clip_interval'])  # [s] Required interval time between valid motion detection
-        tmp_motion_frame_counter_threshold = int(tmp_options['MOTION_DETECTION']['motion_frame_counter_threshold'])  # required number of frames with movement in mask before making a motion conclusion
+        tmp_show_video_debug = bool(arg_option_obj['MOTION_DETECTION']['show_video_debug'])
+        tmp_morph_open_size = int(arg_option_obj['MOTION_DETECTION']['morph_open_size'])
+        tmp_GMG_initializationFrames = int(arg_option_obj['MOTION_DETECTION']['GMG_initializationFrames'])
+        tmp_GMG_decisionThreshold = float(arg_option_obj['MOTION_DETECTION']['GMG_decisionThreshold'])
+        tmp_allowed_clip_interval = float(arg_option_obj['MOTION_DETECTION']['allowed_clip_interval'])  # [s] Required interval time between valid motion detection
+        tmp_motion_frame_counter_threshold = int(arg_option_obj['MOTION_DETECTION']['motion_frame_counter_threshold'])  # required number of frames with movement in mask before making a motion conclusion
+        tmp_relative_search_box_dimensions = ast.literal_eval(arg_option_obj['MOTION_DETECTION']['search_box_dimensions'])  # [-] area to look for motion in
+
 
         foreground_extractor_GMG = cv2.bgsegm.createBackgroundSubtractorGMG(initializationFrames=tmp_GMG_initializationFrames, decisionThreshold=tmp_GMG_decisionThreshold)
         morph_open_kernel = np.ones((tmp_morph_open_size, tmp_morph_open_size), np.uint8)
 
-        MyGoproVideo = GoproVideo.GoproVideo()
+        MyGoproVideo = GoproVideo.GoproVideo(arg_option_obj)
         MyGoproVideo.init(arg_video_for_process_path)
+        tmp_absolute_search_box_dimensions = [
+            int(tmp_relative_search_box_dimensions[0] * MyGoproVideo.height),
+            int(tmp_relative_search_box_dimensions[1] * MyGoproVideo.height),
+            int(tmp_relative_search_box_dimensions[2] * MyGoproVideo.width),
+            int(tmp_relative_search_box_dimensions[3] * MyGoproVideo.width)
+            ]
+        print(tmp_absolute_search_box_dimensions)
+
         next_allowed_motion_frame = 0
         motion_frame_counter = 0
         motion_start_time_list = []
@@ -79,7 +87,7 @@ class MotionStartDetector:
             if read_return_value == 20:  # GoPro video error
                 continue
 
-            frame_cut = frame[pa_frame_cut_dimensions[0]:pa_frame_cut_dimensions[1], pa_frame_cut_dimensions[2]:pa_frame_cut_dimensions[3]]
+            frame_cut = frame[tmp_absolute_search_box_dimensions[0]:tmp_absolute_search_box_dimensions[1], tmp_absolute_search_box_dimensions[2]:tmp_absolute_search_box_dimensions[3]]
             # Resize the frame
             # frame_cut = cv2.resize(frame_cut, None, fx=0.50, fy=0.50, interpolation = cv2.INTER_LINEAR )
             mask = foreground_extractor_GMG.apply(frame_cut)
@@ -107,7 +115,8 @@ class MotionStartDetector:
         logger.info("Finished detection motion in file: " + arg_video_for_process_path)
         return motion_start_time_list
 
-    def process_video(arg_video_for_process_path):
-        motion_start_times = MotionStartDetector.find_motion_start_times(arg_video_for_process_path)
-        MotionFilesHandler.write_motion_file(arg_video_for_process_path, motion_start_times)
+    @staticmethod
+    def process_video(arg_option_obj, arg_video_for_process_path):
+        motion_start_times = MotionStartDetector.find_motion_start_times(arg_option_obj, arg_video_for_process_path)
+        MotionFilesHandler.write_motion_file(arg_option_obj, arg_video_for_process_path, motion_start_times)
         return

@@ -9,7 +9,7 @@ from ConfigurationHandler import ConfigurationHandler
 logger = logging.getLogger(__name__)
 
 class GoproVideo:
-    def __init__(self):
+    def __init__(self, arg_options_obj = None):
         self.videoreader_obj = 0
         self.current_filename = ""
         self.creation_time = 0  # datetime
@@ -18,8 +18,9 @@ class GoproVideo:
         self.fps = 0
         self.frames = 0  # total number of frames
         self.current_frame = 0
-        tmp_options = ConfigurationHandler.get_configuration()
-        self.tool_folder = tmp_options['GOPRO_VIDEO']['tool_folder']
+        if arg_options_obj is None:
+            arg_options_obj = ConfigurationHandler.get_configuration()
+        self.tool_folder = arg_options_obj['GOPRO_VIDEO']['tool_folder']
 
     def init(self, arg_video_filename):
         if (arg_video_filename != self.current_filename):  # Only initilise if it is a new file

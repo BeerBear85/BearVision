@@ -4,9 +4,6 @@ import datetime
 
 logger = logging.getLogger(__name__)
 
-#clock_correction = datetime.timedelta(seconds=10)  # GPS - Only for the crappy test data of sep 27 2017
-clock_correction = datetime.timedelta(seconds=0)  # To be deleted
-
 class UserHandler:
     def __init__(self):
         self.user_list = []
@@ -26,7 +23,7 @@ class UserHandler:
         #logger.debug("Looking for users at time: " + target_date.strftime("%Y%m%d_%H_%M_%S") + " near location:" + str(target_location))
         for user in self.user_list:
             user.refresh_gps_data()
-            if user.is_close(target_date + clock_correction, target_location):
+            if user.is_close(target_date, target_location):
                 user_match = user
                 logger.debug("User match found at time: " + target_date.strftime("%Y%m%d_%H_%M_%S") + " near location:" + str(target_location))
         return user_match

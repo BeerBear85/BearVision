@@ -43,4 +43,6 @@ class ConfigurationHandler:
     @staticmethod
     def get_configuration():
         global _configuration
+        if _configuration is None:
+            print("No configuration was found!")
         return _configuration
