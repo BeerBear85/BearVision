@@ -18,12 +18,12 @@ class InputGPS_Importer:
     def import_user_format_gps_files(arg_input_folder: str, arg_output_folder_path: str):
 
         for gps_file in os.scandir(arg_input_folder):
-            output_path = InputGPS_Importer.__create_output_path(gps_file, arg_output_folder_path)
-            return_val = True
-            if gps_file.name.endswith('.gpx') and gps_file.is_file():
-                return_val = InputGPS_Importer.__generate_from_gpx_file(gps_file, output_path)
-            elif gps_file.name.endswith('.tcx') and gps_file.is_file():
-                return_val = InputGPS_Importer.__generate_from_tcx_file(gps_file, output_path)
+            tmp_output_file_path = InputGPS_Importer.__create_output_path(gps_file, arg_output_folder_path)
+            if not os.path.isfile(tmp_output_file_path):
+                if gps_file.name.endswith('.gpx') and gps_file.is_file():
+                    return_val = InputGPS_Importer.__generate_from_gpx_file(gps_file, tmp_output_file_path)
+                elif gps_file.name.endswith('.tcx') and gps_file.is_file():
+                    return_val = InputGPS_Importer.__generate_from_tcx_file(gps_file, tmp_output_file_path)
 
         return
 

@@ -30,6 +30,8 @@ class User:
         self.obstacle_match_data_names = ['time', 'video_file']
         self.obstacle_match_data = pd.DataFrame()
 
+        self.refresh_gps_data()
+
     def refresh_gps_data(self):
         InputGPS_Importer.import_user_format_gps_files(self.user_GPS_input_files, self.location_data_folder)  # creates BearVison formatted GPS files
         self.location_data = pd.DataFrame()  # reset

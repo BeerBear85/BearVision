@@ -22,7 +22,6 @@ class UserHandler:
         user_match = 0
         #logger.debug("Looking for users at time: " + target_date.strftime("%Y%m%d_%H_%M_%S") + " near location:" + str(target_location))
         for user in self.user_list:
-            user.refresh_gps_data()
             if user.is_close(target_date, target_location):
                 user_match = user
                 logger.debug("User match found at time: " + target_date.strftime("%Y%m%d_%H_%M_%S") + " near location:" + str(target_location))

@@ -12,7 +12,7 @@ class FullClipSpecification:
         self.start_time = arg_start_time + datetime.timedelta(seconds=float(tmp_options['FULL_CLIP_SPECIFICATION']['start_time_offset']))
         self.duration = datetime.timedelta(seconds=float(tmp_options['FULL_CLIP_SPECIFICATION']['clip_duration']))
         self.output_video_relative_speed = float(tmp_options['FULL_CLIP_SPECIFICATION']['output_video_speed'])
-        self.output_video_scale = float(tmp_options['FULL_CLIP_SPECIFICATION']['pa_output_scale'])
+        self.output_video_scale = float(tmp_options['FULL_CLIP_SPECIFICATION']['output_scale'])
         self.output_video_path = arg_output_video_path
 
     def read_file(self, arg_full_clip_spec_filename):
