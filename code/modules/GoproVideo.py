@@ -73,7 +73,7 @@ class GoproVideo:
 
         # Clean up
         if os.path.isfile(temp_bin_file_name):
-            os.unlink(temp_bin_file_name)
+            #os.unlink(temp_bin_file_name)
 
         # Read .json file and extract first GPS timestamp
         if os.access(temp_json_file_name, os.R_OK):
@@ -92,7 +92,7 @@ class GoproVideo:
 
             # Clean up
             if os.path.isfile(temp_json_file_name):
-                os.unlink(temp_json_file_name)
+                #os.unlink(temp_json_file_name)
         else:
             logger.debug("Could not open the json file")
             return -1
