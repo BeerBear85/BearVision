@@ -42,8 +42,8 @@ class GoproVideo:
         # Use ffmpeg to extract metadata stream (GoPro MET) - stream number 3
         ffmpeg_path = os.path.join(self.tool_folder, 'ffmpeg')
 
-        temp_bin_file_name = tempfile.mkstemp(prefix="gopro_temp_", suffix=".bin")[1]
-        temp_json_file_name = tempfile.mkstemp(prefix="gopro_temp_", suffix=".json")[1]
+        (temp_bin_file_handle, temp_bin_file_name) = tempfile.mkstemp(prefix="gopro_temp_", suffix=".bin")
+        (temp_json_file_handle, temp_json_file_name) = tempfile.mkstemp(prefix="gopro_temp_", suffix=".json")
 
         cmd_line = [ffmpeg_path, '-y', '-i', self.current_filename, '-loglevel', 'error', '-codec', 'copy', '-map',
                     '0:3', '-f', 'rawvideo', temp_bin_file_name]
@@ -73,7 +73,8 @@ class GoproVideo:
 
         # Clean up
         if os.path.isfile(temp_bin_file_name):
-            #os.unlink(temp_bin_file_name)
+            os.close(temp_bin_file_handle)
+            os.unlink(temp_bin_file_name)
 
         # Read .json file and extract first GPS timestamp
         if os.access(temp_json_file_name, os.R_OK):
@@ -92,7 +93,8 @@ class GoproVideo:
 
             # Clean up
             if os.path.isfile(temp_json_file_name):
-                #os.unlink(temp_json_file_name)
+                os.close(temp_json_file_handle)
+                os.unlink(temp_json_file_name)
         else:
             logger.debug("Could not open the json file")
             return -1
