@@ -2,7 +2,7 @@
 # A class for getting the info of a GoPro videofile
 # It can do things as extract the start time from the GPS meta data, set the starting point of the video at a specific frame and read a frame of the video
 
-import re, cv2, subprocess, os, logging, warnings
+import re, cv2, subprocess, os, logging, warnings, tempfile
 import datetime as dt
 from ConfigurationHandler import ConfigurationHandler
 
@@ -41,12 +41,13 @@ class GoproVideo:
     def extract_creation_date_from_file_gps(self):
         # Use ffmpeg to extract metadata stream (GoPro MET) - stream number 3
         ffmpeg_path = os.path.join(self.tool_folder, 'ffmpeg')
-        temp_file_name_base = os.path.splitext(self.current_filename)[0]
-        temp_bin_file_name = temp_file_name_base + '.bin'
-        temp_json_file_name = temp_file_name_base + '.json'
+
+        temp_bin_file_name = tempfile.mkstemp(prefix="gopro_temp_", suffix=".bin")[1]
+        temp_json_file_name = tempfile.mkstemp(prefix="gopro_temp_", suffix=".json")[1]
+
         cmd_line = [ffmpeg_path, '-y', '-i', self.current_filename, '-loglevel', 'error', '-codec', 'copy', '-map',
                     '0:3', '-f', 'rawvideo', temp_bin_file_name]
-        logger.debug("Calling command: " + str(cmd_line))
+        logger.debug("Calling command for .bin gen: " + ' '.join(cmd_line))
         process = subprocess.Popen(cmd_line, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         out, err = process.communicate()
         if err:
@@ -59,7 +60,7 @@ class GoproVideo:
         # Use tool to convert metadata to json format
         gopro2json_path = os.path.join(self.tool_folder, 'gopro2json')
         cmd_line = [gopro2json_path, '-i', temp_bin_file_name, '-o', temp_json_file_name]
-        logger.debug("Calling command: " + str(cmd_line))
+        logger.debug("Calling command for json gen: " + ' '.join(cmd_line))
         process = subprocess.Popen(cmd_line, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         out, err = process.communicate()
         if err:
@@ -67,12 +68,12 @@ class GoproVideo:
             print(err.decode('UTF-8'))
             raise ValueError('Something went wrong when extracting meta data from GoPro video!')
         # return -1;
-        out_string = out.decode('UTF-8');
+        out_string = out.decode('UTF-8')
         logger.debug('Output: ' + out_string)
 
         # Clean up
         if os.path.isfile(temp_bin_file_name):
-            os.remove(temp_bin_file_name)
+            os.unlink(temp_bin_file_name)
 
         # Read .json file and extract first GPS timestamp
         if os.access(temp_json_file_name, os.R_OK):
@@ -83,13 +84,17 @@ class GoproVideo:
             if utc_time_match_list:
                 utc_time = int(utc_time_match_list[0])
             else:
+                logger.debug("Did not find any UTC time stamp")
                 return -1
 
             logger.debug("Found UTC time: " + str(utc_time))
-            self.creation_time = dt.datetime.utcfromtimestamp(
-                utc_time / 1000000)  # Devide by 1000000 to match the format of datetime
-            os.remove(temp_json_file_name)
+            self.creation_time = dt.datetime.utcfromtimestamp(utc_time / 1000000)  # Devide by 1000000 to match the format of datetime
+
+            # Clean up
+            if os.path.isfile(temp_json_file_name):
+                os.unlink(temp_json_file_name)
         else:
+            logger.debug("Could not open the json file")
             return -1
 
         return 0
@@ -98,13 +103,14 @@ class GoproVideo:
     def extract_creation_date_from_file_info(self):
         ffprobe_path = os.path.join(self.tool_folder, 'ffprobe')
         cmd_line = [ffprobe_path, '-show_format', '-pretty', '-loglevel', 'quiet', self.current_filename]
+        logger.debug("Calling command for ffprobe file info: " + ' '.join(cmd_line))
         ffprobe_process = subprocess.Popen(cmd_line, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         out, err = ffprobe_process.communicate()
         if err:
             print("========= error ========")
             print(err)
-        # return -1;
-        out_string = out.decode('UTF-8');
+        # return -1
+        out_string = out.decode('UTF-8')
         create_time_str = re.findall("(?<=creation_time=)[\S\ \-\:]+", out_string)[0]
         # print(create_time_str)
         self.creation_time = dt.datetime.strptime(create_time_str, "%Y-%m-%d %H:%M:%S")

@@ -1,5 +1,5 @@
 import logging, os
-import MotionStartDetector, UserHandler, MotionTimeUserMatching, CutExtractor
+import MotionStartDetector, UserHandler, MotionTimeUserMatching, FullClipExtractor
 
 logger = logging.getLogger(__name__)  #Set logger to reflect the current file
 
@@ -14,7 +14,7 @@ class Application:
         tmp_motion_start_detector = MotionStartDetector.MotionStartDetector()
         tmp_user_handler = UserHandler.UserHandler()
         tmp_motion_time_user_matching = MotionTimeUserMatching.MotionTimeUserMatching()
-        tmp_full_clip_cut_extractor = CutExtractor.CutExtractor()
+        tmp_full_clip_cut_extractor = FullClipExtractor.FullClipExtractor()
 
         if not os.path.exists(arg_input_video_folder):
             raise ValueError("Video folder is not a valid folder: " + arg_input_video_folder)

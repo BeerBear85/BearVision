@@ -89,7 +89,7 @@ class User:
             video_output_name_short = self.name + "_" + time_str + ".avi"
             video_output_path = os.path.join(self.output_video_folder, video_output_name_short)
             if not os.path.exists(video_output_path):
-                full_clip_spec = FullClipSpecification.FullClipSpecification(row["video_file"], row["time"], video_output_path)
+                full_clip_spec = FullClipSpecification.FullClipSpecification(row["video_file"].path, row["time"], video_output_path)
                 full_clip_spec_list.append(full_clip_spec)
                 logger.debug("Entry in list of new clip_specification_list" + full_clip_spec.output_video_path)
         return full_clip_spec_list

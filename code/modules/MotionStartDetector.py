@@ -72,7 +72,6 @@ class MotionStartDetector:
             int(tmp_relative_search_box_dimensions[2] * MyGoproVideo.width),
             int(tmp_relative_search_box_dimensions[3] * MyGoproVideo.width)
             ]
-        print(tmp_absolute_search_box_dimensions)
 
         next_allowed_motion_frame = 0
         motion_frame_counter = 0
