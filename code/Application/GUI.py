@@ -2,16 +2,21 @@ from tkinter import *
 from tkinter import filedialog
 import os, logging
 from ConfigurationHandler import ConfigurationHandler
+from Enums import ActionOptions
 
 logger = logging.getLogger(__name__)
 
 #pa_default_input_video_folder = "test/input_video"
 #pa_default_user_folder = "test/users"
 
-command_list = ["Generate motion start files",
-                "Initialize users",
-                "Match user locations to motion files",
-                "Generate output videos"]
+# The much better way is to use ENUMS as:
+commands = {
+    ActionOptions.GENERATE_MOTION_FILES : "Generate motion start files",
+    ActionOptions.INIT_USERS            : "Initialize users",
+    ActionOptions.MATCH_LOCATION_IN_MOTION_FILES : "Match user locations to motion files",
+    ActionOptions.GENERATE_FULL_CLIP_OUTPUTS     : "Generate full clip output videos",
+    ActionOptions.GENERATE_TRACKER_CLIP_OUTPUTS  : "Generate tracker clip output videos"
+}
 
 
 class BearVisionGUI:
@@ -47,8 +52,8 @@ class BearVisionGUI:
         self.user_folder_button.grid(row=1, column=1, sticky=W+E)
 
         self.run_options = Listbox(self.master, selectmode=MULTIPLE )
-        for command_entry in command_list:
-            self.run_options.insert(END, command_entry)
+        for alias in commands:
+            self.run_options.insert(END, commands[alias])
 
         self.run_options.pack(fill=X, pady=10)
         self.run_options.selection_set(0,self.run_options.size())  # select all options
