@@ -1,8 +1,9 @@
 import logging, os
 import MotionStartDetector, UserHandler, MotionTimeUserMatching, FullClipExtractor
-from Enums import ActionOptions
+from Enums import ActionOptions, ClipTypes
 
 logger = logging.getLogger(__name__)  #Set logger to reflect the current file
+
 
 class Application:
     def __init__(self):
@@ -11,7 +12,7 @@ class Application:
     def run(self, arg_input_video_folder, arg_user_root_folder, arg_selection):
         logger.info("Running Application with video folder: " + arg_input_video_folder + " user folder: " + arg_user_root_folder + "\n")
         
-        #Create objects
+        # Create objects
         tmp_motion_start_detector = MotionStartDetector.MotionStartDetector()
         tmp_user_handler = UserHandler.UserHandler()
         tmp_motion_time_user_matching = MotionTimeUserMatching.MotionTimeUserMatching()
@@ -32,8 +33,9 @@ class Application:
             tmp_motion_time_user_matching.match_motion_start_times_with_users(arg_input_video_folder, tmp_user_handler)
 
         if ActionOptions.GENERATE_FULL_CLIP_OUTPUTS.value in arg_selection:
-            clip_specification_list = tmp_user_handler.create_full_clip_specifications()
+            clip_specification_list = tmp_user_handler.create_clip_specifications(ClipTypes.FULL_CLIP)
             tmp_full_clip_cut_extractor.extract_full_clip_specifications(clip_specification_list)
 
         if ActionOptions.GENERATE_TRACKER_CLIP_OUTPUTS.value in arg_selection:
+            clip_specification_list = tmp_user_handler.create_clip_specifications(ClipTypes.TRACKER_CLIP)
             print("not yet!")

@@ -1,6 +1,6 @@
 import logging, os
 import User
-import datetime
+from Enums import ClipTypes
 
 logger = logging.getLogger(__name__)
 
@@ -27,10 +27,10 @@ class UserHandler:
                 logger.debug("User match found at time: " + target_date.strftime("%Y%m%d_%H_%M_%S") + " near location:" + str(target_location))
         return user_match
 
-    def create_full_clip_specifications(self):
+    def create_clip_specifications(self, clip_type : ClipTypes):
         logger.debug("Creating specification objects for the found matches")
-        full_list_of_clip_specs = []
+        list_of_clip_specs = []
         for user in self.user_list:
-            user_clip_list = user.create_full_clip_specifications()
-            full_list_of_clip_specs.extend(user_clip_list)
-        return full_list_of_clip_specs
+            user_clip_list = user.create_clip_specifications(clip_type)
+            list_of_clip_specs.extend(user_clip_list)
+        return list_of_clip_specs

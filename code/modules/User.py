@@ -8,6 +8,7 @@ import GPS_Functions
 import FullClipSpecification
 from InputGPS_Importer import InputGPS_Importer
 from ConfigurationHandler import ConfigurationHandler
+from Enums import ClipTypes
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +20,8 @@ class User:
         self.user_folder = arg_user_folder.path
         self.user_GPS_input_files = os.path.join(self.user_folder, tmp_options['USER']['user_GPS_input_files_subpath'])
         self.location_data_folder = os.path.join(self.user_folder, tmp_options['USER']['location_data_subpath'])
-        self.output_video_folder = os.path.join(self.user_folder, tmp_options['USER']['output_video_subpath'])
+        self.full_clip_output_video_folder = os.path.join(self.user_folder, tmp_options['USER']['full_clip_output_video_subpath'])
+        self.tracker_clip_output_video_folder = os.path.join(self.user_folder, tmp_options['USER']['tracker_clip_output_video_subpath'])
         self.maximum_distance = float(tmp_options['USER']['maximum_distance'])
         self.minimum_velocity = float(tmp_options['USER']['minimum_velocity']) / 3.6  # convert from km/h to m/s
         self.time_search_range = datetime.timedelta(seconds=float(tmp_options['USER']['time_search_range']))
@@ -82,17 +84,24 @@ class User:
         return
 
     # Creates a list of FullClipSpecification objects for known matches of the user
-    def create_full_clip_specifications(self):
-        full_clip_spec_list = []
+    def create_clip_specifications(self, clip_type : ClipTypes):
+        clip_spec_list = []
         for index, row in self.obstacle_match_data.iterrows():
             time_str = row["time"].strftime("%Y%m%d_%H_%M_%S")
             video_output_name_short = self.name + "_" + time_str + ".avi"
-            video_output_path = os.path.join(self.output_video_folder, video_output_name_short)
-            if not os.path.exists(video_output_path):
-                full_clip_spec = FullClipSpecification.FullClipSpecification(row["video_file"].path, row["time"], video_output_path)
-                full_clip_spec_list.append(full_clip_spec)
-                logger.debug("Entry in list of new clip_specification_list" + full_clip_spec.output_video_path)
-        return full_clip_spec_list
+
+            if clip_type is ClipTypes.FULL_CLIP:
+                video_output_path = os.path.join(self.full_clip_output_video_folder, video_output_name_short)
+                if not os.path.exists(video_output_path):
+                    clip_spec = FullClipSpecification.FullClipSpecification(row["video_file"].path, row["time"], video_output_path)
+                    clip_spec_list.append(clip_spec)
+                    logger.debug("Entry in list of new clip_specification_list" + clip_spec.output_video_path)
+            elif clip_type is ClipTypes.TRACKER_CLIP:
+                video_output_path = os.path.join(self.tracker_clip_output_video_folder, video_output_name_short)
+                if not os.path.exists(video_output_path):
+                    print("Tracker clip!")
+
+        return clip_spec_list
 
     def __nearest_date(self, date_list, target_date):  # Quite slow, so should only be used on a limited amount of data
         nearest = min(date_list, key=lambda x: abs(x - target_date))
