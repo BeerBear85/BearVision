@@ -5,7 +5,7 @@ import os, datetime, csv, logging
 import numpy as np
 import pandas as pd
 import GPS_Functions
-import FullClipSpecification
+import BasicClipSpecification
 from InputGPS_Importer import InputGPS_Importer
 from ConfigurationHandler import ConfigurationHandler
 from Enums import ClipTypes
@@ -83,23 +83,23 @@ class User:
         self.obstacle_match_data = pd.concat([self.obstacle_match_data, data_entry])   # concat all the match data
         return
 
-    # Creates a list of FullClipSpecification objects for known matches of the user
+    # Creates a list of BasicClipSpecification objects for known matches of the user
     def create_clip_specifications(self, clip_type : ClipTypes):
         clip_spec_list = []
+        video_output_path = ''
         for index, row in self.obstacle_match_data.iterrows():
             time_str = row["time"].strftime("%Y%m%d_%H_%M_%S")
             video_output_name_short = self.name + "_" + time_str + ".avi"
 
             if clip_type is ClipTypes.FULL_CLIP:
                 video_output_path = os.path.join(self.full_clip_output_video_folder, video_output_name_short)
-                if not os.path.exists(video_output_path):
-                    clip_spec = FullClipSpecification.FullClipSpecification(row["video_file"].path, row["time"], video_output_path)
-                    clip_spec_list.append(clip_spec)
-                    logger.debug("Entry in list of new clip_specification_list" + clip_spec.output_video_path)
             elif clip_type is ClipTypes.TRACKER_CLIP:
                 video_output_path = os.path.join(self.tracker_clip_output_video_folder, video_output_name_short)
-                if not os.path.exists(video_output_path):
-                    print("Tracker clip!")
+
+            if not os.path.exists(video_output_path):
+                clip_spec = BasicClipSpecification.BasicClipSpecification(row["video_file"].path, row["time"],video_output_path)
+                clip_spec_list.append(clip_spec)
+                logger.debug("Entry in list of new clip_specification_list" + clip_spec.output_video_path)
 
         return clip_spec_list
 

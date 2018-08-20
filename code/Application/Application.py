@@ -1,5 +1,5 @@
 import logging, os
-import MotionStartDetector, UserHandler, MotionTimeUserMatching, FullClipExtractor
+import MotionStartDetector, UserHandler, MotionTimeUserMatching, FullClipExtractor, TrackerClipExtractor
 from Enums import ActionOptions, ClipTypes
 
 logger = logging.getLogger(__name__)  #Set logger to reflect the current file
@@ -17,6 +17,7 @@ class Application:
         tmp_user_handler = UserHandler.UserHandler()
         tmp_motion_time_user_matching = MotionTimeUserMatching.MotionTimeUserMatching()
         tmp_full_clip_cut_extractor = FullClipExtractor.FullClipExtractor()
+        tmp_tracker_clip_extractor = TrackerClipExtractor.TrackerClipExtractor()
 
         if not os.path.exists(arg_input_video_folder):
             raise ValueError("Video folder is not a valid folder: " + arg_input_video_folder)
@@ -34,8 +35,8 @@ class Application:
 
         if ActionOptions.GENERATE_FULL_CLIP_OUTPUTS.value in arg_selection:
             clip_specification_list = tmp_user_handler.create_clip_specifications(ClipTypes.FULL_CLIP)
-            tmp_full_clip_cut_extractor.extract_full_clip_specifications(clip_specification_list)
+            tmp_full_clip_cut_extractor.extract_clips_from_list(clip_specification_list)
 
         if ActionOptions.GENERATE_TRACKER_CLIP_OUTPUTS.value in arg_selection:
             clip_specification_list = tmp_user_handler.create_clip_specifications(ClipTypes.TRACKER_CLIP)
-            print("not yet!")
+            tmp_tracker_clip_extractor.extract_clips_from_list(clip_specification_list)

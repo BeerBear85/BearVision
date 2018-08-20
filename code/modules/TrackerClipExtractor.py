@@ -9,24 +9,26 @@ from ConfigurationHandler import ConfigurationHandler
 logger = logging.getLogger(__name__)  #Set logger to reflect the current file
 
 
-class FullClipExtractor:
+class TrackerClipExtractor:
     def __init__(self):
-        logger.debug("FullClipExtractor created")
+        logger.debug("TrackerClipExtractor created")
         self.tmp_options = ConfigurationHandler.get_configuration()
         self.number_of_process_workers = int(self.tmp_options['FULL_CLIP_SPECIFICATION']['number_of_process_workers'])
 
         return
 
     def extract_clips_from_list(self, arg_clip_specification_list: list):
-        logger.info("Extracting full clips from specifications")
+        logger.info("Extracting tracker clips from specifications")
+
+        print("hello!!!")
 
         # Single process
         #for clip_spec in arg_clip_specification_list:
         #    FullClipExtractor.extract_single_clip(self.tmp_options, clip_spec)
 
         # multiprocess
-        with Pool(processes=self.number_of_process_workers) as pool:
-            pool.map(partial(FullClipExtractor.extract_single_clip, self.tmp_options), arg_clip_specification_list)
+        #with Pool(processes=self.number_of_process_workers) as pool:
+        #    pool.map(partial(FullClipExtractor.extract_single_clip, self.tmp_options), arg_clip_specification_list)
 
         return
 

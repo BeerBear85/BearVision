@@ -5,15 +5,12 @@ from ConfigurationHandler import ConfigurationHandler
 
 logger = logging.getLogger(__name__)
 
-class FullClipSpecification:
+class BasicClipSpecification:
     def __init__(self, arg_input_video_file_path: str, arg_start_time: datetime, arg_output_video_path: str):
         logger.debug("Created full clip spec for " + arg_output_video_path + " from video file: " + arg_input_video_file_path)
         tmp_options = ConfigurationHandler.get_configuration()
         self.video_file_path = arg_input_video_file_path
         self.start_time = arg_start_time + datetime.timedelta(seconds=float(tmp_options['FULL_CLIP_SPECIFICATION']['start_time_offset']))
-        self.duration = datetime.timedelta(seconds=float(tmp_options['FULL_CLIP_SPECIFICATION']['clip_duration']))
-        self.output_video_relative_speed = float(tmp_options['FULL_CLIP_SPECIFICATION']['output_video_speed'])
-        self.output_video_scale = float(tmp_options['FULL_CLIP_SPECIFICATION']['output_scale'])
         self.output_video_path = arg_output_video_path
 
     def read_file(self, arg_full_clip_spec_filename):
