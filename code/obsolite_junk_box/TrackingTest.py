@@ -45,8 +45,9 @@ if __name__ == '__main__' :
     #video = cv2.VideoCapture("users/bear/full_clips/20170927_15_42_31_GP020491.mp4") # tail grep
     #video = cv2.VideoCapture("users/bear/full_clips/20170927_15_58_24_GP030491.mp4")  #FS 360
     #video = cv2.VideoCapture("users/bear/full_clips/20170927_15_43_44_GP020491.mp4")  #Backside slide
-    video = cv2.VideoCapture("users/bear/full_clips/20170927_16_00_50_GP040491.mp4")  # backflip fail
+    #video = cv2.VideoCapture("users/bear/full_clips/20170927_16_00_50_GP040491.mp4")  # backflip fail
     #video = cv2.VideoCapture("users/bear/full_clips/not_bear_20170927_15_42_40_GP020491.mp4")  # far away jump
+    video = cv2.VideoCapture("C:/git_reps/BearVision/test/users/test_user2/output_video_files/test_user2_20170927_15_58_33.avi")
 
 
     # Exit if video not opened.
@@ -56,7 +57,7 @@ if __name__ == '__main__' :
 
     # Read first frame.
 
-    start_frame = 90 #100
+    start_frame = 1 #100
     frame_count = 0
     while (frame_count < start_frame):
         ok, frame = video.read()
@@ -66,7 +67,7 @@ if __name__ == '__main__' :
             sys.exit()
 
     # Define an initial bounding box
-    bbox = (1, 700, 300, 200) # x1,y1,width,height
+    bbox = (1, 300, 300, 200) # x1,y1,width,height
 
     # Uncomment the line below to select a different bounding box
     #bbox = cv2.selectROI(frame, False)
@@ -76,11 +77,14 @@ if __name__ == '__main__' :
     # Initialize tracker with first frame and bounding box
     ok = tracker.init(frame, bbox)
 
+    frame_num = 0
     while True:
         # Read a new frame
         ok, frame = video.read()
         if not ok:
             break
+
+        frame_num += 1
 
         # Start timer
         timer = cv2.getTickCount()
@@ -120,3 +124,9 @@ if __name__ == '__main__' :
         # Exit if ESC pressed
         k = cv2.waitKey(1) & 0xff
         if k == 27 : break
+
+        #if frame_num > 50:
+        #    break
+
+    if tracker_type == 'BEARTRACKER':
+        tracker.write_state_log_file()
