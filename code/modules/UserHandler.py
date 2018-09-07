@@ -20,11 +20,11 @@ class UserHandler:
 
     def find_valid_user_match(self,  target_date, target_location):
         user_match = 0
-        #logger.debug("Looking for users at time: " + target_date.strftime("%Y%m%d_%H_%M_%S") + " near location:" + str(target_location))
+        logger.debug("Looking for users at time: " + target_date.strftime("%Y%m%d_%H_%M_%S_%f") + " near location:" + str(target_location))
         for user in self.user_list:
             if user.is_close(target_date, target_location):
                 user_match = user
-                logger.debug("User match found at time: " + target_date.strftime("%Y%m%d_%H_%M_%S") + " near location:" + str(target_location))
+                logger.debug("User match found at time: " + target_date.strftime("%Y%m%d_%H_%M_%S_%f") + " near location:" + str(target_location))
         return user_match
 
     def create_clip_specifications(self, clip_type : ClipTypes):

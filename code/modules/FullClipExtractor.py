@@ -61,7 +61,7 @@ class FullClipExtractor:
             if read_return_value == 20:  # GoPro video error
                 continue
 
-            if arg_clip_spec.output_video_scale != 1.0:
+            if tmp_output_video_scale != 1.0:
                 frame = cv2.resize(frame, (clip_frame_width, clip_frame_height), 0, 0, interpolation=cv2.INTER_LINEAR)
 
             writer_object.write(frame)

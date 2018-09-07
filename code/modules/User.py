@@ -48,14 +48,14 @@ class User:
                 self.location_data = pd.concat([self.location_data, file_data]) # concat all the read GPS data
 
         self.location_data = self.location_data[~self.location_data.index.duplicated(keep='first')]  # Remove multiple entries with the same time stamp
-        #print('Full data:' + str(self.data))
+        #print('Full location data:' + str(self.location_data))
         return
 
     def is_close(self, target_date, target_location):
         #logger.debug("Types: " + str(type(target_date)) + "  " + str(type(target_location)))
-        log_data_within_time_interval = self.location_data.truncate(before=target_date - self.time_search_range, after=target_date + self.time_search_range)
         #print("Before: " + (target_date - self.time_search_range).strftime("%Y%m%d_%H_%M_%S_%f"))
         #print("After:  " + (target_date + self.time_search_range).strftime("%Y%m%d_%H_%M_%S_%f"))
+        log_data_within_time_interval = self.location_data.truncate(before=target_date - self.time_search_range, after=target_date + self.time_search_range)
 
         if not log_data_within_time_interval.empty:  # not empty
             [nearest, nearest_time_delta] = self.__nearest_date(log_data_within_time_interval.index, target_date)

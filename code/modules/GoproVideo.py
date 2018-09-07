@@ -90,6 +90,7 @@ class GoproVideo:
 
             logger.debug("Found UTC time: " + str(utc_time))
             self.creation_time = dt.datetime.utcfromtimestamp(utc_time / 1000000)  # Devide by 1000000 to match the format of datetime
+            logger.debug("Converted creation time: " + self.creation_time.strftime("%Y%m%d_%H_%M_%S_%f"))
 
             # Clean up
             if os.path.isfile(temp_json_file_name):

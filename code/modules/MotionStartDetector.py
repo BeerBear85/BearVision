@@ -72,6 +72,7 @@ class MotionStartDetector:
             int(tmp_relative_search_box_dimensions[2] * MyGoproVideo.width),
             int(tmp_relative_search_box_dimensions[3] * MyGoproVideo.width)
             ]
+        logger.debug("Looking for motion in the following pixel range (y_start,y_end,x_start,x_end): " + str(tmp_absolute_search_box_dimensions))
 
         next_allowed_motion_frame = 0
         motion_frame_counter = 0
@@ -97,10 +98,11 @@ class MotionStartDetector:
                 if motion_frame_counter >= tmp_motion_frame_counter_threshold:
                     motion_frame_counter = 0
                     next_allowed_motion_frame = frame_number + int(MyGoproVideo.fps * tmp_allowed_clip_interval)
-                    relative_start_time = datetime.timedelta(seconds=int((frame_number - tmp_motion_frame_counter_threshold) / MyGoproVideo.fps))
+                    relative_start_time_double = (frame_number - tmp_motion_frame_counter_threshold) / MyGoproVideo.fps # [s]
+                    relative_start_time = datetime.timedelta(seconds=int(relative_start_time_double), milliseconds=int((relative_start_time_double-int(relative_start_time_double))*1000))
                     abs_motion_start_time = MyGoproVideo.creation_time + relative_start_time
-                    logger.debug("Motion detected at frame: " + str(frame_number) + ", corrisponding to relative time: " + str(relative_start_time) + ", absolute time: " + abs_motion_start_time.strftime("%Y%m%d_%H_%M_%S"))
-                    print("Motion detected at frame: " + str(frame_number) + ", corrisponding to relative time: " + str(relative_start_time) + ", absolute time: " + abs_motion_start_time.strftime("%Y%m%d_%H_%M_%S"))
+                    logger.debug("Motion detected at frame: " + str(frame_number) + ", corrisponding to relative time: " + str(relative_start_time) + ", absolute time: " + abs_motion_start_time.strftime("%Y%m%d_%H_%M_%S_%f"))
+                    print("Motion detected at frame: " + str(frame_number) + ", corrisponding to relative time: " + str(relative_start_time) + ", absolute time: " + abs_motion_start_time.strftime("%Y%m%d_%H_%M_%S_%f"))
                     motion_start_time_list.append(abs_motion_start_time)
 
             if tmp_show_video_debug:

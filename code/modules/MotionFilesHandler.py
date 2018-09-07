@@ -57,9 +57,9 @@ class MotionFilesHandler:
             for entry in row:
                 if tmp_motion_start_time_entry_regex.match(entry):
                     #print("Matching entry: " + entry)
-                    motion_start_time = datetime.datetime.strptime(entry, "%Y%m%d_%H_%M_%S")
+                    motion_start_time = datetime.datetime.strptime(entry, "%Y%m%d_%H_%M_%S_%f")
                     motion_start_times_list.append(motion_start_time)
-                    #logger.debug("Motion time for readout of file: " + arg_motion_file.path + " : " + motion_start_time.strftime("%Y%m%d_%H_%M_%S"))
+                    #logger.debug("Motion time for readout of file: " + arg_motion_file.path + " : " + motion_start_time.strftime("%Y%m%d_%H_%M_%S_%f"))
 
         return motion_start_times_list  # list of datetimes
 
@@ -75,9 +75,8 @@ class MotionFilesHandler:
         csv_file = open(output_filename, 'w', newline='')
         output_writer = csv.writer(csv_file)
 
-
         for start_time in arg_motion_start_times_list:
-            start_time_str = start_time.strftime("%Y%m%d_%H_%M_%S")
+            start_time_str = start_time.strftime("%Y%m%d_%H_%M_%S_%f")
             output_writer.writerow([start_time_str])
 
         logger.debug("Finished writing motion file: " + output_filename)
