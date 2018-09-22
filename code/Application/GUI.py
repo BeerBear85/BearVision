@@ -76,13 +76,13 @@ class BearVisionGUI:
 
     def set_input_video_folder(self, arg_directory_path=None):
         if arg_directory_path is None:
-            arg_directory_path = filedialog.askdirectory()
+            arg_directory_path = filedialog.askdirectory(initialdir=self.video_folder_text.get())
         self.video_folder_text.set(arg_directory_path)
         logger.info("Setting input video folder to: " + arg_directory_path)
 
     def set_user_folder(self, arg_directory_path=None):
         if arg_directory_path is None:
-            arg_directory_path = filedialog.askdirectory()
+            arg_directory_path = filedialog.askdirectory(initialdir=self.video_folder_text.get())
         self.user_folder_text.set(arg_directory_path)
         logger.info("Setting user folder to: " + arg_directory_path)
 
@@ -100,7 +100,7 @@ class BearVisionGUI:
 
     def load_config(self):
         logger.debug("load_config()")
-        tmp_config_file = filedialog.askopenfilename()
+        tmp_config_file = filedialog.askopenfilename(initialdir=ConfigurationHandler.get_configuration_path())
         tmp_options = ConfigurationHandler.read_config_file(tmp_config_file)
 
         # update file selection boxes and GUI
