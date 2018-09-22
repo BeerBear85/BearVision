@@ -82,7 +82,7 @@ class BearVisionGUI:
 
     def set_user_folder(self, arg_directory_path=None):
         if arg_directory_path is None:
-            arg_directory_path = filedialog.askdirectory(initialdir=self.video_folder_text.get())
+            arg_directory_path = filedialog.askdirectory(initialdir=self.user_folder_text.get())
         self.user_folder_text.set(arg_directory_path)
         logger.info("Setting user folder to: " + arg_directory_path)
 
