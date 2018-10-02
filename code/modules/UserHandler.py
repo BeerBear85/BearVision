@@ -34,3 +34,8 @@ class UserHandler:
             user_clip_list = user.create_clip_specifications(clip_type)
             list_of_clip_specs.extend(user_clip_list)
         return list_of_clip_specs
+
+    def filter_obstacle_matches(self, arg_user_match_minimum_interval : float):
+        for user in self.user_list:
+            user.filter_obstacle_matches(arg_user_match_minimum_interval)
+        return

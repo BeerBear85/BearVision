@@ -1,5 +1,5 @@
 import logging, os
-import UserHandler
+from UserHandler import UserHandler
 from MotionFilesHandler import MotionFilesHandler
 from ConfigurationHandler import ConfigurationHandler
 
@@ -9,10 +9,11 @@ class MotionTimeUserMatching:
     def __init__(self):
         tmp_options = ConfigurationHandler.get_configuration()
         self.obstacle_approach_location = [float(tmp_options['OBSTACLE']['approach_location_lat']), float(tmp_options['OBSTACLE']['approach_location_long'])]
+        self.user_match_minimum_interval = float(tmp_options['OBSTACLE']['user_match_minimum_interval'])
         return
 
     # Updates all the users database of known matches
-    def match_motion_start_times_with_users(self, arg_input_video_folder, arg_user_handler):
+    def match_motion_start_times_with_users(self, arg_input_video_folder, arg_user_handler: UserHandler):
         motion_times_files = MotionFilesHandler.get_motion_file_list(arg_input_video_folder)
 
         for motion_file in motion_times_files:
@@ -28,4 +29,5 @@ class MotionTimeUserMatching:
                     else:
                         logger.warning("No associated video file found for motion file: " + motion_file.path)
 
+        arg_user_handler.filter_obstacle_matches(self.user_match_minimum_interval)
         return

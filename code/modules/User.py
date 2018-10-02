@@ -27,10 +27,10 @@ class User:
         self.time_search_range = datetime.timedelta(seconds=float(tmp_options['USER']['time_search_range']))
 
         self.location_data_names = ['time', 'latitude', 'longitude', 'velocity', 'precision', 'satellites']
-        self.location_data = pd.DataFrame()
+        self.location_data = pd.DataFrame(columns=self.location_data_names)
 
         self.obstacle_match_data_names = ['time', 'video_file']
-        self.obstacle_match_data = pd.DataFrame()
+        self.obstacle_match_data = pd.DataFrame(columns=self.obstacle_match_data_names)
 
         self.refresh_gps_data()
 
@@ -47,7 +47,7 @@ class User:
                 # print(file_data)
                 self.location_data = pd.concat([self.location_data, file_data]) # concat all the read GPS data
 
-        self.location_data = self.location_data[~self.location_data.index.duplicated(keep='first')]  # Remove multiple entries with the same time stamp
+        self.location_data = self.location_data[~self.location_data.index.duplicated(keep='first')]  # Remove multiple entries with the same time stamp be bnexe3
         #print('Full location data:' + str(self.location_data))
         return
 
@@ -80,7 +80,30 @@ class User:
     def add_obstacle_match(self, arg_start_time_entry, arg_video_file):
         data_entry = [arg_start_time_entry, arg_video_file] # format for panda frame (table)
         data_entry = pd.DataFrame([data_entry], columns=self.obstacle_match_data_names)
+        #self.obstacle_match_data.append(data_entry) # Why does this not work?
         self.obstacle_match_data = pd.concat([self.obstacle_match_data, data_entry])   # concat all the match data
+        return
+
+    def filter_obstacle_matches(self, arg_user_match_minimum_interval : float):
+        # Drop every match which is closer (after) a match than the minimum interval
+        self.obstacle_match_data.sort_values(by='time', inplace=True)
+        self.obstacle_match_data.index = range(len(self.obstacle_match_data))  # reset indexing of dataframe
+        tmp_match_minimim_interval = datetime.timedelta(seconds=int(arg_user_match_minimum_interval))
+        tmp_indexes_to_drop = []
+
+        #logger.debug("Pre-filtered match list of user %s, is: %s", self.name, str(self.obstacle_match_data))
+
+        # This is probably not the smartes way of doing this!
+        for index, row in self.obstacle_match_data.iterrows():
+            detection_time = row["time"]
+
+            if ((index+1) < self.obstacle_match_data.shape[0]):  # not out of range
+                if self.obstacle_match_data.at[index+1,'time'] < (detection_time + tmp_match_minimim_interval): #As the dataframe is sorted, we already know that the next item is later in time
+                    tmp_indexes_to_drop.append(index+1)
+
+        self.obstacle_match_data.drop(tmp_indexes_to_drop, inplace=True)
+
+        logger.debug("Filtered match list for user %s, is: %s", self.name,str(self.obstacle_match_data))
         return
 
     # Creates a list of BasicClipSpecification objects for known matches of the user
