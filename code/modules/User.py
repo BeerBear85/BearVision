@@ -29,7 +29,7 @@ class User:
         self.location_data_names = ['time', 'latitude', 'longitude', 'velocity', 'precision', 'satellites']
         self.location_data = pd.DataFrame(columns=self.location_data_names)
 
-        self.obstacle_match_data_names = ['time', 'video_file']
+        self.obstacle_match_data_names = ['time', 'video_file', 'init_bbox']
         self.obstacle_match_data = pd.DataFrame(columns=self.obstacle_match_data_names)
 
         self.refresh_gps_data()
@@ -77,10 +77,10 @@ class User:
                 return True  # maybe also get dataframe row of the 'nearest' element
         return False
 
-    def add_obstacle_match(self, arg_start_time_entry, arg_video_file):
-        data_entry = [arg_start_time_entry, arg_video_file] # format for panda frame (table)
+    def add_obstacle_match(self, arg_start_time_entry, arg_video_file, arg_init_bbox):
+        data_entry = [arg_start_time_entry, arg_video_file, arg_init_bbox] # format for panda frame (table)
         data_entry = pd.DataFrame([data_entry], columns=self.obstacle_match_data_names)
-        #self.obstacle_match_data.append(data_entry) # Why does this not work?
+        #self.obstacle_match_data = self.obstacle_match_data.append(data_entry)
         self.obstacle_match_data = pd.concat([self.obstacle_match_data, data_entry])   # concat all the match data
         return
 
@@ -110,8 +110,8 @@ class User:
     def create_clip_specifications(self, clip_type : ClipTypes):
         clip_spec_list = []
         video_output_path = ''
-        for index, row in self.obstacle_match_data.iterrows():
-            time_str = row["time"].strftime("%Y%m%d_%H_%M_%S")
+        for index, obstacle_row in self.obstacle_match_data.iterrows():
+            time_str = obstacle_row["time"].strftime("%Y%m%d_%H_%M_%S")
             video_output_name_short = self.name + "_" + time_str + ".avi"
 
             if clip_type is ClipTypes.FULL_CLIP:
@@ -120,7 +120,10 @@ class User:
                 video_output_path = os.path.join(self.tracker_clip_output_video_folder, video_output_name_short)
 
             if not os.path.exists(video_output_path):
-                clip_spec = BasicClipSpecification.BasicClipSpecification(row["video_file"].path, row["time"],video_output_path)
+                clip_spec = BasicClipSpecification.BasicClipSpecification(obstacle_row["video_file"].path,
+                                                                          obstacle_row["time"],
+                                                                          video_output_path,
+                                                                          obstacle_row["init_bbox"])
                 clip_spec_list.append(clip_spec)
                 logger.debug("Entry in list of new clip_specification_list" + clip_spec.output_video_path)
 

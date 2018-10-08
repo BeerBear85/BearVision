@@ -5,13 +5,15 @@ from ConfigurationHandler import ConfigurationHandler
 
 logger = logging.getLogger(__name__)
 
+
 class BasicClipSpecification:
-    def __init__(self, arg_input_video_file_path: str, arg_start_time: datetime, arg_output_video_path: str):
+    def __init__(self, arg_input_video_file_path: str, arg_start_time: datetime, arg_output_video_path: str, arg_init_bbox: list):
         logger.debug("Created full clip spec for " + arg_output_video_path + " from video file: " + arg_input_video_file_path)
         tmp_options = ConfigurationHandler.get_configuration()
         self.video_file_path = arg_input_video_file_path
         self.start_time = arg_start_time + datetime.timedelta(seconds=float(tmp_options['FULL_CLIP_SPECIFICATION']['start_time_offset']))
         self.output_video_path = arg_output_video_path
+        self.init_bbox = arg_init_bbox
 
     def read_file(self, arg_full_clip_spec_filename):
         logger.error("read_file - Not implemented yet!")

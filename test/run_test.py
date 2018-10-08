@@ -33,7 +33,12 @@ if __name__ == "__main__":
     tmp_user_folder  = os.path.abspath("users")
     tmp_config_file = os.path.abspath("test_config.ini")
 
-    tmp_action_list = [ActionOptions.INIT_USERS.value, ActionOptions.MATCH_LOCATION_IN_MOTION_FILES.value]
+    # list of actions to do in the test
+    tmp_action_list = [ActionOptions.GENERATE_MOTION_FILES.value,
+                       ActionOptions.INIT_USERS.value,
+                       ActionOptions.MATCH_LOCATION_IN_MOTION_FILES.value,
+                       ActionOptions.GENERATE_FULL_CLIP_OUTPUTS.value,
+                       ActionOptions.GENERATE_TRACKER_CLIP_OUTPUTS.value]
 
     print("Starting test!\n")
     logger.debug("------------------------Start------------------------------------")

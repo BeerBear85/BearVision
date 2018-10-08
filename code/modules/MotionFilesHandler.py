@@ -1,4 +1,5 @@
 import logging, os, re, csv, datetime
+import pandas as pd
 from ConfigurationHandler import ConfigurationHandler
 
 
@@ -48,36 +49,26 @@ class MotionFilesHandler:
 
     @staticmethod
     def read_motion_file(arg_motion_file):
+        # https://stackoverflow.com/questions/21269399/datetime-dtypes-in-pandas-read-csv
         logger.info("Reading motion file: " + arg_motion_file.path)
-        tmp_motion_start_time_entry_regex = re.compile("\d{8}\_\d{2}\_\d{2}\_\d{2}")
         csv_file = open(arg_motion_file, 'r', newline='')
-        file_reader = csv.reader(csv_file)
-        motion_start_times_list = []
-        for row in file_reader:  # row is here a list
-            for entry in row:
-                if tmp_motion_start_time_entry_regex.match(entry):
-                    #print("Matching entry: " + entry)
-                    motion_start_time = datetime.datetime.strptime(entry, "%Y%m%d_%H_%M_%S_%f")
-                    motion_start_times_list.append(motion_start_time)
-                    #logger.debug("Motion time for readout of file: " + arg_motion_file.path + " : " + motion_start_time.strftime("%Y%m%d_%H_%M_%S_%f"))
+        tmp_motion_start_info = pd.read_csv(csv_file, sep=',', parse_dates=['time'])
 
-        return motion_start_times_list  # list of datetimes
+        #tmp_motion_start_time = tmp_motion_start_info['time'].tolist()
+
+        return tmp_motion_start_info
 
     @staticmethod
-    def write_motion_file(arg_option_obj, arg_video_file_path, arg_motion_start_times_list):
+    def write_motion_file(arg_option_obj, arg_video_file_path, arg_motion_start_info):
 
         tmp_motion_file_ending = arg_option_obj['MOTION_DETECTION']['motion_file_ending']
         output_filename_short = os.path.splitext(arg_video_file_path)[0] + tmp_motion_file_ending + ".csv"
         output_dir = os.path.dirname(arg_video_file_path)
         output_filename = os.path.join(output_dir, output_filename_short)
 
-        logger.info("Writing motion file: " + output_filename + " with " + str(len(arg_motion_start_times_list)) + " entries")
-        csv_file = open(output_filename, 'w', newline='')
-        output_writer = csv.writer(csv_file)
+        logger.info("Writing motion file: " + output_filename + " with " + str(len(arg_motion_start_info)) + " entries")
 
-        for start_time in arg_motion_start_times_list:
-            start_time_str = start_time.strftime("%Y%m%d_%H_%M_%S_%f")
-            output_writer.writerow([start_time_str])
+        arg_motion_start_info.to_csv(output_filename, index=False)
 
         logger.debug("Finished writing motion file: " + output_filename)
 
