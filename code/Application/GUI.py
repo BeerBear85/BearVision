@@ -1,8 +1,10 @@
 from tkinter import *
 from tkinter import filedialog
+from tkinter import messagebox
 import os, logging
 from ConfigurationHandler import ConfigurationHandler
 from Enums import ActionOptions
+from MotionROISelector import MotionROISelector
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +60,21 @@ class BearVisionGUI:
         self.run_options.pack(fill=X, pady=10)
         self.run_options.selection_set(0,self.run_options.size())  # select all options
 
+        # Frame and button for motion ROI selection
+        self.motion_ROI_selection_frame = Frame(self.master)
+        self.motion_ROI_selection_frame.pack(fill=X, pady=10, side=TOP)
+        self.motion_ROI_selection_frame.columnconfigure(0, weight=3)
+        self.motion_ROI_selection_frame.columnconfigure(1, weight=1)
+
+        self.motion_ROI_text = StringVar()
+        if tmp_options is not None:
+            self.motion_ROI_text.set( tmp_options['MOTION_DETECTION']['search_box_dimensions'] )
+        self.video_folder_entry = Entry(self.motion_ROI_selection_frame, textvariable=self.motion_ROI_text)
+        self.video_folder_entry.grid(row=0, column=0, sticky=W+E)
+        self.video_folder_button = Button(self.motion_ROI_selection_frame, text="Select motion detection ROI", command=self.set_motion_detection_ROI)
+        self.video_folder_button.grid(row=0, column=1, sticky=W+E)
+
+        # Create button frame
         self.button_frame = Frame(self.master)
         self.button_frame.pack(fill=X, pady=10)
 
@@ -77,14 +94,20 @@ class BearVisionGUI:
     def set_input_video_folder(self, arg_directory_path=None):
         if arg_directory_path is None:
             arg_directory_path = filedialog.askdirectory(initialdir=self.video_folder_text.get())
-        self.video_folder_text.set(arg_directory_path)
+        self.video_folder_text.set( os.path.abspath(arg_directory_path) )
         logger.info("Setting input video folder to: " + arg_directory_path)
 
     def set_user_folder(self, arg_directory_path=None):
         if arg_directory_path is None:
             arg_directory_path = filedialog.askdirectory(initialdir=self.user_folder_text.get())
-        self.user_folder_text.set(arg_directory_path)
+        self.user_folder_text.set( os.path.abspath(arg_directory_path) )
         logger.info("Setting user folder to: " + arg_directory_path)
+        
+    def set_motion_detection_ROI(self):
+
+        tempROISelector = MotionROISelector()
+        tempROISelector.SelectROI(self.video_folder_text.get())
+        #logger.info("Setting user folder to: " + arg_directory_path)
 
     def run(self):
         logger.debug("run()")

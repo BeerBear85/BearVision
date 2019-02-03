@@ -1,5 +1,6 @@
 import logging, os, re, csv, datetime
 import pandas as pd
+from ast import literal_eval
 from ConfigurationHandler import ConfigurationHandler
 
 
@@ -52,7 +53,8 @@ class MotionFilesHandler:
         # https://stackoverflow.com/questions/21269399/datetime-dtypes-in-pandas-read-csv
         logger.info("Reading motion file: " + arg_motion_file.path)
         csv_file = open(arg_motion_file, 'r', newline='')
-        tmp_motion_start_info = pd.read_csv(csv_file, sep=',', parse_dates=['time'])
+
+        tmp_motion_start_info = pd.read_csv(csv_file, sep=',', parse_dates=['time'], converters={"bbox": literal_eval})
 
         #tmp_motion_start_time = tmp_motion_start_info['time'].tolist()
 

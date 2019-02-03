@@ -42,14 +42,16 @@ class TrackerClipExtractor:
         # Parameter reads
         tmp_max_duration = datetime.timedelta(seconds=float(arg_option_obj['TRACKER_CLIP_SPECIFICATION']['max_clip_duration']))
         tmp_output_video_relative_speed = float(arg_option_obj['TRACKER_CLIP_SPECIFICATION']['output_video_speed'])
-        tmp_show_tracker_debug = bool(arg_option_obj['TRACKER_CLIP_SPECIFICATION']['show_tracker_debug'])
+        tmp_show_tracker_debug = bool(int(arg_option_obj['TRACKER_CLIP_SPECIFICATION']['show_tracker_debug']))
 
         # Derived parameters
         tmp_start_frame = int(tmp_input_video.fps * (arg_clip_spec.start_time - tmp_input_video.creation_time).total_seconds())
         tmp_output_fps = int(tmp_input_video.fps * tmp_output_video_relative_speed)
         tmp_clip_frame_max_duration = int(tmp_input_video.fps * tmp_max_duration.total_seconds())
 
-        # Init tracker
+        tmp_input_video.set_start_point(tmp_start_frame)  # Set start point of video
+
+        tmp_tracker_return_code = False
 
         # Start reading video file
         for iterator in range(0, tmp_clip_frame_max_duration):
@@ -60,10 +62,36 @@ class TrackerClipExtractor:
             if read_return_value == 20:  # GoPro video error
                 continue
 
-        # Iterate tracker
+            if iterator is 0:
+                # Init tracker
+                tmp_tracker.init(frame, arg_clip_spec.init_bbox)
+                tmp_tracker_return_code, tmp_bbox = tmp_tracker.update(frame)
+            else:
+                # Iterate tracker
+                tmp_tracker_return_code, tmp_bbox = tmp_tracker.update(frame)
 
+            if tmp_show_tracker_debug:
+                # Debug draw update (if debug enabled - see motion start detector)
+                # Draw bounding box
+                if tmp_tracker_return_code is True:
+                    # Tracking success
+                    p1 = (int(tmp_bbox[0]), int(tmp_bbox[1]))
+                    p2 = (int(tmp_bbox[0] + tmp_bbox[2]), int(tmp_bbox[1] + tmp_bbox[3]))
+                    cv2.rectangle(frame, p1, p2, (255, 0, 0), 2, 1)
+                else:
+                    # Tracking failure
+                    # print("Tracking failure")
+                    cv2.putText(frame, "Tracking failure detected", (100, 80), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 255), 2)
 
-        # Debug draw update (if debug enabled - see motion start detector)
+                frame = tmp_tracker.draw(frame)
+
+                cv2.namedWindow('Tracking', cv2.WINDOW_NORMAL)
+                cv2.imshow("Tracking", frame)
+
+                # Exit if ESC pressed
+                k = cv2.waitKey(1) & 0xff
+                if k == 27:
+                    break
 
 
         # Post process (rate limit on decline speed)? - for later.

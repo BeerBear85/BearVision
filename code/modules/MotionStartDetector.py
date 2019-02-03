@@ -117,7 +117,7 @@ class MotionStartDetector:
                     tmp_p2 = (tmp_bbox[0] + tmp_bbox[2],
                               tmp_bbox[1] + tmp_bbox[3])
                     cv2.rectangle(frame, tmp_p1, tmp_p2, (255, 0, 0), 2)
-                    frame = cv2.resize(frame, (int(0.25*MyGoproVideo.width), int(0.25*MyGoproVideo.height)), 0, 0, interpolation=cv2.INTER_LINEAR)
+                    frame = cv2.resize(frame, (int(0.4*MyGoproVideo.width), int(0.4*MyGoproVideo.height)), 0, 0, interpolation=cv2.INTER_LINEAR)
                     cv2.imshow('frame with bbox', frame)
                     cv2.waitKey(1)
 

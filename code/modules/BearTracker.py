@@ -33,7 +33,7 @@ class BearTracker:
         self.kalman_filter.statePost = np.array([[start_pos[0]], [start_pos[1]], [0], [0]], np.float32)
         # self.internal_tracker = cv2.TrackerMIL_create()
         self.internal_tracker = cv2.TrackerKCF_create()  # it is not enough to just run the init() again to reset
-        return self.internal_tracker.init(arg_frame, arg_bbox)
+        return self.internal_tracker.init(arg_frame, tuple(arg_bbox))
 
     def update(self, arg_frame):
         [tmp_tracker_status, tmp_bbox] = self.internal_tracker.update(arg_frame)
