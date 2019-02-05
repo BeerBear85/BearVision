@@ -106,8 +106,10 @@ class BearVisionGUI:
     def set_motion_detection_ROI(self):
 
         tempROISelector = MotionROISelector()
-        tempROISelector.SelectROI(self.video_folder_text.get())
-        #logger.info("Setting user folder to: " + arg_directory_path)
+        tmpROI = tempROISelector.SelectROI(self.video_folder_text.get())
+        tmp_options = ConfigurationHandler.get_configuration()
+        self.motion_ROI_text.set(tmp_options['MOTION_DETECTION']['search_box_dimensions'])
+        logger.info("Setting motion ROI to: " + str(tmpROI))
 
     def run(self):
         logger.debug("run()")
