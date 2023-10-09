@@ -62,20 +62,16 @@ class DnnHandler:
         # Apply non-maxima suppression to suppress weak, overlapping bounding boxes
         idxs = cv2.dnn.NMSBoxes(boxes, confidences, 0.5, 0.4)  # You can adjust these thresholds
 
+        #Create array of boxes and confidences after filtering
+        boxes_filtered = []
+        confidences_filtered = []
         
         if len(idxs) > 0: # Ensure at least one detection exists
             for i in idxs.flatten():
                 # Only proceed if the class label is 'person' (class ID 0 in COCO dataset)
                 if class_ids[i] == 0:
-                    (x, y) = (boxes[i][0], boxes[i][1])
-                    (w, h) = (boxes[i][2], boxes[i][3])
-                    cv2.rectangle(image, (x, y), (x + w, y + h), (0, 255, 0), 2)
-                    
-                    # Draw label text with confidence score
-                    label = "Person: {:.2f}%".format(confidences[i] * 100)
-                    labelSize, baseLine = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 2)
-                    y_label = max(y, labelSize[1])
-                    cv2.rectangle(image, (x, y_label - labelSize[1] - 10), (x + labelSize[0], y_label + baseLine - 10), (255, 255, 255), cv2.FILLED)
-                    cv2.putText(image, label, (x, y_label), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 2)
-        return image
+                    boxes_filtered.append(boxes[i])
+                    confidences_filtered.append(confidences[i])
+
+        return [boxes_filtered, confidences_filtered]
 

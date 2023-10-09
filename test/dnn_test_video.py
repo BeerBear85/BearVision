@@ -49,11 +49,23 @@ if __name__ == "__main__":
             break
         frame_count += 1
         modified_frame = frame
-        if frame_count % 10 == 0:
+        if frame_count % 6 == 0:
             print(f'Looking for person in frame {frame_count}')
-            modified_frame = dnn_handler.find_person(frame)
-            modified_frame = cv2.resize(modified_frame, (0, 0), fx=0.5, fy=0.5)
-            cv2.imshow('frame2', modified_frame)
+            [boxes, confidences] = dnn_handler.find_person(frame)
+
+            for i, box in enumerate(boxes):
+                # Draw bounding box for the object
+                (x, y) = (box[0], box[1])
+                (w, h) = (box[2], box[3])
+                cv2.rectangle(modified_frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
+                modified_frame = cv2.resize(modified_frame, (0, 0), fx=0.5, fy=0.5)
+                cv2.imshow('frame2', modified_frame)
+                # Draw label text with confidence score
+                label = "Person: {:.2f}%".format(confidences[i] * 100)
+                labelSize, baseLine = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 2)
+                y_label = max(y, labelSize[1])
+                cv2.rectangle(modified_frame, (x, y_label - labelSize[1] - 10), (x + labelSize[0], y_label + baseLine - 10), (255, 255, 255), cv2.FILLED)
+                cv2.putText(modified_frame, label, (x, y_label), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 2)
 
         #Scale frame to 50% for better overview
         modified_frame = cv2.resize(modified_frame, (0, 0), fx=0.5, fy=0.5)
