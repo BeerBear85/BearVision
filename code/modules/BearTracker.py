@@ -2,76 +2,62 @@ import cv2, math
 from csv import writer
 import numpy as np
 
+from DnnHandler import DnnHandler
+
 from scipy.signal import filtfilt, butter  # http://scipy-cookbook.readthedocs.io/items/FiltFilt.html
 
-minimum_frames_between_resets = 30
-
 class BearTracker:
-    def __init__(self, arg_fps):
-        self.internal_tracker = 0
-        self.internal_tracker_bbox_size = (0, 0) # width, height
+    def __init__(self):
 
-        model_position_noise_sigma = 1  # pixies
+        model_position_noise_sigma = 10  # pixies
         model_velocity_noise_sigma = 1  # pixies
-        measument_noise_sigma      = 10 # pixies
+        measurement_noise_sigma      = 20 # pixies
         self.kalman_filter = cv2.KalmanFilter(4, 2)  # States: x, y, v_x, v_y
         self.kalman_filter.transitionMatrix    = np.array([[1, 0, 1, 0], [0, 1, 0, 1], [0, 0, 1, 0], [0, 0, 0, 1]], np.float32)  # Const velocity model - should be TS (1/fps) in the position from velocity
         self.kalman_filter.measurementMatrix   = np.array([[1, 0, 0, 0], [0, 1, 0, 0]], np.float32) #Measurement: x, y
         self.kalman_filter.processNoiseCov     = np.diag(np.array([model_position_noise_sigma**2, model_position_noise_sigma**2, model_velocity_noise_sigma**2, model_velocity_noise_sigma**2 ], np.float32))
-        self.kalman_filter.measurementNoiseCov = np.diag(np.array([measument_noise_sigma**2,measument_noise_sigma**2], np.float32))
+        self.kalman_filter.measurementNoiseCov = np.diag(np.array([measurement_noise_sigma**2,measurement_noise_sigma**2], np.float32))
 
-        self.latest_state_estimate = 0
+        self.latest_state_estimate = None
         self.kalman_filter.errorCovPost = np.diag(np.array([model_position_noise_sigma**2, model_position_noise_sigma**2, model_velocity_noise_sigma**2, model_velocity_noise_sigma**2 ], np.float32))
         self.kalman_filter.statePost    = np.array([[0], [0], [0], [0]], np.float32)
-        self.max_velocity = 0
-        self.frame_since_reset = int(0)
         self.state_log = list()
 
-    def init(self, arg_frame, arg_bbox):
-        self.internal_tracker_bbox_size = (arg_bbox[2], arg_bbox[3])
+        self.dnn_handler = DnnHandler()
+
+    def init(self, arg_bbox):
         start_pos = (int(arg_bbox[0] + 0.5*arg_bbox[2]), int(arg_bbox[1] + 0.5*arg_bbox[3]))
         self.kalman_filter.statePost = np.array([[start_pos[0]], [start_pos[1]], [0], [0]], np.float32)
-        # self.internal_tracker = cv2.TrackerMIL_create()
-        self.internal_tracker = cv2.TrackerKCF_create()  # it is not enough to just run the init() again to reset
-        return self.internal_tracker.init(arg_frame, tuple(arg_bbox))
+        self.dnn_handler.init()
+
+        return
 
     def update(self, arg_frame):
-        [tmp_tracker_status, tmp_bbox] = self.internal_tracker.update(arg_frame)
-        tmp_tracker_measurement = self.get_bbox_center(tmp_bbox)
+        ## Prediction ##
+        self.latest_state_estimate = self.kalman_filter.predict()  # Predicted state from motion model
 
-        tmp_prediction = self.kalman_filter.predict()  # Predicted state from motion model
+        ## Measurement ##
+        #TODO: only do this for a sub-part of the frame (covariance of the position)
+        [boxes, confidences] = self.dnn_handler.find_person(arg_frame)
+        if len(boxes) != 0:
+            tmp_bbox = boxes[0] #just take the first one for now
+            tmp_measurement = self.get_bbox_center(tmp_bbox)
 
-        # if ((tmp_tracker_measurement[0] + 10) < tmp_prediction[0]):
-        #     print("X measurement lower than expected")
-        #     self.latest_state_estimate = tmp_prediction
-        # else:
-        if tmp_tracker_status:
-            self.latest_state_estimate = self.kalman_filter.correct(tmp_tracker_measurement)
+            ## Correction ##
+            self.latest_state_estimate = self.kalman_filter.correct(tmp_measurement)
 
-        if (self.latest_state_estimate[2] > self.max_velocity) & (self.frame_since_reset > minimum_frames_between_resets): #right after a reset, the velocity goes faulsly high
-            self.max_velocity = self.latest_state_estimate[2].copy()
-            print("New max vel: " + str(self.max_velocity))
-
-        # self.frame_since_reset += int(1)
-        # if (self.latest_state_estimate[2] < 0) & (self.frame_since_reset > minimum_frames_between_resets):  # if x-velocity is negative, restart filter
-        #     print("Restart of filter!!! - Low x-velocity")
-        #     tmp_new_bbox = (tmp_bbox[0] + self.max_velocity*10, tmp_bbox[1], self.internal_tracker_bbox_size[0], self.internal_tracker_bbox_size[1]) #Todo: should reset on current estimate!
-        #     self.init(arg_frame, tmp_new_bbox)
-        #     self.frame_since_reset = int(0)
-
-        # if (not tmp_tracker_status) & (self.frame_since_reset > minimum_frames_between_resets):  # if x-velocity is negative, restart filter
-        #     print("Restart of filter!!! - Tracking lost")
-        #     tmp_new_bbox = (self.latest_state_estimate[0], self.latest_state_estimate[1], self.internal_tracker_bbox_size[0], self.internal_tracker_bbox_size[1])
-        #     self.init(arg_frame, tmp_new_bbox)
-        #     self.frame_since_reset = int(0)
-
+        ## Logging ##
         self.log_state(self.latest_state_estimate)
 
-        return (tmp_tracker_status, tmp_bbox)
+        #Tell if the X position is outside the right side of the frame
+        if int(self.latest_state_estimate[0]) > arg_frame.shape[1]:
+            return True
+        else:
+            return False
 
     def draw(self, frame):
         tmp_color = (0, 0, 255) #red
-        tmp_pos = (self.latest_state_estimate[0], self.latest_state_estimate[1])
+        tmp_pos = (int(self.latest_state_estimate[0]), int(self.latest_state_estimate[1]))
         cv2.circle(frame, tmp_pos, 10, tmp_color, -1)
         cv2.putText(frame, "X-velocity : " + str(self.latest_state_estimate[2]), (120, 80), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (50, 170, 50), 2)
 
@@ -118,11 +104,3 @@ class BearTracker:
 
         np.savetxt(output_filename, np_log_filteren, delimiter=",")
 
-
-    #kalman.correct(mp)
-    #tp = kalman.predict()
-
-
-    #Notes:
-    #Hvis prediction er uden for bbox (tæt på), køres init af KCFen igen
-    #Foretag ikke correct af Kalman filter når den målte x-position er X gange mindre end den predicted

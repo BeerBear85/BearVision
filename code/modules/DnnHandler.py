@@ -9,6 +9,7 @@ class DnnHandler:
         current_file_path = os.path.dirname(os.path.abspath(__file__))
         self.model_cfg = os.path.join(current_file_path, '../dnn_models/yolov3_608.cfg')
         self.model_weights = os.path.join(current_file_path, '../dnn_models/yolov3_608.weights')
+        self.threshold = 0.7
 
     def init(self):
         self.net = cv2.dnn.readNetFromDarknet(self.model_cfg, self.model_weights)
@@ -49,7 +50,7 @@ class DnnHandler:
                 scores = detection[5:]
                 class_id = np.argmax(scores)
                 confidence = scores[class_id]
-                if confidence > 0.5:  # You can adjust this threshold
+                if confidence > self.threshold:  # You can adjust this threshold
                     # Scale the bounding box coordinates back to the size of the image
                     box = detection[0:4] * np.array([w, h, w, h])
                     (centerX, centerY, width, height) = box.astype("int")
