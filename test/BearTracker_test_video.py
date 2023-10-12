@@ -76,7 +76,9 @@ if __name__ == "__main__":
 
             if len(boxes) != 0:
                 start_tracker = True
-                tracker.init(boxes[0])            
+                tracker.init(boxes[0])
+                #TODO make draw function for dnn_handler
+                cv2.imshow('frame_ROI', frame_ROI)
 
         if start_tracker:
             out_of_frame = tracker.update(frame)
@@ -96,7 +98,19 @@ if __name__ == "__main__":
     # take x-position for logged state
 
     x_pos_log = [inner_list[0] for inner_list in tracker.state_log if inner_list]
-    plt.plot(x_pos_log) #plot the x-position vs frame number
+    y_pos_log = [inner_list[1] for inner_list in tracker.state_log if inner_list]
+
+    #plot x and y position
+    plt.figure()
+    plt.plot(x_pos_log, y_pos_log)
+    #set axis limits to match the frame size
+    plt.xlim([0, frame_width])
+    plt.ylim([0, frame_height])
     plt.show()
+
+    # make spine fit to the x and y data
+
+
+
 
 
