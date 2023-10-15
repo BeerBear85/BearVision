@@ -22,6 +22,7 @@ class BearTracker:
         self.kalman_filter.errorCovPost = np.diag(np.array([model_position_noise_sigma**2, model_position_noise_sigma**2, model_velocity_noise_sigma**2, model_velocity_noise_sigma**2 ], np.float32))
         self.kalman_filter.statePost    = np.array([[0], [0], [0], [0]], np.float32)
         self.state_log = list()
+        self.box_log = list()
 
         self.dnn_handler = DnnHandler()
 
@@ -41,10 +42,13 @@ class BearTracker:
         [boxes, confidences] = self.dnn_handler.find_person(arg_frame)
         if len(boxes) != 0:
             tmp_bbox = boxes[0] #just take the first one for now
+            self.box_log.append(tmp_bbox)
             tmp_measurement = self.get_bbox_center(tmp_bbox)
 
             ## Correction ##
             self.latest_state_estimate = self.kalman_filter.correct(tmp_measurement)
+        else:
+            self.box_log.append(None) #to still have the same number of elements in the list
 
         ## Logging ##
         self.log_state(self.latest_state_estimate)
@@ -81,26 +85,4 @@ class BearTracker:
         print(tmp_state_vec)
         return
 
-    def write_state_log_file(self):
-        output_filename = "state_log.csv"
-        #csv_file = open(output_filename, 'w', newline='')
-        #output_writer = writer(csv_file)
-
-        #filter test
-        np_log = np.matrix(self.state_log)
-        # Create an order 3 lowpass butterworth filter.
-        b, a = butter(3, 0.05)
-        pos_x = filtfilt(b, a, np_log[:, 0].T)
-        pos_y = -filtfilt(b, a, np_log[:, 1].T)
-        vel_x = filtfilt(b, a, np_log[:, 2].T)
-        vel_y = -filtfilt(b, a, np_log[:, 3].T)
-        #print(pos_x.T)
-        #print(type(pos_x))
-        np_log_filteren = np.concatenate([pos_x, pos_y, vel_x, vel_y]).T
-        #print(np_log_filteren)
-
-        #for state in self.state_log:
-        #    output_writer.writerow(np_log_filteren)
-
-        np.savetxt(output_filename, np_log_filteren, delimiter=",")
 

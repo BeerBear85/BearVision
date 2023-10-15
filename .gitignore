@@ -1,4 +1,7 @@
 *.mp4
+*.avi
+*.log
+*.pkl
 .idea
 test/debug.log
 __pycache__

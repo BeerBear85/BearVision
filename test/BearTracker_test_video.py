@@ -1,6 +1,6 @@
 # Make main process create the new file and sub-processes append - probably not the nices way of doing this
 import logging
-import cv2
+
 
 if __name__ == "__main__":
     write_mode = 'w'
@@ -18,6 +18,8 @@ if __name__ == "__main__":
     import sys
     import os
     import matplotlib.pyplot as plt
+    import cv2
+    import pickle
 
     modules_abs_path = os.path.abspath("code/modules")
     dnn_models_abs_path = os.path.abspath("code/dnn_models")
@@ -33,8 +35,8 @@ if __name__ == "__main__":
     logger = logging.getLogger(__name__)
 
     #input_video = os.path.abspath("test/test_video/TestMovie1.mp4")
-    #input_video = os.path.abspath("test/test_video/TestMovie2.mp4")
-    input_video = os.path.abspath("test/test_video/TestMovie3.avi")
+    input_video = os.path.abspath("test/test_video/TestMovie2.mp4")
+    #input_video = os.path.abspath("test/test_video/TestMovie3.avi")
     #input_video = os.path.abspath("test/test_video/TestMovie4.avi")
 
     tracker = BearTracker()
@@ -61,6 +63,7 @@ if __name__ == "__main__":
     start_tracker = False
     frame_count = 0
     out_of_frame = False
+    start_frame = 0
     while True:
         ret, frame = cap.read()
         if not ret:
@@ -76,8 +79,12 @@ if __name__ == "__main__":
 
             if len(boxes) != 0:
                 start_tracker = True
-                tracker.init(boxes[0])
-                #TODO make draw function for dnn_handler
+                start_frame = frame_count
+                box_in_frame_ROI = boxes[0]
+                box_in_frame = [box_in_frame_ROI[0] + ROI_x, box_in_frame_ROI[1] + ROI_y, box_in_frame_ROI[2], box_in_frame_ROI[3]]
+                tracker.init(box_in_frame)
+                # Draw bounding box in frame
+                cv2.rectangle(frame, (box_in_frame[0], box_in_frame[1]), (box_in_frame[0] + box_in_frame[2], box_in_frame[1] + box_in_frame[3]), (0, 255, 0), 2)
                 cv2.imshow('frame_ROI', frame_ROI)
 
         if start_tracker:
@@ -108,7 +115,21 @@ if __name__ == "__main__":
     plt.ylim([0, frame_height])
     plt.show()
 
-    # make spine fit to the x and y data
+    # save the etire state log
+    pickle_file_name = input_video.split('.')[0] + '_tracking_vars.pkl'
+
+    data = {
+        'state_log': tracker.state_log,
+        'box_log': tracker.box_log,
+        'start_frame': start_frame,
+        'fps': fps,
+        'frame_width': frame_width,
+        'frame_height': frame_height
+    }
+
+    with open(pickle_file_name, 'wb') as f:
+        pickle.dump(data, f)
+
 
 
 
