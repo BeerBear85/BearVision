@@ -2,11 +2,21 @@
 import math
 import numpy as np
 import cv2
+from enum import Enum
 
 from DnnHandler import DnnHandler
 
+class State(Enum):
+    INIT = 1
+    SEARCHING = 2
+    TRACKING = 3
+    DONE = 4
+
 class BearTracker:
     def __init__(self):
+        self.state = None
+        self.search_window_width = 0.3
+        self.search_window_height = 0.8
 
         model_position_noise_sigma = 10  # pixies
         model_velocity_noise_sigma = 1  # pixies
@@ -25,12 +35,46 @@ class BearTracker:
 
         self.dnn_handler = DnnHandler()
 
-    def init(self, arg_bbox):
-        start_pos = (int(arg_bbox[0] + 0.5*arg_bbox[2]), int(arg_bbox[1] + 0.5*arg_bbox[3]))
-        self.kalman_filter.statePost = np.array([[start_pos[0]], [start_pos[1]], [0], [0]], np.float32)
+    def init(self):
+        self.state = State.INIT
         self.dnn_handler.init()
-
         return
+    
+    def calculate(self, arg_frame):
+        if self.state == State.INIT:
+            print('Tracker: Switching to SEARCHING state')
+            self.state = State.SEARCHING
+            return
+        elif self.state == State.SEARCHING:
+            self.search_for_start(arg_frame)
+            return
+        elif self.state == State.TRACKING:
+            return self.update(arg_frame)
+        else:
+            return False
+    
+    def search_for_start(self, arg_frame):
+        self.state = State.SEARCHING
+        #get frame size of video
+        frame_width = int(arg_frame.shape[1])
+        frame_height = int(arg_frame.shape[0])
+        ROI_width = int(self.search_window_width * frame_width)
+        ROI_height = int(self.search_window_height * frame_height)
+        ROI_x = int(0)
+        ROI_y = int(0.5 * frame_height - 0.5 * ROI_height)
+        ROI_region = [ROI_x, ROI_y, ROI_width, ROI_height] #x, y, width, height
+        frame_ROI = arg_frame[ROI_region[1]:ROI_region[1]+ROI_region[3], ROI_region[0]:ROI_region[0]+ROI_region[2]]
+        [boxes, confidences] = self.dnn_handler.find_person(frame_ROI)
+        if len(boxes) != 0:
+            box_in_frame_ROI = boxes[0]
+            box_in_frame = [box_in_frame_ROI[0] + ROI_x, box_in_frame_ROI[1] + ROI_y, box_in_frame_ROI[2], box_in_frame_ROI[3]]
+            
+            start_pos = (int(box_in_frame[0] + 0.5*box_in_frame[2]), int(box_in_frame[1] + 0.5*box_in_frame[3]))
+            self.kalman_filter.statePost = np.array([[start_pos[0]], [start_pos[1]], [0], [0]], np.float32)
+            print('Tracker: Switching to TRACKING state')
+            self.state = State.TRACKING
+        return
+
     
     def update(self, arg_frame):
         """Update the state estimate of the Kalman filter based on a new frame.
@@ -60,9 +104,10 @@ class BearTracker:
 
         #Tell if the X position is outside the frame
         if (int(self.latest_state_estimate[0]) < 0) or (int(self.latest_state_estimate[0]) > arg_frame.shape[1]):
-            return False
+            print('Tracker: Switching to DONE state')
+            self.state = State.DONE
         
-        return True
+        return
 
     def draw(self, frame):
         tmp_color = (0, 0, 255) #red
@@ -84,7 +129,7 @@ class BearTracker:
     def log_state(self, arg_state):
         tmp_state_vec = [int(arg_state[0]), int(arg_state[1]), float(arg_state[2]), float(arg_state[3])]
         self.state_log.append(tmp_state_vec)
-        print(tmp_state_vec)
+        print(f'X: {tmp_state_vec[0]}, Y: {tmp_state_vec[1]}, X-velocity: {tmp_state_vec[2]}, Y-velocity: {tmp_state_vec[3]}')
         return
 
 

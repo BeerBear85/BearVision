@@ -1,0 +1,20 @@
+Prompt input:
+
+Write a description of the company BearVision.
+The description should have a nice layout.
+Some notes about the company:
+* It is taking videos of wakeboarders
+* The product is using AI
+* This generated video is available for the user within 5 min after capture of the video
+* The generated videos are great for getting instance feedback on the technique for the experienced wakeboarder
+* Camera is mainly located at kickers or other obstacles for doing tricks
+* great to show your new awesome trick off to friends
+* Also, videos of great crashes are always fun
+* The product is also good for beginners, learning to get up on the big track - this always leads to some wild crashes.
+* Great to show at the wedding after having a bachelor party at the local wakeboard park
+Things that are less important:
+* The user is identified using a bluetooth beacon worn on the arm
+* It is named BearVision because of the name of the creator (danish guy Bjørn)
+* it is making a virtual camera from one stationary camera
+* Camera can also be placed at the beginning of the track (to capture beginners)
+

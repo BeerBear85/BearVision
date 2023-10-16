@@ -25,6 +25,7 @@ if __name__ == "__main__":
     sys.path.append(dnn_models_abs_path)
 
     from BearTracker import BearTracker
+    from BearTracker import State
     from DnnHandler import DnnHandler
 
 
@@ -37,8 +38,6 @@ if __name__ == "__main__":
     #input_video = os.path.abspath("test/test_video/TestMovie4.avi")
 
     tracker = BearTracker()
-    dnn_handler = DnnHandler()
-    dnn_handler.init()
     
     #Read frames from video
     #Check if file exists
@@ -48,53 +47,34 @@ if __name__ == "__main__":
     cap = cv2.VideoCapture(input_video)
     #get fps of video
     fps = cap.get(cv2.CAP_PROP_FPS)
-    #get frame size of video
-    frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    ROI_width = int(0.3 * frame_width)
-    ROI_height = int(0.8 * frame_height)
-    ROI_x = int(0)
-    ROI_y = int(0.5 * frame_height - 0.5 * ROI_height)
-    initial_ROI = [ROI_x, ROI_y, ROI_width, ROI_height] #x, y, width, height
-    
-    start_tracker = False
+
     frame_count = 0
-    out_of_frame = False
     start_frame = 0
+
+    tracker.init()
+
     while True:
         ret, frame = cap.read()
         if not ret:
             print('Reached end of video')
             break
         frame_count += 1
-        original_frame = frame
-        #only take the part of the frame in the inital ROI
-        frame_ROI = frame[initial_ROI[1]:initial_ROI[1]+initial_ROI[3], initial_ROI[0]:initial_ROI[0]+initial_ROI[2]]
-        if not start_tracker:
-            cv2.imshow('frame_ROI', frame_ROI)
-            [boxes, confidences] = dnn_handler.find_person(frame_ROI)
+        start_state = tracker.state
 
-            if len(boxes) != 0:
-                start_tracker = True
-                start_frame = frame_count
-                box_in_frame_ROI = boxes[0]
-                box_in_frame = [box_in_frame_ROI[0] + ROI_x, box_in_frame_ROI[1] + ROI_y, box_in_frame_ROI[2], box_in_frame_ROI[3]]
-                tracker.init(box_in_frame)
-                # Draw bounding box in frame
-                cv2.rectangle(frame, (box_in_frame[0], box_in_frame[1]), (box_in_frame[0] + box_in_frame[2], box_in_frame[1] + box_in_frame[3]), (0, 255, 0), 2)
-                cv2.imshow('frame_ROI', frame_ROI)
+        if tracker.state == State.SEARCHING:
+            start_frame = frame_count #stops updating start_frame after first frame
 
-        if start_tracker:
-            inside_frame = tracker.update(frame)
+        tracker.calculate(frame)
+        if start_state == State.TRACKING:
             frame = tracker.draw(frame)
 
         #Scale frame to 50% for better overview
         frame = cv2.resize(frame, (0, 0), fx=0.5, fy=0.5)
         cv2.imshow('frame', frame)
         #Wait for 1 ms for keypress
-        if cv2.waitKey(50) & 0xFF == ord('q'):
+        if cv2.waitKey(20) & 0xFF == ord('q'):
             break
-        if not inside_frame:
+        if tracker.state == State.DONE:
             print('Bear went out of frame')
             break
 
@@ -120,8 +100,8 @@ if __name__ == "__main__":
         'box_log': tracker.box_log,
         'start_frame': start_frame,
         'fps': fps,
-        'frame_width': frame_width,
-        'frame_height': frame_height
+        'frame_width': int(frame.shape[1]),
+        'frame_height': int(frame.shape[0]),
     }
 
     with open(pickle_file_name, 'wb') as f:
