@@ -1,7 +1,6 @@
 # Make main process create the new file and sub-processes append - probably not the nices way of doing this
 import logging
 
-
 if __name__ == "__main__":
     write_mode = 'w'
 else:
@@ -11,8 +10,6 @@ logging.basicConfig(filename='debug.log',
                     level=logging.DEBUG,
                     format='%(asctime)s:%(levelname)-8s:%(name)s:%(message)s',
                     filemode=write_mode)
-
-
 
 if __name__ == "__main__":
     import sys
@@ -35,8 +32,8 @@ if __name__ == "__main__":
     logger = logging.getLogger(__name__)
 
     #input_video = os.path.abspath("test/test_video/TestMovie1.mp4")
-    input_video = os.path.abspath("test/test_video/TestMovie2.mp4")
-    #input_video = os.path.abspath("test/test_video/TestMovie3.avi")
+    #input_video = os.path.abspath("test/test_video/TestMovie2.mp4")
+    input_video = os.path.abspath("test/test_video/TestMovie3.avi")
     #input_video = os.path.abspath("test/test_video/TestMovie4.avi")
 
     tracker = BearTracker()
@@ -88,7 +85,7 @@ if __name__ == "__main__":
                 cv2.imshow('frame_ROI', frame_ROI)
 
         if start_tracker:
-            out_of_frame = tracker.update(frame)
+            inside_frame = tracker.update(frame)
             frame = tracker.draw(frame)
 
         #Scale frame to 50% for better overview
@@ -97,7 +94,7 @@ if __name__ == "__main__":
         #Wait for 1 ms for keypress
         if cv2.waitKey(50) & 0xFF == ord('q'):
             break
-        if out_of_frame:
+        if not inside_frame:
             print('Bear went out of frame')
             break
 

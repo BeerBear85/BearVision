@@ -5,3 +5,4 @@
 .idea
 test/debug.log
 __pycache__
+code/dnn_models/yolov3_608.weights

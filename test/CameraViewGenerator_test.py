@@ -1,6 +1,5 @@
 import logging
-import numpy as np
-from scipy.signal import butter, filtfilt
+
 
 if __name__ == "__main__":
     write_mode = 'w'
@@ -12,27 +11,20 @@ logging.basicConfig(filename='debug.log',
                     format='%(asctime)s:%(levelname)-8s:%(name)s:%(message)s',
                     filemode=write_mode)
 
-def butter_lowpass(cutoff, fs, order=1):
-    nyq = 0.5 * fs
-    normal_cutoff = cutoff / nyq
-    b, a = butter(order, normal_cutoff, btype='low', analog=False)
-    return b, a
 
 if __name__ == "__main__":
     import sys
     import os
-    import matplotlib.pyplot as plt
     import pickle
     from pprint import pprint
     import cv2
 
     modules_abs_path = os.path.abspath("code/modules")
+    sys.path.append(modules_abs_path)
+    from CameraViewGenerator import CameraViewGenerator
 
     logger = logging.getLogger(__name__)
 
-    # bbox_parameters
-    box_width_scale = 8
-    box_aspect_ratio = 16/9
 
     input_video = os.path.abspath("test/test_video/TestMovie1.mp4")
     #input_video = os.path.abspath("test/test_video/TestMovie2.mp4")
@@ -53,48 +45,10 @@ if __name__ == "__main__":
     frame_width = data['frame_width']
     frame_height = data['frame_height']
 
-    #find the average size of the bounding boxes
-    box_width = [inner_list[2] for inner_list in box_log if inner_list]
-    box_height = [inner_list[3] for inner_list in box_log if inner_list]
-    avg_box_width = int(sum(box_width)/len(box_width))
-    avg_box_height = int(sum(box_height)/len(box_height))
-    print(f'Average box width: {avg_box_width} Average box height: {avg_box_height}')
-    camera_view_width = int(avg_box_width * box_width_scale)
-    camera_view_height = int(camera_view_width / box_aspect_ratio)
-    print(f'Camera width: {camera_view_width} Camera height: {camera_view_height}')
-
-    ## Filter the measured position for a smoother camera path
-    x = [inner_list[0] for inner_list in state_log if inner_list]
-    y = [inner_list[1] for inner_list in state_log if inner_list]
-
-    #Filter parameters
-    cutoff = 2  # desired cutoff frequency of the filter, Hz
-    fs = data['fps']  # sample rate, Hz
-    b, a = butter_lowpass(cutoff, fs)
-    x_smooth = filtfilt(b, a, x)
-    y_smooth = filtfilt(b, a, y)
-
-    plt.figure()
-    plt.plot(x, y, label='Original Data')
-    plt.plot(x_smooth, y_smooth, label='Filtered Data', linewidth=2, color='red', linestyle='--')
-    plt.legend()
-    plt.show()
-
-    # make list of bounding boxes with the new positions and sizes
-    camera_view = []
-    for i in range(len(x)):
-        x_pos = int(x_smooth[i] - 0.5 * camera_view_width)
-        y_pos = int(y_smooth[i] - 0.5 * camera_view_height)
-        if x_pos < 0:
-            x_pos = 0
-        elif x_pos + camera_view_width > frame_width:
-            x_pos = frame_width - camera_view_width
-        if y_pos < 0:
-            y_pos = 0
-        elif y_pos + camera_view_height > frame_height:
-            y_pos = frame_height - camera_view_height
-        camera_view.append([x_pos, y_pos, camera_view_width, camera_view_height])
-        
+    # Run the actual module that is being tested
+    my_camera_view_generator = CameraViewGenerator()
+    my_camera_view_generator.init(data['fps'], frame_width, frame_height)
+    camera_view = my_camera_view_generator.calculate(box_log, state_log)
 
 
     # Open the video file

@@ -1,10 +1,9 @@
-import cv2, math
-from csv import writer
+
+import math
 import numpy as np
+import cv2
 
 from DnnHandler import DnnHandler
-
-from scipy.signal import filtfilt, butter  # http://scipy-cookbook.readthedocs.io/items/FiltFilt.html
 
 class BearTracker:
     def __init__(self):
@@ -32,8 +31,14 @@ class BearTracker:
         self.dnn_handler.init()
 
         return
-
+    
     def update(self, arg_frame):
+        """Update the state estimate of the Kalman filter based on a new frame.
+        Args:
+            arg_frame: The input image frame as a NumPy array.
+        Returns:
+            bool: False if the position estimate is outside the frame - True otherwise.
+        """
         ## Prediction ##
         self.latest_state_estimate = self.kalman_filter.predict()  # Predicted state from motion model
 
@@ -53,11 +58,11 @@ class BearTracker:
         ## Logging ##
         self.log_state(self.latest_state_estimate)
 
-        #Tell if the X position is outside the right side of the frame
-        if int(self.latest_state_estimate[0]) > arg_frame.shape[1]:
-            return True
-        else:
+        #Tell if the X position is outside the frame
+        if (int(self.latest_state_estimate[0]) < 0) or (int(self.latest_state_estimate[0]) > arg_frame.shape[1]):
             return False
+        
+        return True
 
     def draw(self, frame):
         tmp_color = (0, 0, 255) #red
@@ -67,9 +72,6 @@ class BearTracker:
 
         tmp_x_sigma = math.sqrt(self.kalman_filter.errorCovPost[0, 0])
         tmp_y_sigma = math.sqrt(self.kalman_filter.errorCovPost[1, 1])
-
-        # print("errorCovPost - type: " + str(type(self.kalman_filter.errorCovPost)) + " value: " + str(self.kalman_filter.errorCovPost))
-        #print("tmp_x_sigma - type: " + str(type(tmp_x_sigma)) + " value: " + str(tmp_x_sigma))
 
         cv2.ellipse(frame, tmp_pos, (int(tmp_x_sigma*3), int(tmp_y_sigma*3)), 0, 0, 360, tmp_color, 2)
         return frame
