@@ -33,8 +33,8 @@ if __name__ == "__main__":
 
     #input_video = os.path.abspath("test/test_video/TestMovie1.mp4")
     #input_video = os.path.abspath("test/test_video/TestMovie2.mp4")
-    input_video = os.path.abspath("test/test_video/TestMovie3.avi")
-    #input_video = os.path.abspath("test/test_video/TestMovie4.avi")
+    #input_video = os.path.abspath("test/test_video/TestMovie3.avi")
+    input_video = os.path.abspath("test/test_video/TestMovie4.avi")
 
 
     #Read frames from video

@@ -5,9 +5,9 @@ from scipy.signal import butter, filtfilt
 class CameraViewGenerator:
     def __init__(self):
         # bbox_parameters
-        self.box_width_scale = 8
+        self.box_width_scale = 10
         self.box_aspect_ratio = 16/9 #Standard aspect ratio that is fairly wide
-        self.pos_filter_cutoff = 0.4  # Desired cutoff frequency of the filter, Hz
+        self.pos_filter_cutoff = 0.3  # Desired cutoff frequency of the filter, Hz
         self.fps = None  # Sample rate, Hz
         self.frame_width = None
         self.frame_height = None
@@ -27,10 +27,10 @@ class CameraViewGenerator:
         box_height = [inner_list[3] for inner_list in box_log if inner_list]
         avg_box_width = int(sum(box_width)/len(box_width))
         avg_box_height = int(sum(box_height)/len(box_height))
-        print(f'Average box width: {avg_box_width} Average box height: {avg_box_height}')
+        #print(f'Average box width: {avg_box_width} Average box height: {avg_box_height}')
         camera_view_width = int(avg_box_width * self.box_width_scale)
         camera_view_height = int(camera_view_width / self.box_aspect_ratio)
-        print(f'Camera width: {camera_view_width} Camera height: {camera_view_height}')
+        #print(f'Camera width: {camera_view_width} Camera height: {camera_view_height}')
         return camera_view_width, camera_view_height
 
     def filter_position(self, state_log):
