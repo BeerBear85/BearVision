@@ -53,6 +53,11 @@ class CameraViewGenerator:
             plt.figure()
             plt.plot(x, y, label='Original Data')
             plt.plot(x_smooth, y_smooth, label='Filtered Data', linewidth=2, color='red', linestyle='--')
+            #set limits to match the frame size
+            plt.xlim(0, self.frame_width)
+            plt.ylim(0, self.frame_height)
+            plt.xlabel('x-position')
+            plt.ylabel('y-position')
             plt.legend()
             plt.show()
 

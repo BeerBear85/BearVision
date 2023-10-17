@@ -2,6 +2,7 @@
 import math
 import numpy as np
 import cv2
+import pickle
 from enum import Enum
 
 from DnnHandler import DnnHandler
@@ -30,14 +31,22 @@ class BearTracker:
         self.latest_state_estimate = None
         self.kalman_filter.errorCovPost = np.diag(np.array([model_position_noise_sigma**2, model_position_noise_sigma**2, model_velocity_noise_sigma**2, model_velocity_noise_sigma**2 ], np.float32))
         self.kalman_filter.statePost    = np.array([[0], [0], [0], [0]], np.float32)
-        self.state_log = list()
-        self.box_log = list()
 
         self.dnn_handler = DnnHandler()
 
-    def init(self):
+        #For logging data
+        self.state_log = list()
+        self.box_log = list()
+        self.start_frame = None
+        self.video_file_name = None
+        
+
+    def init(self, arg_video_file_name):
         self.state = State.INIT
+        self.video_file_name = arg_video_file_name
         self.dnn_handler.init()
+        self.start_frame = 0
+
         return
     
     def calculate(self, arg_frame):
@@ -46,6 +55,7 @@ class BearTracker:
             self.state = State.SEARCHING
             return
         elif self.state == State.SEARCHING:
+            self.start_frame += 1 #stops updating start_frame after first frame
             self.search_for_start(arg_frame)
             return
         elif self.state == State.TRACKING:
@@ -132,4 +142,15 @@ class BearTracker:
         print(f'X: {tmp_state_vec[0]}, Y: {tmp_state_vec[1]}, X-velocity: {tmp_state_vec[2]}, Y-velocity: {tmp_state_vec[3]}')
         return
 
+    def save_data(self):
+        base_video_file_name = self.video_file_name.split('.')[0]
+        file_name = f'{base_video_file_name}_{self.start_frame}_tracking.pkl'
+        tmp_data = {
+            'state_log': self.state_log,
+            'box_log': self.box_log,
+            'start_frame': self.start_frame,
+            'video_file_name': self.video_file_name,
+        }
+        pickle.dump(tmp_data, open(file_name, 'wb'))
+        return
 
