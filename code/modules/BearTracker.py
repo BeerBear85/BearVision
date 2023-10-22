@@ -55,6 +55,10 @@ class BearTracker:
         self.state = new_state
         return
     
+    def reset(self):
+        self.change_state(State.INIT)
+        return
+    
     def calculate(self, arg_frame):
         if self.state == State.INIT:
             print('Tracker: Switching to SEARCHING state')
@@ -198,5 +202,5 @@ class BearTracker:
             'video_file_name': self.video_file_name,
         }
         pickle.dump(tmp_data, open(file_name, 'wb'))
-        return
+        return file_name
 

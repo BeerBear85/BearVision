@@ -18,9 +18,10 @@ class GoproVideo:
         self.fps = 0
         self.frames = 0  # total number of frames
         self.current_frame = 0
-        if arg_options_obj is None:
-            arg_options_obj = ConfigurationHandler.get_configuration()
-        self.tool_folder = arg_options_obj['GOPRO_VIDEO']['tool_folder']
+        #if arg_options_obj is None:
+        #   arg_options_obj = ConfigurationHandler.get_configuration()
+        #self.tool_folder = arg_options_obj['GOPRO_VIDEO']['tool_folder']
+        self.tool_folder = os.path.abspath("tools")
 
     def init(self, arg_video_filename):
         if (arg_video_filename != self.current_filename):  # Only initilise if it is a new file
@@ -55,12 +56,12 @@ class GoproVideo:
             print(err.decode('UTF-8'))
         # return -1;
         out_string = out.decode('UTF-8')
-        logger.debug('Output: ' + out_string)
+        logger.debug('Output: %s', out_string)
 
         # Use tool to convert metadata to json format
         gopro2json_path = os.path.join(self.tool_folder, 'gopro2json')
         cmd_line = [gopro2json_path, '-i', temp_bin_file_name, '-o', temp_json_file_name]
-        logger.debug("Calling command for json gen: " + ' '.join(cmd_line))
+        logger.debug("Calling command for json gen: %s", ' '.join(cmd_line))
         process = subprocess.Popen(cmd_line, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         out, err = process.communicate()
         if err:
@@ -88,9 +89,9 @@ class GoproVideo:
                 logger.debug("Did not find any UTC time stamp")
                 return -1
 
-            logger.debug("Found UTC time: " + str(utc_time))
+            logger.debug("Found UTC time: %s", utc_time)
             self.creation_time = dt.datetime.utcfromtimestamp(utc_time / 1000000)  # Devide by 1000000 to match the format of datetime
-            logger.debug("Converted creation time: " + self.creation_time.strftime("%Y%m%d_%H_%M_%S_%f"))
+            logger.debug("Converted creation time: %s", self.creation_time.strftime("%Y%m%d_%H_%M_%S_%f"))
 
             # Clean up
             if os.path.isfile(temp_json_file_name):
