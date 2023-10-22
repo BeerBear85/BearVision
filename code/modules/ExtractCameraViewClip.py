@@ -41,7 +41,7 @@ class ExtractCameraViewClip:
         camera_view = self.my_camera_view_generator.calculate(box_log, state_log)
 
         # Initialize the video capture
-        output_video_path = os.path.abspath(f'{video_file_name}_camera_view.avi')
+        output_video_path = os.path.abspath(f'{video_file_name}_{start_frame}_camera_view.avi')
         output_codex = cv2.VideoWriter_fourcc(*'DIVX')
         writer_object = cv2.VideoWriter(output_video_path, output_codex, self.clip_fps,
                                         (self.clip_frame_width, self.clip_frame_height))

@@ -43,6 +43,7 @@ if __name__ == "__main__":
 
         while True:
             read_return_value, frame, frame_number = input_video_obj.read_frame()
+            print(f'Frame number: {frame_number}')
             if read_return_value == 0:
                 print('Reached end of video')
                 break
@@ -52,6 +53,7 @@ if __name__ == "__main__":
             tracker.calculate(frame)
 
             if tracker.state == State.DONE:
+                print(f'Tracking completed at frame {frame_number}')
                 pickle_file_name = tracker.save_data()
                 my_extracter.init(pickle_file_name)
                 my_extracter.run()
