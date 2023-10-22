@@ -32,7 +32,9 @@ class BearTracker:
         self.kalman_filter.errorCovPost = np.diag(np.array([model_position_noise_sigma**2, model_position_noise_sigma**2, model_velocity_noise_sigma**2, model_velocity_noise_sigma**2 ], np.float32))
         self.kalman_filter.statePost    = np.array([[0], [0], [0], [0]], np.float32)
 
+        self.search_area_scale = 20 #How much bigger the search area is compared to the current estimate covariance
         self.dnn_handler = DnnHandler()
+
 
         #For logging data
         self.state_log = list()
@@ -42,29 +44,37 @@ class BearTracker:
         
 
     def init(self, arg_video_file_name):
-        self.state = State.INIT
+        self.change_state(State.INIT)
         self.video_file_name = arg_video_file_name
         self.dnn_handler.init()
         self.start_frame = 0
-
+        return
+    
+    def change_state(self, new_state):
+        print(f'Changing state from {self.state} to {new_state}')
+        self.state = new_state
         return
     
     def calculate(self, arg_frame):
         if self.state == State.INIT:
             print('Tracker: Switching to SEARCHING state')
-            self.state = State.SEARCHING
+            self.change_state(State.SEARCHING)
             return
         elif self.state == State.SEARCHING:
             self.start_frame += 1 #stops updating start_frame after first frame
-            self.search_for_start(arg_frame)
+            found = self.search_for_start(arg_frame)
+            if found:
+                self.change_state(State.TRACKING)
             return
         elif self.state == State.TRACKING:
-            return self.update(arg_frame)
+            still_in_picture = self.update(arg_frame)
+            if not still_in_picture:
+                self.change_state(State.DONE)
+            return
         else:
             return False
     
     def search_for_start(self, arg_frame):
-        self.state = State.SEARCHING
         #get frame size of video
         frame_width = int(arg_frame.shape[1])
         frame_height = int(arg_frame.shape[0])
@@ -81,9 +91,9 @@ class BearTracker:
             
             start_pos = (int(box_in_frame[0] + 0.5*box_in_frame[2]), int(box_in_frame[1] + 0.5*box_in_frame[3]))
             self.kalman_filter.statePost = np.array([[start_pos[0]], [start_pos[1]], [0], [0]], np.float32)
-            print('Tracker: Switching to TRACKING state')
-            self.state = State.TRACKING
-        return
+            return True
+            
+        return False
 
     
     def update(self, arg_frame):
@@ -97,12 +107,17 @@ class BearTracker:
         self.latest_state_estimate = self.kalman_filter.predict()  # Predicted state from motion model
 
         ## Measurement ##
-        #TODO: only do this for a sub-part of the frame (covariance of the position)
-        [boxes, confidences] = self.dnn_handler.find_person(arg_frame)
+        search_box, search_frame = self.get_current_search_frame(arg_frame)
+
+        [boxes, confidences] = self.dnn_handler.find_person(search_frame)
+        # Map the box to the original frame
+        boxes = [[box[0] + search_box[0], box[1] + search_box[1], box[2], box[3]] for box in boxes]
+
         if len(boxes) != 0:
             tmp_bbox = boxes[0] #just take the first one for now
             self.box_log.append(tmp_bbox)
             tmp_measurement = self.get_bbox_center(tmp_bbox)
+            print(f'Person found at x: {tmp_measurement[0]}, y: {tmp_measurement[1]}')
 
             ## Correction ##
             self.latest_state_estimate = self.kalman_filter.correct(tmp_measurement)
@@ -114,12 +129,39 @@ class BearTracker:
 
         #Tell if the X position is outside the frame
         if (int(self.latest_state_estimate[0]) < 0) or (int(self.latest_state_estimate[0]) > arg_frame.shape[1]):
-            print('Tracker: Switching to DONE state')
-            self.state = State.DONE
+            return False
         
-        return
+        return True
+    
+    def get_current_search_frame(self, frame):
+        search_box = self.get_current_search_box(frame)
+        search_frame = frame[search_box[1]:search_box[1]+search_box[3], search_box[0]:search_box[0]+search_box[2]]
 
-    def draw(self, frame):
+        return search_box, search_frame
+
+    def get_current_search_box(self, frame):
+        tmp_x_sigma = math.sqrt(self.kalman_filter.errorCovPost[0, 0])
+        tmp_y_sigma = math.sqrt(self.kalman_filter.errorCovPost[1, 1])
+
+        search_area_width = int(self.search_area_scale * tmp_x_sigma)
+        search_area_height = int(self.search_area_scale * tmp_y_sigma)
+        search_area_x = int(self.latest_state_estimate[0] - 0.5 * search_area_width)
+        search_area_y = int(self.latest_state_estimate[1] - 0.5 * search_area_height)
+        search_box = [search_area_x, search_area_y, search_area_width, search_area_height]
+
+        # Range check
+        if search_box[0] < 0:
+            search_box[0] = 0
+        if search_box[1] < 0:
+            search_box[1] = 0
+        if search_box[0] + search_box[2] > frame.shape[1]:
+            search_box[2] = frame.shape[1] - search_box[0]
+        if search_box[1] + search_box[3] > frame.shape[0]:
+            search_box[3] = frame.shape[0] - search_box[1]
+
+        return search_box
+
+    def visualize_state(self, frame):
         tmp_color = (0, 0, 255) #red
         tmp_pos = (int(self.latest_state_estimate[0]), int(self.latest_state_estimate[1]))
         cv2.circle(frame, tmp_pos, 10, tmp_color, -1)
@@ -129,6 +171,10 @@ class BearTracker:
         tmp_y_sigma = math.sqrt(self.kalman_filter.errorCovPost[1, 1])
 
         cv2.ellipse(frame, tmp_pos, (int(tmp_x_sigma*3), int(tmp_y_sigma*3)), 0, 0, 360, tmp_color, 2)
+
+        search_box = self.get_current_search_box(frame)
+        cv2.rectangle(frame, (search_box[0], search_box[1]), (search_box[0]+search_box[2], search_box[1]+search_box[3]), tmp_color, 2)
+
         return frame
 
     def get_bbox_center(self, bbox):

@@ -24,13 +24,18 @@ if __name__ == "__main__":
 
     logger = logging.getLogger(__name__)
 
-    pickle_file_name = os.path.abspath("test/test_video/TestMovie1_113_tracking.pkl")
-    #pickle_file_name = os.path.abspath("test/test_video/TestMovie2_127_tracking.pkl")
-    #pickle_file_name = os.path.abspath("test/test_video/TestMovie3_59_tracking.pkl")
-    #pickle_file_name = os.path.abspath("test/test_video/TestMovie4_1_tracking.pkl")
+    pickle_file_name_list = list()
+    pickle_file_name_list.append(os.path.abspath("test/test_video/TestMovie1_113_tracking.pkl"))
+    pickle_file_name_list.append(os.path.abspath("test/test_video/TestMovie2_127_tracking.pkl"))
+    pickle_file_name_list.append(os.path.abspath("test/test_video/TestMovie3_59_tracking.pkl"))
+    pickle_file_name_list.append(os.path.abspath("test/test_video/TestMovie4_1_tracking.pkl"))
 
-    my_extracter = ExtractCameraViewClip()
-    my_extracter.init(pickle_file_name)
-    my_extracter.run()
+    #pickle_file_name_list = [pickle_file_name_list[0]] # single file test
 
-    print(f'Test complete for {pickle_file_name}')
+    for pickle_file_name in pickle_file_name_list:
+
+        my_extracter = ExtractCameraViewClip()
+        my_extracter.init(pickle_file_name)
+        my_extracter.run()
+
+        print(f'Test complete for {pickle_file_name}')
