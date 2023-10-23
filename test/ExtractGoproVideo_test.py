@@ -32,30 +32,44 @@ if __name__ == "__main__":
 
     #video_file_name_list = [video_file_name_list[0]] # single file test
 
+    do_tracking = False
+    visualize_tracking = False
+
+
     for video_file_name in video_file_name_list:
 
-        tracker = BearTracker()
+        if do_tracking:
+
+            tracker = BearTracker()
+            input_video_obj = GoproVideo()
+
+            input_video_obj.init(video_file_name)
+            tracker.init(video_file_name)
+
+            while True:
+                read_return_value, frame, frame_number = input_video_obj.read_frame()
+                print(f'Frame number: {frame_number}')
+                if read_return_value == 0:
+                    print('Reached end of video')
+                    break
+                if read_return_value == 20: #GoPro error with empty frame
+                    continue
+
+                start_state = tracker.state
+                tracker.calculate(frame)
+                if visualize_tracking and start_state == State.TRACKING:
+                    frame = tracker.visualize_state(frame)
+
+                    #Scale frame to 50% for better overview
+                    frame = cv2.resize(frame, (0, 0), fx=0.5, fy=0.5, interpolation=cv2.INTER_LINEAR)
+                    cv2.imshow('frame', frame)
+                    #Wait for 1 ms for keypress
+                    if cv2.waitKey(1) & 0xFF == ord('q'):
+                        break
+
+        ## Extract camera view clip ##
+        video_folder = os.path.dirname(video_file_name) #Get folder of video_file_name
         my_extracter = ExtractCameraViewClip()
-        input_video_obj = GoproVideo()
+        my_extracter.init()
+        my_extracter.extract_folder(video_folder)
 
-        input_video_obj.init(video_file_name)
-        tracker.init(video_file_name)
-
-        while True:
-            read_return_value, frame, frame_number = input_video_obj.read_frame()
-            print(f'Frame number: {frame_number}')
-            if read_return_value == 0:
-                print('Reached end of video')
-                break
-            if read_return_value == 20: #GoPro error with empty frame
-                continue
-
-            tracker.calculate(frame)
-
-            if tracker.state == State.DONE:
-                print(f'Tracking completed at frame {frame_number}')
-                pickle_file_name = tracker.save_data()
-                my_extracter.init(pickle_file_name)
-                my_extracter.run()
-                tracker.reset()
-                print(f'Extract complete for {pickle_file_name}')

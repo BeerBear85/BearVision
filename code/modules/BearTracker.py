@@ -11,13 +11,17 @@ class State(Enum):
     INIT = 1
     SEARCHING = 2
     TRACKING = 3
-    DONE = 4
+    SAVING = 4
 
 class BearTracker:
     def __init__(self):
         self.state = None
         self.search_window_width = 0.3
         self.search_window_height = 0.8
+        self.max_tracking_time = 15 #seconds
+        self.max_tracking_frames = None
+        self.fps = None
+        self.tracking_frame_count = None
 
         model_position_noise_sigma = 10  # pixies
         model_velocity_noise_sigma = 1  # pixies
@@ -43,20 +47,19 @@ class BearTracker:
         self.video_file_name = None
         
 
-    def init(self, arg_video_file_name):
+    def init(self, arg_video_file_name, fps = 60):
         self.change_state(State.INIT)
         self.video_file_name = arg_video_file_name
         self.dnn_handler.init()
         self.start_frame = 0
+        self.fps = fps
+        self.tracking_frame_count = 0
+        self.max_tracking_frames = self.max_tracking_time / self.fps
         return
     
     def change_state(self, new_state):
         print(f'Changing state from {self.state} to {new_state}')
         self.state = new_state
-        return
-    
-    def reset(self):
-        self.change_state(State.INIT)
         return
     
     def calculate(self, arg_frame):
@@ -71,10 +74,15 @@ class BearTracker:
                 self.change_state(State.TRACKING)
             return
         elif self.state == State.TRACKING:
+            self.tracking_frame_count += 1
             still_in_picture = self.update(arg_frame)
-            if not still_in_picture:
-                self.change_state(State.DONE)
+            if (not still_in_picture) or (self.tracking_frame_count > self.max_tracking_frames):
+                self.change_state(State.SAVING)
             return
+        elif self.state == State.SAVING:
+            self.save_data()
+            self.change_state(State.INIT)
+            
         else:
             return False
     
@@ -189,7 +197,7 @@ class BearTracker:
     def log_state(self, arg_state):
         tmp_state_vec = [int(arg_state[0]), int(arg_state[1]), float(arg_state[2]), float(arg_state[3])]
         self.state_log.append(tmp_state_vec)
-        print(f'X: {tmp_state_vec[0]}, Y: {tmp_state_vec[1]}, X-velocity: {tmp_state_vec[2]}, Y-velocity: {tmp_state_vec[3]}')
+        print(f'X: {tmp_state_vec[0]:.2f}, Y: {tmp_state_vec[1]:.2f}, X-velocity: {tmp_state_vec[2]:.2f}, Y-velocity: {tmp_state_vec[3]:.2f}')
         return
 
     def save_data(self):
@@ -202,5 +210,6 @@ class BearTracker:
             'video_file_name': self.video_file_name,
         }
         pickle.dump(tmp_data, open(file_name, 'wb'))
+        print(f'Tracking completed and data saved to {file_name}')
         return file_name
 
