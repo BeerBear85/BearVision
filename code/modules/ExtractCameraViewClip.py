@@ -54,20 +54,21 @@ class ExtractCameraViewClip:
 
         self.input_video_obj.set_start_point(start_frame)
         camera_view_index = 0
-        camera_view_end_index = start_frame + len(camera_view)
+        camera_view_end_frame = start_frame + len(camera_view)
 
         # Loop through each frame of the video
         while True:
             # Read the frame
             read_return_value, frame, frame_number = self.input_video_obj.read_frame()
-            print(f'Frame number: {frame_number} - stop at {camera_view_end_index}')
+            if frame_number % 50 == 0:
+                print(f'Frame number: {frame_number} - stops at {camera_view_end_frame}')
             if read_return_value == 0:
                 print('Reached end of video')
                 break
             if read_return_value == 20: #GoPro error with empty frame
                 continue
 
-            if (frame_number < camera_view_end_index):
+            if (frame_number < camera_view_end_frame):
                 # Get the bounding box coordinates for the current frame
                 bbox = camera_view[camera_view_index]
                 camera_view_index += 1

@@ -44,19 +44,20 @@ if __name__ == "__main__":
             input_video_obj = GoproVideo()
 
             input_video_obj.init(video_file_name)
-            tracker.init(video_file_name)
+            tracker.init(video_file_name, input_video_obj.fps)
 
             while True:
                 read_return_value, frame, frame_number = input_video_obj.read_frame()
-                print(f'Frame number: {frame_number}')
+                if frame_number % 20 == 0:
+                    print(f'Frame number: {frame_number}')
                 if read_return_value == 0:
                     print('Reached end of video')
                     break
-                if read_return_value == 20: #GoPro error with empty frame
+                if read_return_value == 20: #GoPro error with empty frame (will skip 5 frames)
                     continue
 
                 start_state = tracker.state
-                tracker.calculate(frame)
+                tracker.calculate(frame, frame_number)
                 if visualize_tracking and start_state == State.TRACKING:
                     frame = tracker.visualize_state(frame)
 

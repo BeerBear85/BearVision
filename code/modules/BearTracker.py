@@ -3,9 +3,12 @@ import math
 import numpy as np
 import cv2
 import pickle
+import logging
 from enum import Enum
 
 from DnnHandler import DnnHandler
+
+logger = logging.getLogger(__name__)
 
 class State(Enum):
     INIT = 1
@@ -21,7 +24,6 @@ class BearTracker:
         self.max_tracking_time = 15 #seconds
         self.max_tracking_frames = None
         self.fps = None
-        self.tracking_frame_count = None
 
         model_position_noise_sigma = 10  # pixies
         model_velocity_noise_sigma = 1  # pixies
@@ -43,40 +45,46 @@ class BearTracker:
         #For logging data
         self.state_log = list()
         self.box_log = list()
-        self.start_frame = None
+        self.abs_tracking_start_frame = None
         self.video_file_name = None
         
 
-    def init(self, arg_video_file_name, fps = 60):
+    def init(self, arg_video_file_name, fps):
         self.change_state(State.INIT)
+        
         self.video_file_name = arg_video_file_name
         self.dnn_handler.init()
-        self.start_frame = 0
         self.fps = fps
-        self.tracking_frame_count = 0
-        self.max_tracking_frames = self.max_tracking_time / self.fps
+        self.max_tracking_frames = self.max_tracking_time * self.fps
+
+        self.abs_tracking_start_frame = None
+        self.state_log.clear()
+        self.box_log.clear()
+
         return
     
     def change_state(self, new_state):
-        print(f'Changing state from {self.state} to {new_state}')
+        log_string = f'Changing state from {self.state} to {new_state}'
+        logger.debug(log_string)
+        print(log_string)
         self.state = new_state
         return
     
-    def calculate(self, arg_frame):
+    def calculate(self, arg_frame, arg_frame_number):
+        """ Main state machine for the tracker."""
         if self.state == State.INIT:
-            print('Tracker: Switching to SEARCHING state')
             self.change_state(State.SEARCHING)
             return
         elif self.state == State.SEARCHING:
-            self.start_frame += 1 #stops updating start_frame after first frame
             found = self.search_for_start(arg_frame)
             if found:
                 self.change_state(State.TRACKING)
+                self.abs_tracking_start_frame = arg_frame_number
             return
         elif self.state == State.TRACKING:
-            self.tracking_frame_count += 1
+            tracking_frame_count = arg_frame_number - self.abs_tracking_start_frame
             still_in_picture = self.update(arg_frame)
-            if (not still_in_picture) or (self.tracking_frame_count > self.max_tracking_frames):
+            if (not still_in_picture) or (tracking_frame_count > self.max_tracking_frames):
                 self.change_state(State.SAVING)
             return
         elif self.state == State.SAVING:
@@ -129,7 +137,7 @@ class BearTracker:
             tmp_bbox = boxes[0] #just take the first one for now
             self.box_log.append(tmp_bbox)
             tmp_measurement = self.get_bbox_center(tmp_bbox)
-            print(f'Person found at x: {tmp_measurement[0]}, y: {tmp_measurement[1]}')
+            logger.debug(f'Person found at x: {tmp_measurement[0]}, y: {tmp_measurement[1]}')
 
             ## Correction ##
             self.latest_state_estimate = self.kalman_filter.correct(tmp_measurement)
@@ -197,19 +205,26 @@ class BearTracker:
     def log_state(self, arg_state):
         tmp_state_vec = [int(arg_state[0]), int(arg_state[1]), float(arg_state[2]), float(arg_state[3])]
         self.state_log.append(tmp_state_vec)
-        print(f'X: {tmp_state_vec[0]:.2f}, Y: {tmp_state_vec[1]:.2f}, X-velocity: {tmp_state_vec[2]:.2f}, Y-velocity: {tmp_state_vec[3]:.2f}')
+        logger.debug(f'X: {tmp_state_vec[0]:.2f}, Y: {tmp_state_vec[1]:.2f}, X-velocity: {tmp_state_vec[2]:.2f}, Y-velocity: {tmp_state_vec[3]:.2f}')
         return
 
     def save_data(self):
         base_video_file_name = self.video_file_name.split('.')[0]
-        file_name = f'{base_video_file_name}_{self.start_frame}_tracking.pkl'
+        file_name = f'{base_video_file_name}_{self.abs_tracking_start_frame}_tracking.pkl'
+
         tmp_data = {
             'state_log': self.state_log,
             'box_log': self.box_log,
-            'start_frame': self.start_frame,
+            'start_frame': self.abs_tracking_start_frame,
             'video_file_name': self.video_file_name,
         }
         pickle.dump(tmp_data, open(file_name, 'wb'))
-        print(f'Tracking completed and data saved to {file_name}')
+        logger.debug(f'Tracking completed and data saved to {file_name}')
+
+        #Clear the data
+        self.state_log.clear()
+        self.box_log.clear()
+        self.abs_tracking_start_frame = None
+
         return file_name
 

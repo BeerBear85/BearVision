@@ -5,7 +5,7 @@ from scipy.signal import butter, filtfilt
 class CameraViewGenerator:
     def __init__(self):
         # bbox_parameters
-        self.box_width_scale = 10
+        self.box_width_scale = 15  # How many times the width of the bounding box should the camera view be
         self.box_aspect_ratio = 16/9 #Standard aspect ratio that is fairly wide
         self.pos_filter_cutoff = 0.3  # Desired cutoff frequency of the filter, Hz
         self.fps = None  # Sample rate, Hz

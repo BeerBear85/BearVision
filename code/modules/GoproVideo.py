@@ -35,7 +35,7 @@ class GoproVideo:
 
     def extract_creation_date(self):
         return_code = self.extract_creation_date_from_file_gps()
-        if (return_code is not 0):
+        if return_code != 0:
             warnings.warn("No GPS info was found. Extracting the recoding time using non-GPS info instead")
             self.extract_creation_date_from_file_info()
 
@@ -131,8 +131,14 @@ class GoproVideo:
         self.current_frame = arg_start_frame
         return
 
+    def get_relative_time(self):
+        """Get the relative time in milliseconds from the start of the video"""
+        rel_time_ms = self.videoreader_obj.get(cv2.CAP_PROP_POS_MSEC)
+        return rel_time_ms
+
     # Consider using VideoStream for increased speed
     def read_frame(self):
+        """ Read a frame from the video and return it along with the frame number"""
         read_return_value, frame = self.videoreader_obj.read()
         self.current_frame += 1
 
