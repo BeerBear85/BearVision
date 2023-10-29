@@ -17,7 +17,9 @@ logging.basicConfig(filename='debug.log',
 if __name__ == "__main__":
     import sys
     import os
+    import time
 
+    start_time = time.time()
     modules_abs_path = os.path.abspath("code/modules")
     dnn_models_abs_path = os.path.abspath("code/dnn_models")
 
@@ -27,10 +29,9 @@ if __name__ == "__main__":
     from DnnHandler import DnnHandler
 
 
-
     logger = logging.getLogger(__name__)
 
-    input_video = os.path.abspath("test/test_video/TestMovie3.avi")
+    input_video = os.path.abspath("test/test_video/TestMovie2.mp4")
 
     dnn_handler = DnnHandler()
     dnn_handler.init()
@@ -49,7 +50,7 @@ if __name__ == "__main__":
             break
         frame_count += 1
         modified_frame = frame
-        if frame_count % 6 == 0:
+        if frame_count % 10 == 0:
             print(f'Looking for person in frame {frame_count}')
             [boxes, confidences] = dnn_handler.find_person(frame)
 
@@ -66,10 +67,16 @@ if __name__ == "__main__":
                 y_label = max(y, labelSize[1])
                 cv2.rectangle(modified_frame, (x, y_label - labelSize[1] - 10), (x + labelSize[0], y_label + baseLine - 10), (255, 255, 255), cv2.FILLED)
                 cv2.putText(modified_frame, label, (x, y_label), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 2)
+                print(f'Found person in frame {frame_count} with confidence {confidences[i] * 100:.2f}%')
+                
 
         #Scale frame to 50% for better overview
         modified_frame = cv2.resize(modified_frame, (0, 0), fx=0.5, fy=0.5)
-        cv2.imshow('frame', modified_frame)
+        #cv2.imshow('frame', modified_frame)
         #Wait for 1 ms for keypress
-        if cv2.waitKey(50) & 0xFF == ord('q'):
-            break
+        #if cv2.waitKey(50) & 0xFF == ord('q'):
+        #    break
+
+    end_time = time.time()
+    elapsed_time = end_time - start_time
+    print(f"Elapsed time: {elapsed_time:.2f} seconds")

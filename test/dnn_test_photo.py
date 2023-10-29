@@ -1,6 +1,7 @@
 import logging
 import cv2
 
+
 if __name__ == "__main__":
     write_mode = 'w'
 else:
@@ -16,6 +17,9 @@ logging.basicConfig(filename='debug.log',
 if __name__ == "__main__":
     import sys
     import os
+    import time
+
+    start_time = time.time()
 
     modules_abs_path = os.path.abspath("code/modules")
     dnn_models_abs_path = os.path.abspath("code/dnn_models")
@@ -69,6 +73,12 @@ if __name__ == "__main__":
             y_label = max(y, labelSize[1])
             cv2.rectangle(frame, (x, y_label - labelSize[1] - 10), (x + labelSize[0], y_label + baseLine - 10), (255, 255, 255), cv2.FILLED)
             cv2.putText(frame, label, (x, y_label), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 2)
+            print(f'Found person in file {image_path} with confidence {confidences[i] * 100:.2f}%')
 
         cv2.imshow('frame', frame)
         cv2.waitKey(2000)
+
+
+    end_time = time.time()
+    elapsed_time = end_time - start_time
+    print(f"Elapsed time: {elapsed_time:.2f} seconds")

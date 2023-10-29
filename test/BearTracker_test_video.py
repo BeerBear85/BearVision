@@ -16,6 +16,9 @@ if __name__ == "__main__":
     import os
     import matplotlib.pyplot as plt
     import cv2
+    import time
+
+    start_time = time.time()
 
     modules_abs_path = os.path.abspath("code/modules")
     dnn_models_abs_path = os.path.abspath("code/dnn_models")
@@ -35,29 +38,32 @@ if __name__ == "__main__":
     input_video_list.append(os.path.abspath("test/test_video/TestMovie3.avi"))
     input_video_list.append(os.path.abspath("test/test_video/TestMovie4.avi"))
 
-    input_video = [input_video_list[0]]
+    input_video_path = [input_video_list[1]]
 
-    for input_video in input_video_list:
+    for input_video_path in input_video_list:
 
         #Read frames from video
         #Check if file exists
-        if not os.path.isfile(input_video):
-            print(f'Could not find file {input_video}')
+        if not os.path.isfile(input_video_path):
+            print(f'Could not find file {input_video_path}')
             sys.exit(1)
-        cap = cv2.VideoCapture(input_video)
+        cap = cv2.VideoCapture(input_video_path)
 
         tracker = BearTracker()
-        tracker.init(input_video)
+        tracker.init(input_video_path, cap.get(cv2.CAP_PROP_FPS))
+
+        frame_count = 0
 
         while True:
             ret, frame = cap.read()
             if not ret:
                 print('Reached end of video')
                 break
+            frame_count += 1
 
             start_state = tracker.state
 
-            tracker.calculate(frame)
+            tracker.calculate(frame, frame_count)
             if start_state == State.TRACKING:
                 frame = tracker.visualize_state(frame)
 
@@ -67,12 +73,11 @@ if __name__ == "__main__":
             #Wait for 1 ms for keypress
             if cv2.waitKey(10) & 0xFF == ord('q'):
                 break
-            if tracker.state == State.DONE:
+            if tracker.state == State.SAVING:
                 print('Bear went out of frame')
                 break
 
         tracker.save_data()
         cap.release()
-
-
-
+        elapsed_time = time.time() - start_time
+        print(f"Elapsed time: {elapsed_time:.2f} seconds")

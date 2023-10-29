@@ -21,21 +21,24 @@ class BearTracker:
         self.state = None
         self.search_window_width = 0.3
         self.search_window_height = 0.8
+        self.search_interval_time = 0.5 #seconds
+        self.search_interval_frames = None
         self.max_tracking_time = 15 #seconds
         self.max_tracking_frames = None
         self.fps = None
 
-        model_position_noise_sigma = 10  # pixies
-        model_velocity_noise_sigma = 1  # pixies
-        measurement_noise_sigma      = 20 # pixies
+        self.model_position_noise_sigma = 10  # pixies
+        self.model_velocity_noise_sigma = 1  # pixies
+        self.measurement_position_noise_sigma = 5 # pixies
+        self.measurement_conduct_threshold = 2 * self.model_position_noise_sigma # Only do new DNN meas., when position state estimate sigma is bigger than this value
         self.kalman_filter = cv2.KalmanFilter(4, 2)  # States: x, y, v_x, v_y
         self.kalman_filter.transitionMatrix    = np.array([[1, 0, 1, 0], [0, 1, 0, 1], [0, 0, 1, 0], [0, 0, 0, 1]], np.float32)  # Const velocity model - should be TS (1/fps) in the position from velocity
         self.kalman_filter.measurementMatrix   = np.array([[1, 0, 0, 0], [0, 1, 0, 0]], np.float32) #Measurement: x, y
-        self.kalman_filter.processNoiseCov     = np.diag(np.array([model_position_noise_sigma**2, model_position_noise_sigma**2, model_velocity_noise_sigma**2, model_velocity_noise_sigma**2 ], np.float32))
-        self.kalman_filter.measurementNoiseCov = np.diag(np.array([measurement_noise_sigma**2,measurement_noise_sigma**2], np.float32))
+        self.kalman_filter.processNoiseCov     = np.diag(np.array([self.model_position_noise_sigma**2, self.model_position_noise_sigma**2, self.model_velocity_noise_sigma**2, self.model_velocity_noise_sigma**2 ], np.float32))
+        self.kalman_filter.measurementNoiseCov = np.diag(np.array([self.measurement_position_noise_sigma**2,self.measurement_position_noise_sigma**2], np.float32))
 
         self.latest_state_estimate = None
-        self.kalman_filter.errorCovPost = np.diag(np.array([model_position_noise_sigma**2, model_position_noise_sigma**2, model_velocity_noise_sigma**2, model_velocity_noise_sigma**2 ], np.float32))
+        self.kalman_filter.errorCovPost = np.diag(np.array([self.model_position_noise_sigma**2, self.model_position_noise_sigma**2, self.model_velocity_noise_sigma**2, self.model_velocity_noise_sigma**2 ], np.float32))
         self.kalman_filter.statePost    = np.array([[0], [0], [0], [0]], np.float32)
 
         self.search_area_scale = 20 #How much bigger the search area is compared to the current estimate covariance
@@ -45,6 +48,7 @@ class BearTracker:
         #For logging data
         self.state_log = list()
         self.box_log = list()
+        self.last_search_frame = 0
         self.abs_tracking_start_frame = None
         self.video_file_name = None
         
@@ -56,7 +60,9 @@ class BearTracker:
         self.dnn_handler.init()
         self.fps = fps
         self.max_tracking_frames = self.max_tracking_time * self.fps
+        self.search_interval_frames = self.search_interval_time * self.fps
 
+        self.last_search_frame = 0
         self.abs_tracking_start_frame = None
         self.state_log.clear()
         self.box_log.clear()
@@ -90,7 +96,6 @@ class BearTracker:
         elif self.state == State.SAVING:
             self.save_data()
             self.change_state(State.INIT)
-            
         else:
             return False
     
@@ -127,21 +132,27 @@ class BearTracker:
         self.latest_state_estimate = self.kalman_filter.predict()  # Predicted state from motion model
 
         ## Measurement ##
-        search_box, search_frame = self.get_current_search_frame(arg_frame)
+        new_valid_measurement = False
+        tmp_x_sigma = math.sqrt(self.kalman_filter.errorCovPost[0, 0])
+        tmp_y_sigma = math.sqrt(self.kalman_filter.errorCovPost[1, 1])
+        average_sigma = 0.5 * (tmp_x_sigma + tmp_y_sigma)
 
-        [boxes, confidences] = self.dnn_handler.find_person(search_frame)
-        # Map the box to the original frame
-        boxes = [[box[0] + search_box[0], box[1] + search_box[1], box[2], box[3]] for box in boxes]
+        if average_sigma > self.measurement_conduct_threshold: # position confidence is low
+            search_box, search_frame = self.get_current_search_frame(arg_frame)
 
-        if len(boxes) != 0:
-            tmp_bbox = boxes[0] #just take the first one for now
-            self.box_log.append(tmp_bbox)
-            tmp_measurement = self.get_bbox_center(tmp_bbox)
-            logger.debug(f'Person found at x: {tmp_measurement[0]}, y: {tmp_measurement[1]}')
+            [boxes, confidences] = self.dnn_handler.find_person(search_frame)
+            # Map the box to the original frame
+            boxes = [[box[0] + search_box[0], box[1] + search_box[1], box[2], box[3]] for box in boxes]
+            if len(boxes) != 0:
+                new_valid_measurement = True
+                tmp_bbox = boxes[0] #just take the first one for now
+                self.box_log.append(tmp_bbox)
+                tmp_measurement = self.get_bbox_center(tmp_bbox)
+                logger.debug(f'Person found at x: {tmp_measurement[0]}, y: {tmp_measurement[1]}')
+                ## Correction ##
+                self.latest_state_estimate = self.kalman_filter.correct(tmp_measurement)
 
-            ## Correction ##
-            self.latest_state_estimate = self.kalman_filter.correct(tmp_measurement)
-        else:
+        if not new_valid_measurement:
             self.box_log.append(None) #to still have the same number of elements in the list
 
         ## Logging ##
