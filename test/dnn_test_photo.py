@@ -1,83 +1,74 @@
+import logging
 import cv2
-import numpy as np
 
-input_image = '../test_image_2.jpg'
+if __name__ == "__main__":
+    write_mode = 'w'
+else:
+    write_mode = 'a'
 
-# Load YOLOv3 model
-model_cfg = 'yolov3_608.cfg'
-model_weights = 'yolov3_608.weights'
-net = cv2.dnn.readNetFromDarknet(model_cfg, model_weights)
-
-# Load the image
-image = cv2.imread(input_image)
-(h, w) = image.shape[:2]
-
-# Prepare the image for YOLO
-blob = cv2.dnn.blobFromImage(image, 1 / 255.0, (416, 416), swapRB=True, crop=False)
-net.setInput(blob)
-
-# Get the output layer names
-layer_names = net.getLayerNames()
-
-# Get the indices of the output layers
-unconnected_out_layers_indices = net.getUnconnectedOutLayers()
-
-# Get the names of the output layers
-output_layers = []
-for layer_idx in unconnected_out_layers_indices: 
-    layer_name = layer_names[layer_idx - 1]
-    output_layers.append(layer_name)
+logging.basicConfig(filename='debug.log',
+                    level=logging.DEBUG,
+                    format='%(asctime)s:%(levelname)-8s:%(name)s:%(message)s',
+                    filemode=write_mode)
 
 
-# Perform a forward pass
-layer_outputs = net.forward(output_layers)
 
-# Initialize lists for detected bounding boxes, confidences, and class IDs
-boxes = []
-confidences = []
-class_ids = []
+if __name__ == "__main__":
+    import sys
+    import os
 
-# Loop over each of the layer outputs
-for output in layer_outputs:
-    # Loop over each of the detections
-    for detection in output:
-        scores = detection[5:]
-        class_id = np.argmax(scores)
-        confidence = scores[class_id]
-        if confidence > 0.5:  # You can adjust this threshold
-            # Scale the bounding box coordinates back to the size of the image
-            box = detection[0:4] * np.array([w, h, w, h])
-            (centerX, centerY, width, height) = box.astype("int")
-            x = int(centerX - (width / 2))
-            y = int(centerY - (height / 2))
-            boxes.append([x, y, int(width), int(height)])
-            confidences.append(float(confidence))
-            class_ids.append(class_id)
+    modules_abs_path = os.path.abspath("code/modules")
+    dnn_models_abs_path = os.path.abspath("code/dnn_models")
 
-# Apply non-maxima suppression to suppress weak, overlapping bounding boxes
-idxs = cv2.dnn.NMSBoxes(boxes, confidences, 0.5, 0.4)  # You can adjust these thresholds
+    sys.path.append(modules_abs_path)
+    sys.path.append(dnn_models_abs_path)
 
-# Ensure at least one detection exists
-if len(idxs) > 0:
-    for i in idxs.flatten():
-        # Only proceed if the class label is 'person' (class ID 0 in COCO dataset)
-        if class_ids[i] == 0:
-            (x, y) = (boxes[i][0], boxes[i][1])
-            (w, h) = (boxes[i][2], boxes[i][3])
-            cv2.rectangle(image, (x, y), (x + w, y + h), (0, 255, 0), 2)
-            
+    from DnnHandler import DnnHandler
+    logger = logging.getLogger(__name__)
+
+    input_image_list = list()
+    input_image_list.append(os.path.abspath("test/images/test_image_1.jpg"))
+    input_image_list.append(os.path.abspath("test/images/test_image_2.jpg"))
+    input_image_list.append(os.path.abspath("test/images/test_image_3.jpg"))
+    input_image_list.append(os.path.abspath("test/images/test_image_4.jpg"))
+    input_image_list.append(os.path.abspath("test/images/test_image_5.jpg"))
+
+    #input_image_list = [input_image_list[2]]
+
+    for image_path in input_image_list:
+
+
+
+
+
+        #Check if file exists
+        if not os.path.isfile(image_path):
+            print(f'Could not find file {image_path}')
+            sys.exit(1)
+        frame = cv2.imread(image_path)
+
+        #if image contains "test_image_2", scale to 50%
+        if "test_image_2" in image_path:
+            frame = cv2.resize(frame, (0, 0), fx=0.5, fy=0.5)
+
+
+        dnn_handler = DnnHandler()
+        dnn_handler.init()
+
+        [boxes, confidences] = dnn_handler.find_person(frame)
+
+        for i, box in enumerate(boxes):
+            # Draw bounding box for the object
+            (x, y) = (box[0], box[1])
+            (w, h) = (box[2], box[3])
+            cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
+
             # Draw label text with confidence score
             label = "Person: {:.2f}%".format(confidences[i] * 100)
             labelSize, baseLine = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 2)
             y_label = max(y, labelSize[1])
-            cv2.rectangle(image, (x, y_label - labelSize[1] - 10), (x + labelSize[0], y_label + baseLine - 10), (255, 255, 255), cv2.FILLED)
-            cv2.putText(image, label, (x, y_label), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 2)
+            cv2.rectangle(frame, (x, y_label - labelSize[1] - 10), (x + labelSize[0], y_label + baseLine - 10), (255, 255, 255), cv2.FILLED)
+            cv2.putText(frame, label, (x, y_label), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 2)
 
-# Show the output image
-
-# Scale the image
-scaled_image = cv2.resize(image, None, fx=0.5, fy=0.5, interpolation=cv2.INTER_AREA)
-
-cv2.imshow("Image", scaled_image)
-cv2.waitKey(0)
-cv2.destroyAllWindows()
+        cv2.imshow('frame', frame)
+        cv2.waitKey(2000)

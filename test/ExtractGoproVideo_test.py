@@ -27,12 +27,17 @@ if __name__ == "__main__":
 
     logger = logging.getLogger(__name__)
 
+    one_drive_folder = os.path.join('C:','Users','bjes','OneDrive - MAN Energy Solutions SE'...
+                                    ,'personal','BearVision','test_video')
+    
+
     video_file_name_list = list()
-    video_file_name_list.append('C:\\Users\\bjes\\OneDrive - MAN Energy Solutions SE\\personal\\BearVision\\test_video\\GP020511.MP4')
+    #video_file_name_list.append(os.path.join(one_drive_folder,'GP020511','GP020511.MP4'))
+    video_file_name_list.append(os.path.join(one_drive_folder,'GP010554','GP010554.MP4'))
 
     #video_file_name_list = [video_file_name_list[0]] # single file test
 
-    do_tracking = False
+    do_tracking = True
     visualize_tracking = False
 
 
