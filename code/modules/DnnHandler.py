@@ -9,9 +9,9 @@ class DnnHandler:
         current_file_path = os.path.dirname(os.path.abspath(__file__))
         model_path = os.path.join(current_file_path, '../dnn_models')
 
-        self.model = os.path.join(model_path, 'yolov8n.onnx')
+        #self.model = os.path.join(model_path, 'yolov8n.onnx')
         #self.model = os.path.join(model_path, 'yolov8s.onnx')
-        #self.model = os.path.join(model_path, 'yolov8m.onnx')
+        self.model = os.path.join(model_path, 'yolov8m.onnx')
         #self.model = os.path.join(model_path, 'yolov8l.onnx')
         #self.model = os.path.join(model_path, 'yolov8x.onnx')
         self.threshold = 0.6

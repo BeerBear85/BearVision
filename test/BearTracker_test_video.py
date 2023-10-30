@@ -38,7 +38,7 @@ if __name__ == "__main__":
     input_video_list.append(os.path.abspath("test/test_video/TestMovie3.avi"))
     input_video_list.append(os.path.abspath("test/test_video/TestMovie4.avi"))
 
-    input_video_path = [input_video_list[1]]
+    input_video_list = [input_video_list[3]]
 
     for input_video_path in input_video_list:
 

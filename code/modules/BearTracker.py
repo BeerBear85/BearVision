@@ -23,14 +23,14 @@ class BearTracker:
         self.search_window_height = 0.8
         self.search_interval_time = 0.5 #seconds
         self.search_interval_frames = None
-        self.max_tracking_time = 15 #seconds
+        self.max_tracking_time = 10 #seconds
         self.max_tracking_frames = None
         self.fps = None
 
         self.model_position_noise_sigma = 10  # pixies
         self.model_velocity_noise_sigma = 1  # pixies
         self.measurement_position_noise_sigma = 5 # pixies
-        self.measurement_conduct_threshold = 2 * self.model_position_noise_sigma # Only do new DNN meas., when position state estimate sigma is bigger than this value
+        self.measurement_conduct_threshold = 3 * self.model_position_noise_sigma # Only do new DNN meas., when position state estimate sigma is bigger than this value
         self.kalman_filter = cv2.KalmanFilter(4, 2)  # States: x, y, v_x, v_y
         self.kalman_filter.transitionMatrix    = np.array([[1, 0, 1, 0], [0, 1, 0, 1], [0, 0, 1, 0], [0, 0, 0, 1]], np.float32)  # Const velocity model - should be TS (1/fps) in the position from velocity
         self.kalman_filter.measurementMatrix   = np.array([[1, 0, 0, 0], [0, 1, 0, 0]], np.float32) #Measurement: x, y
@@ -59,10 +59,10 @@ class BearTracker:
         self.video_file_name = arg_video_file_name
         self.dnn_handler.init()
         self.fps = fps
-        self.max_tracking_frames = self.max_tracking_time * self.fps
-        self.search_interval_frames = self.search_interval_time * self.fps
+        self.max_tracking_frames = round(self.max_tracking_time * self.fps)
+        self.search_interval_frames = round(self.search_interval_time * self.fps)
 
-        self.last_search_frame = 0
+        self.last_search_frame = -1000 #trigger a search right away
         self.abs_tracking_start_frame = None
         self.state_log.clear()
         self.box_log.clear()
@@ -82,7 +82,7 @@ class BearTracker:
             self.change_state(State.SEARCHING)
             return
         elif self.state == State.SEARCHING:
-            found = self.search_for_start(arg_frame)
+            found = self.search_for_start(arg_frame, arg_frame_number)
             if found:
                 self.change_state(State.TRACKING)
                 self.abs_tracking_start_frame = arg_frame_number
@@ -99,8 +99,15 @@ class BearTracker:
         else:
             return False
     
-    def search_for_start(self, arg_frame):
-        #get frame size of video
+    def search_for_start(self, arg_frame, arg_frame_number):
+        """Search for a person in the frame and initialize the Kalman filter if found."""
+        #Check if enough time has passed since the last search
+        if (arg_frame_number - self.last_search_frame) < self.search_interval_frames:
+            return False
+        
+        self.last_search_frame = arg_frame_number
+
+        #get frame size of video and extract ROI
         frame_width = int(arg_frame.shape[1])
         frame_height = int(arg_frame.shape[0])
         ROI_width = int(self.search_window_width * frame_width)
@@ -110,6 +117,7 @@ class BearTracker:
         ROI_region = [ROI_x, ROI_y, ROI_width, ROI_height] #x, y, width, height
         frame_ROI = arg_frame[ROI_region[1]:ROI_region[1]+ROI_region[3], ROI_region[0]:ROI_region[0]+ROI_region[2]]
         [boxes, confidences] = self.dnn_handler.find_person(frame_ROI)
+
         if len(boxes) != 0:
             box_in_frame_ROI = boxes[0]
             box_in_frame = [box_in_frame_ROI[0] + ROI_x, box_in_frame_ROI[1] + ROI_y, box_in_frame_ROI[2], box_in_frame_ROI[3]]
@@ -117,8 +125,8 @@ class BearTracker:
             start_pos = (int(box_in_frame[0] + 0.5*box_in_frame[2]), int(box_in_frame[1] + 0.5*box_in_frame[3]))
             self.kalman_filter.statePost = np.array([[start_pos[0]], [start_pos[1]], [0], [0]], np.float32)
             return True
-            
-        return False
+        else:
+            return False
 
     
     def update(self, arg_frame):
@@ -161,16 +169,17 @@ class BearTracker:
         #Tell if the X position is outside the frame
         if (int(self.latest_state_estimate[0]) < 0) or (int(self.latest_state_estimate[0]) > arg_frame.shape[1]):
             return False
-        
         return True
-    
+
     def get_current_search_frame(self, frame):
+        """ Extracts the current search area from the frame."""
         search_box = self.get_current_search_box(frame)
         search_frame = frame[search_box[1]:search_box[1]+search_box[3], search_box[0]:search_box[0]+search_box[2]]
-
         return search_box, search_frame
 
+
     def get_current_search_box(self, frame):
+        """ Returns the current search box parameters as a list [x, y, width, height] """
         tmp_x_sigma = math.sqrt(self.kalman_filter.errorCovPost[0, 0])
         tmp_y_sigma = math.sqrt(self.kalman_filter.errorCovPost[1, 1])
 
