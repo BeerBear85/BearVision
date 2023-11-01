@@ -1,3 +1,4 @@
+# pylint: disable=E0401
 import logging
 
 
@@ -10,6 +11,11 @@ logging.basicConfig(filename='debug.log',
                     level=logging.DEBUG,
                     format='%(asctime)s:%(levelname)-8s:%(name)s:%(message)s',
                     filemode=write_mode)
+
+# Create a console handler and set level to info
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.INFO)
+logging.getLogger('').addHandler(console_handler) # Add the console handler to the root logger
 
 
 if __name__ == "__main__":
@@ -27,8 +33,7 @@ if __name__ == "__main__":
 
     logger = logging.getLogger(__name__)
 
-    one_drive_folder = os.path.join('C:','Users','bjes','OneDrive - MAN Energy Solutions SE'...
-                                    ,'personal','BearVision','test_video')
+    one_drive_folder = os.path.join('C:','Users','bjes','OneDrive - MAN Energy Solutions SE','personal','BearVision','test_video')
     
 
     video_file_name_list = list()
@@ -41,7 +46,18 @@ if __name__ == "__main__":
     visualize_tracking = False
 
 
+
+
     for video_file_name in video_file_name_list:
+
+        logger.info("Processing %s", video_file_name)
+
+
+        #Delete all existing pickle files in folder
+        folder_path = os.path.dirname(video_file_name_list[0]) #Get folder of video_file_name
+        pickle_file_name_list = [os.path.join(folder_path, f) for f in os.listdir(folder_path) if f.endswith('.pkl')]
+        for pickle_file_name in pickle_file_name_list:
+            os.remove(pickle_file_name)
 
         if do_tracking:
 

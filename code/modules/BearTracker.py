@@ -1,22 +1,23 @@
-
+# pylint: disable=E0401
 import math
-import numpy as np
-import cv2
 import pickle
 import logging
 from enum import Enum
-
+import numpy as np
+import cv2
 from DnnHandler import DnnHandler
 
 logger = logging.getLogger(__name__)
 
 class State(Enum):
+    """Possible states of the tracker"""
     INIT = 1
     SEARCHING = 2
     TRACKING = 3
     SAVING = 4
 
 class BearTracker:
+    """Class for tracking a person in a video"""
     def __init__(self):
         self.state = None
         self.search_window_width = 0.3
@@ -42,7 +43,7 @@ class BearTracker:
         self.kalman_filter.statePost    = np.array([[0], [0], [0], [0]], np.float32)
 
         self.search_area_scale = 20 #How much bigger the search area is compared to the current estimate covariance
-        self.dnn_handler = DnnHandler()
+        self.dnn_handler = DnnHandler("yolov8n")
 
 
         #For logging data
@@ -51,11 +52,11 @@ class BearTracker:
         self.last_search_frame = 0
         self.abs_tracking_start_frame = None
         self.video_file_name = None
-        
 
     def init(self, arg_video_file_name, fps):
+        """Reinitialize the tracker"""
         self.change_state(State.INIT)
-        
+
         self.video_file_name = arg_video_file_name
         self.dnn_handler.init()
         self.fps = fps
@@ -66,16 +67,14 @@ class BearTracker:
         self.abs_tracking_start_frame = None
         self.state_log.clear()
         self.box_log.clear()
-
         return
-    
+
     def change_state(self, new_state):
-        log_string = f'Changing state from {self.state} to {new_state}'
-        logger.debug(log_string)
-        print(log_string)
+        """Change the state of the tracker"""
+        logger.debug("Changing state from %s to %s", self.state, new_state)
         self.state = new_state
         return
-    
+
     def calculate(self, arg_frame, arg_frame_number):
         """ Main state machine for the tracker."""
         if self.state == State.INIT:
@@ -86,6 +85,7 @@ class BearTracker:
             if found:
                 self.change_state(State.TRACKING)
                 self.abs_tracking_start_frame = arg_frame_number
+                logger.info('Starting tracking at frame %i', arg_frame_number)
             return
         elif self.state == State.TRACKING:
             tracking_frame_count = arg_frame_number - self.abs_tracking_start_frame
@@ -98,13 +98,13 @@ class BearTracker:
             self.change_state(State.INIT)
         else:
             return False
-    
+
     def search_for_start(self, arg_frame, arg_frame_number):
-        """Search for a person in the frame and initialize the Kalman filter if found."""
+        """Search for a person in a section of the frame and initialize the tracking if found."""
         #Check if enough time has passed since the last search
         if (arg_frame_number - self.last_search_frame) < self.search_interval_frames:
             return False
-        
+
         self.last_search_frame = arg_frame_number
 
         #get frame size of video and extract ROI
@@ -121,14 +121,14 @@ class BearTracker:
         if len(boxes) != 0:
             box_in_frame_ROI = boxes[0]
             box_in_frame = [box_in_frame_ROI[0] + ROI_x, box_in_frame_ROI[1] + ROI_y, box_in_frame_ROI[2], box_in_frame_ROI[3]]
-            
+
             start_pos = (int(box_in_frame[0] + 0.5*box_in_frame[2]), int(box_in_frame[1] + 0.5*box_in_frame[3]))
             self.kalman_filter.statePost = np.array([[start_pos[0]], [start_pos[1]], [0], [0]], np.float32)
             return True
         else:
             return False
 
-    
+
     def update(self, arg_frame):
         """Update the state estimate of the Kalman filter based on a new frame.
         Args:
@@ -156,7 +156,7 @@ class BearTracker:
                 tmp_bbox = boxes[0] #just take the first one for now
                 self.box_log.append(tmp_bbox)
                 tmp_measurement = self.get_bbox_center(tmp_bbox)
-                logger.debug(f'Person found at x: {tmp_measurement[0]}, y: {tmp_measurement[1]}')
+                logger.debug("Person found at x: %s, y: %s", tmp_measurement[0], tmp_measurement[1])
                 ## Correction ##
                 self.latest_state_estimate = self.kalman_filter.correct(tmp_measurement)
 
@@ -223,12 +223,15 @@ class BearTracker:
         return np.array([[tmp_x], [tmp_y]], np.float32)
 
     def log_state(self, arg_state):
+        """Log the state of the tracker"""
         tmp_state_vec = [int(arg_state[0]), int(arg_state[1]), float(arg_state[2]), float(arg_state[3])]
         self.state_log.append(tmp_state_vec)
-        logger.debug(f'X: {tmp_state_vec[0]:.2f}, Y: {tmp_state_vec[1]:.2f}, X-velocity: {tmp_state_vec[2]:.2f}, Y-velocity: {tmp_state_vec[3]:.2f}')
+        logger.debug("X: %.2f, Y: %.2f, X-velocity: %.2f, Y-velocity: %.2f", tmp_state_vec[0], tmp_state_vec[1], tmp_state_vec[2], tmp_state_vec[3])
+
         return
 
     def save_data(self):
+        """Save the relevant data to a pickle file"""
         base_video_file_name = self.video_file_name.split('.')[0]
         file_name = f'{base_video_file_name}_{self.abs_tracking_start_frame}_tracking.pkl'
 
@@ -239,7 +242,7 @@ class BearTracker:
             'video_file_name': self.video_file_name,
         }
         pickle.dump(tmp_data, open(file_name, 'wb'))
-        logger.debug(f'Tracking completed and data saved to {file_name}')
+        logger.info("Tracking completed and data saved to %s", file_name)
 
         #Clear the data
         self.state_log.clear()

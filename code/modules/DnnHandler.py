@@ -3,24 +3,36 @@ import numpy as np
 import os
 
 class DnnHandler:
-    def __init__(self):
+    """Class for handling DNN models and performing inference"""
+    def __init__(self, model_name):
         self.net = None
         #Abs path of the folder of the current file
         current_file_path = os.path.dirname(os.path.abspath(__file__))
         model_path = os.path.join(current_file_path, '../dnn_models')
 
-        #self.model = os.path.join(model_path, 'yolov8n.onnx')
-        #self.model = os.path.join(model_path, 'yolov8s.onnx')
-        self.model = os.path.join(model_path, 'yolov8m.onnx')
-        #self.model = os.path.join(model_path, 'yolov8l.onnx')
-        #self.model = os.path.join(model_path, 'yolov8x.onnx')
-        self.threshold = 0.6
+        #switch case for model_name
+        if model_name == 'yolov8n':
+            self.model = os.path.join(model_path, 'yolov8n.onnx')
+        elif model_name == 'yolov8s':
+            self.model = os.path.join(model_path, 'yolov8s.onnx')
+        elif model_name == 'yolov8m':
+            self.model = os.path.join(model_path, 'yolov8m.onnx')
+        elif model_name == 'yolov8l':
+            self.model = os.path.join(model_path, 'yolov8l.onnx')
+        elif model_name == 'yolov8x':
+            self.model = os.path.join(model_path, 'yolov8x.onnx')
+        else:
+            print('Error: Invalid model name')
+            exit(1)
+
+        self.confidence_threshold = 0.6
 
     def init(self):
-        #self.net = cv2.dnn.readNetFromDarknet(self.model_cfg, self.model_weights)
+        """Initialize the DNN model"""
         self.net = cv2.dnn.readNetFromONNX(self.model)
 
     def find_person(self, original_image):
+        """Perform inference on an image and return the bounding boxes and confidences for all detected people"""
         # Load the image
         (height, width) = original_image.shape[:2]
 
@@ -51,7 +63,7 @@ class DnnHandler:
         for i in range(rows):
             classes_scores = outputs[0][i][4:]
             (minScore, maxScore, minClassLoc, (x, maxClassIndex)) = cv2.minMaxLoc(classes_scores)
-            if maxScore >= self.threshold:
+            if maxScore >= self.confidence_threshold:
                 box = [
                     outputs[0][i][0] - (0.5 * outputs[0][i][2]), outputs[0][i][1] - (0.5 * outputs[0][i][3]),
                     outputs[0][i][2], outputs[0][i][3]]
