@@ -27,6 +27,6 @@ if __name__ == "__main__":
 
     logger.info("Starting BLE beacon handler test")
     my_ble_beacon_handler = BleBeaconHandler()
-    my_ble_beacon_handler.start_scan()
+    my_ble_beacon_handler.start_scan(0.0)
 
     logger.info("BLE beacon handler test done")
