@@ -1,5 +1,5 @@
-*.mp4
-*.avi
+#*.mp4
+#*.avi
 *.log
 *.pkl
 .idea
