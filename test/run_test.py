@@ -1,5 +1,6 @@
 # Make main process create the new file and sub-processes append - probably not the nices way of doing this
 import logging
+import os
 
 if __name__ == "__main__":
     write_mode = 'w'
@@ -16,9 +17,10 @@ logging.basicConfig(filename='debug.log',
 if __name__ == "__main__":
     import sys, os, logging
 
-    sys.path.append('..\code\Modules')
-    sys.path.append('..\code\Application')
-    sys.path.append('..\code\external_modules')
+    base_dir = os.path.join(os.path.dirname(__file__), '..', 'code')
+    sys.path.append(os.path.join(base_dir, 'modules'))
+    sys.path.append(os.path.join(base_dir, 'Application'))
+    sys.path.append(os.path.join(base_dir, 'external_modules'))
     import Application
     from Enums import ActionOptions
     from ConfigurationHandler import ConfigurationHandler
