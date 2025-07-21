@@ -1,4 +1,4 @@
-"""BearVision dataset pipeline for video ingestion and labeling."""
+"""Annotation dataset pipeline for video ingestion and labeling."""
 from dataclasses import dataclass, field
 import json
 from pathlib import Path
@@ -39,10 +39,10 @@ class ExportConfig:
 @dataclass
 class PipelineConfig:
     videos: List[str] = field(default_factory=list)
-    sampling: SamplingConfig = SamplingConfig()
-    quality: QualityConfig = QualityConfig()
+    sampling: SamplingConfig = field(default_factory=SamplingConfig)
+    quality: QualityConfig = field(default_factory=QualityConfig)
     yolo: YoloConfig | None = None
-    export: ExportConfig = ExportConfig(output_dir="dataset")
+    export: ExportConfig = field(default_factory=lambda: ExportConfig(output_dir="dataset"))
 
 
 class VidIngest:
@@ -148,7 +148,7 @@ class DatasetExporter:
         self.debug_file.write(json.dumps(debug) + "\n")
     def close(self):
         self.debug_file.close()
-app = typer.Typer(help="BearVision dataset pipeline")
+app = typer.Typer(help="Annotation dataset pipeline")
 @app.command()
 def run(config_path: str):
     """Run the dataset generation pipeline."""
