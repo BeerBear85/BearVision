@@ -21,8 +21,8 @@ if __name__ == "__main__":
 
     start_time = time.time()
 
-    modules_abs_path = os.path.abspath("code/modules")
-    dnn_models_abs_path = os.path.abspath("code/dnn_models")
+    modules_abs_path = os.path.abspath(os.path.join("code", "modules"))
+    dnn_models_abs_path = os.path.abspath(os.path.join("code", "dnn_models"))
 
     sys.path.append(modules_abs_path)
     sys.path.append(dnn_models_abs_path)
@@ -31,11 +31,11 @@ if __name__ == "__main__":
     logger = logging.getLogger(__name__)
 
     input_image_list = list()
-    input_image_list.append(os.path.abspath("test/images/test_image_1.jpg"))
-    input_image_list.append(os.path.abspath("test/images/test_image_2.jpg"))
-    input_image_list.append(os.path.abspath("test/images/test_image_3.jpg"))
-    input_image_list.append(os.path.abspath("test/images/test_image_4.jpg"))
-    input_image_list.append(os.path.abspath("test/images/test_image_5.jpg"))
+    input_image_list.append(os.path.abspath(os.path.join("test", "images", "test_image_1.jpg")))
+    input_image_list.append(os.path.abspath(os.path.join("test", "images", "test_image_2.jpg")))
+    input_image_list.append(os.path.abspath(os.path.join("test", "images", "test_image_3.jpg")))
+    input_image_list.append(os.path.abspath(os.path.join("test", "images", "test_image_4.jpg")))
+    input_image_list.append(os.path.abspath(os.path.join("test", "images", "test_image_5.jpg")))
 
     #input_image_list = [input_image_list[2]]
 

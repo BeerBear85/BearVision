@@ -13,11 +13,13 @@ logging.basicConfig(filename='debug.log',
                     filemode=write_mode)
 
 if __name__ == "__main__":
-    import sys, tkinter
+    import sys
+    import tkinter
+    import os
 
-    sys.path.append('code\Modules')
-    sys.path.append('code\Application')
-    sys.path.append('code\external_modules')
+    sys.path.append(os.path.join('code', 'Modules'))
+    sys.path.append(os.path.join('code', 'Application'))
+    sys.path.append(os.path.join('code', 'external_modules'))
 
     from Application import Application
     from GUI import BearVisionGUI

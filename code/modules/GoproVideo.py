@@ -21,7 +21,8 @@ class GoproVideo:
         #if arg_options_obj is None:
         #   arg_options_obj = ConfigurationHandler.get_configuration()
         #self.tool_folder = arg_options_obj['GOPRO_VIDEO']['tool_folder']
-        self.tool_folder = os.path.abspath("tools")
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        self.tool_folder = os.path.abspath(os.path.join(current_dir, '..', '..', 'tools'))
 
     def init(self, arg_video_filename):
         if (arg_video_filename != self.current_filename):  # Only initilise if it is a new file

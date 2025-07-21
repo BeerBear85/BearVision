@@ -19,17 +19,17 @@ if __name__ == "__main__":
     from pprint import pprint
     import cv2
 
-    modules_abs_path = os.path.abspath("code/modules")
+    modules_abs_path = os.path.abspath(os.path.join("code", "modules"))
     sys.path.append(modules_abs_path)
     from CameraViewGenerator import CameraViewGenerator
 
     logger = logging.getLogger(__name__)
 
 
-    input_video = os.path.abspath("test/test_video/TestMovie1.mp4")
-    #input_video = os.path.abspath("test/test_video/TestMovie2.mp4")
-    #input_video = os.path.abspath("test/test_video/TestMovie3.avi")
-    #input_video = os.path.abspath("test/test_video/TestMovie4.avi")
+    input_video = os.path.abspath(os.path.join("test", "test_video", "TestMovie1.mp4"))
+    #input_video = os.path.abspath(os.path.join("test", "test_video", "TestMovie2.mp4"))
+    #input_video = os.path.abspath(os.path.join("test", "test_video", "TestMovie3.avi"))
+    #input_video = os.path.abspath(os.path.join("test", "test_video", "TestMovie4.avi"))
 
     pickle_file_name = input_video.split('.')[0] + '_tracking_vars.pkl'
     

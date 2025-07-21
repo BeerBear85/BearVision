@@ -17,7 +17,7 @@ if __name__ == "__main__":
     import os
     import cv2
 
-    modules_abs_path = os.path.abspath("code/modules")
+    modules_abs_path = os.path.abspath(os.path.join("code", "modules"))
     sys.path.append(modules_abs_path)
 
     from ExtractCameraViewClip import ExtractCameraViewClip
@@ -25,10 +25,10 @@ if __name__ == "__main__":
     logger = logging.getLogger(__name__)
 
     pickle_file_name_list = list()
-    pickle_file_name_list.append(os.path.abspath("test/test_video/TestMovie1_113_tracking.pkl"))
-    pickle_file_name_list.append(os.path.abspath("test/test_video/TestMovie2_127_tracking.pkl"))
-    pickle_file_name_list.append(os.path.abspath("test/test_video/TestMovie3_59_tracking.pkl"))
-    pickle_file_name_list.append(os.path.abspath("test/test_video/TestMovie4_1_tracking.pkl"))
+    pickle_file_name_list.append(os.path.abspath(os.path.join("test", "test_video", "TestMovie1_113_tracking.pkl")))
+    pickle_file_name_list.append(os.path.abspath(os.path.join("test", "test_video", "TestMovie2_127_tracking.pkl")))
+    pickle_file_name_list.append(os.path.abspath(os.path.join("test", "test_video", "TestMovie3_59_tracking.pkl")))
+    pickle_file_name_list.append(os.path.abspath(os.path.join("test", "test_video", "TestMovie4_1_tracking.pkl")))
 
     #pickle_file_name_list = [pickle_file_name_list[0]] # single file test
 
