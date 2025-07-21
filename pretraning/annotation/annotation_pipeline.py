@@ -35,6 +35,7 @@ class YoloConfig:
 @dataclass
 class ExportConfig:
     output_dir: str
+    format: str = "yolo"
 
 @dataclass
 class PipelineConfig:
@@ -95,6 +96,10 @@ class PreLabelYOLO:
     def __init__(self, config: YoloConfig):
         self.model = YOLO(config.weights)
         self.conf_thr = config.conf_thr
+        try:
+            self.names = self.model.names
+        except AttributeError:
+            self.names = {}
 
     def detect(self, frame) -> List[Dict[str, Any]]:
         results = self.model(frame)[0]
@@ -104,9 +109,11 @@ class PreLabelYOLO:
             if conf < self.conf_thr:
                 continue
             x1, y1, x2, y2 = b.xyxy[0].tolist()
+            cls_id = int(b.cls[0])
             boxes.append({
                 "bbox": [x1, y1, x2, y2],
-                "cls": int(b.cls[0]),
+                "cls": cls_id,
+                "label": self.names.get(cls_id, str(cls_id)),
                 "conf": conf,
             })
         return boxes
@@ -148,6 +155,62 @@ class DatasetExporter:
         self.debug_file.write(json.dumps(debug) + "\n")
     def close(self):
         self.debug_file.close()
+
+
+class CvatExporter:
+    """Save frames and annotations in CVAT format."""
+
+    def __init__(self, config: ExportConfig):
+        self.root = Path(config.output_dir)
+        self.img_dir = self.root / "images"
+        self.img_dir.mkdir(parents=True, exist_ok=True)
+        self.annotations: List[Dict[str, Any]] = []
+
+    def save(self, item: Dict[str, Any], boxes: List[Dict[str, Any]]):
+        frame = item["frame"]
+        idx = item["frame_idx"]
+        video_name = Path(item["video"]).stem
+        img_name = f"{video_name}_{idx:06d}.jpg"
+        cv2.imwrite(str(self.img_dir / img_name), frame)
+        h, w = frame.shape[:2]
+        self.annotations.append({
+            "name": img_name,
+            "width": w,
+            "height": h,
+            "boxes": boxes,
+        })
+
+    def close(self):
+        import xml.etree.ElementTree as ET
+
+        root_el = ET.Element("annotations")
+        for i, img in enumerate(self.annotations):
+            img_el = ET.SubElement(
+                root_el,
+                "image",
+                id=str(i),
+                name=img["name"],
+                width=str(img["width"]),
+                height=str(img["height"]),
+            )
+            for b in img["boxes"]:
+                x1, y1, x2, y2 = b["bbox"]
+                box_el = ET.SubElement(
+                    img_el,
+                    "box",
+                    label=str(b.get("label", b.get("cls", "0"))),
+                    xtl=str(x1),
+                    ytl=str(y1),
+                    xbr=str(x2),
+                    ybr=str(y2),
+                    occluded="0",
+                )
+                ET.SubElement(box_el, "attribute", name="confidence").text = str(
+                    b.get("conf", 0)
+                )
+
+        tree = ET.ElementTree(root_el)
+        tree.write(self.root / "annotations.xml", encoding="utf-8", xml_declaration=True)
 app = typer.Typer(help="Annotation dataset pipeline")
 @app.command()
 def run(config_path: str):
@@ -158,7 +221,10 @@ def run(config_path: str):
     ingest = VidIngest(cfg.videos, cfg.sampling)
     qf = QualityFilter(cfg.quality)
     yolo = PreLabelYOLO(cfg.yolo)
-    exporter = DatasetExporter(cfg.export)
+    if cfg.export.format.lower() == "cvat":
+        exporter = CvatExporter(cfg.export)
+    else:
+        exporter = DatasetExporter(cfg.export)
     for item in ingest:
         if not qf.check(item["frame"]):
             continue

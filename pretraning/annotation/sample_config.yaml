@@ -1,0 +1,14 @@
+videos:
+  - path/to/video1.mp4
+sampling:
+  fps: 2.0
+quality:
+  blur: 120.0
+  luma_min: 50
+  luma_max: 200
+yolo:
+  weights: yolov8n.pt
+  conf_thr: 0.25
+export:
+  output_dir: dataset
+  format: cvat

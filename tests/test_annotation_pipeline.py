@@ -70,7 +70,14 @@ def test_prelabel_yolo_detection():
     with mock.patch.object(ap, 'YOLO', return_value=DummyModel(d_boxes)):
         yolo = ap.PreLabelYOLO(ap.YoloConfig(weights='x.pt', conf_thr=0.5))
         out = yolo.detect(np.zeros((10, 10, 3), dtype=np.uint8))
-    assert out == [{'bbox': [0, 0, 10, 10], 'cls': 1, 'conf': 0.8}]
+    assert out == [
+        {
+            'bbox': [0, 0, 10, 10],
+            'cls': 1,
+            'label': '1',
+            'conf': 0.8,
+        }
+    ]
 
 
 def test_dataset_exporter(tmp_path):
@@ -93,3 +100,22 @@ def test_dataset_exporter(tmp_path):
     assert len(lines) == 1
     rec = json.loads(lines[0])
     assert rec['frame_idx'] == 1
+
+
+def test_cvat_exporter(tmp_path):
+    exporter = ap.CvatExporter(ap.ExportConfig(output_dir=str(tmp_path), format="cvat"))
+    item = {
+        'frame': np.zeros((4, 4, 3), dtype=np.uint8),
+        'frame_idx': 1,
+        'video': str(tmp_path / 'vid.mp4'),
+    }
+    boxes = [{'bbox': [0, 0, 2, 2], 'cls': 0, 'label': 'cls0', 'conf': 1.0}]
+    exporter.save(item, boxes)
+    exporter.close()
+
+    img_files = list((tmp_path / 'images').iterdir())
+    assert len(img_files) == 1
+    xml_path = tmp_path / 'annotations.xml'
+    assert xml_path.exists()
+    content = xml_path.read_text()
+    assert '<image' in content and '<box' in content
