@@ -1,0 +1,3 @@
+- Få taget et billede af en wakeboarder og lægge det i repositoryet.
+- Implementere en regressionstest, der kører YOLO high grade på billedet.
+- Implementere en regressionstest, der kører min egen trænede YOLO low grade på billedet.
