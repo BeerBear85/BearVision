@@ -23,7 +23,7 @@ if __name__ == "__main__":
     import os
     import cv2
 
-    modules_abs_path = os.path.abspath("code/modules")
+    modules_abs_path = os.path.abspath(os.path.join("code", "modules"))
     sys.path.append(modules_abs_path)
 
     from BearTracker import BearTracker

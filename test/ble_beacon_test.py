@@ -20,7 +20,7 @@ if __name__ == "__main__":
     import sys
     import os
 
-    modules_abs_path = os.path.abspath("code/modules")
+    modules_abs_path = os.path.abspath(os.path.join("code", "modules"))
     sys.path.append(modules_abs_path)
     from ble_beacon_handler import BleBeaconHandler
     logger = logging.getLogger(__name__)

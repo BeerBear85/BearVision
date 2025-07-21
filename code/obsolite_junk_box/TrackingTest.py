@@ -1,5 +1,6 @@
 import cv2
 import sys
+import os
 sys.path.append('modules')
 import BearTracker
 
@@ -47,7 +48,18 @@ if __name__ == '__main__' :
     #video = cv2.VideoCapture("users/bear/full_clips/20170927_15_43_44_GP020491.mp4")  #Backside slide
     #video = cv2.VideoCapture("users/bear/full_clips/20170927_16_00_50_GP040491.mp4")  # backflip fail
     #video = cv2.VideoCapture("users/bear/full_clips/not_bear_20170927_15_42_40_GP020491.mp4")  # far away jump
-    video = cv2.VideoCapture("C:/git_reps/BearVision/test/users/test_user2/output_video_files/test_user2_20170927_15_58_33.avi")
+    video = cv2.VideoCapture(
+        os.path.join(
+            "C:",
+            "git_reps",
+            "BearVision",
+            "test",
+            "users",
+            "test_user2",
+            "output_video_files",
+            "test_user2_20170927_15_58_33.avi",
+        )
+    )
 
 
     # Exit if video not opened.
