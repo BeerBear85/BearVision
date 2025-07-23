@@ -1,0 +1,9 @@
+pandas
+opencv-python
+scipy
+matplotlib
+bleak
+pyyaml
+ultralytics
+lxml
+opencv-python-headless
