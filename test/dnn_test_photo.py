@@ -56,7 +56,7 @@ if __name__ == "__main__":
             frame = cv2.resize(frame, (0, 0), fx=0.5, fy=0.5)
 
 
-        dnn_handler = DnnHandler()
+        dnn_handler = DnnHandler("yolov8s")
         dnn_handler.init()
 
         [boxes, confidences] = dnn_handler.find_person(frame)

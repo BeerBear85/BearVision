@@ -33,7 +33,7 @@ if __name__ == "__main__":
 
     input_video = os.path.abspath(os.path.join("test", "test_video", "TestMovie2.mp4"))
 
-    dnn_handler = DnnHandler()
+    dnn_handler = DnnHandler("yolov8s")
     dnn_handler.init()
 
     #Read frames from video

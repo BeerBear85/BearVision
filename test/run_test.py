@@ -17,10 +17,11 @@ logging.basicConfig(filename='debug.log',
 if __name__ == "__main__":
     import sys, os, logging
 
-    base_dir = os.path.join(os.path.dirname(__file__), '..', 'code')
-    sys.path.append(os.path.join(base_dir, 'modules'))
-    sys.path.append(os.path.join(base_dir, 'Application'))
-    sys.path.append(os.path.join(base_dir, 'external_modules'))
+    root_dir = os.path.join(os.path.dirname(__file__), '..')
+    code_dir = os.path.join(root_dir, 'code')
+    sys.path.append(os.path.join(code_dir, 'modules'))
+    sys.path.append(os.path.join(code_dir, 'Application'))
+    sys.path.append(os.path.join(code_dir, 'external_modules'))
     import Application
     from Enums import ActionOptions
     from ConfigurationHandler import ConfigurationHandler
@@ -31,9 +32,9 @@ if __name__ == "__main__":
     #tmp_video_folder = os.path.abspath("F:/GoPro/Kabelpark/20180603")
     #tmp_video_folder = os.path.abspath("E:/DCIM/100GOPRO") #  - very slow to read from SD card using converter and build-in reader
     #tmp_user_folder  = os.path.abspath("F:/GoPro/BearVision/users")
-    tmp_video_folder = os.path.abspath(os.path.join("input_video"))
-    tmp_user_folder  = os.path.abspath(os.path.join("users"))
-    tmp_config_file = os.path.abspath(os.path.join("test_config.ini"))
+    tmp_video_folder = os.path.abspath(os.path.join(root_dir, "test", "input_video"))
+    tmp_user_folder  = os.path.abspath(os.path.join(root_dir, "test", "users"))
+    tmp_config_file = os.path.abspath(os.path.join(root_dir, "test", "test_config.ini"))
 
     # list of actions to do in the test
     tmp_action_list = [ActionOptions.GENERATE_MOTION_FILES.value,
