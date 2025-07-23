@@ -105,11 +105,15 @@ class PreLabelYOLO:
         results = self.model(frame)[0]
         boxes = []
         for b in results.boxes:
-            conf = float(b.conf[0])
+            # `b.conf` and `b.cls` are numpy arrays with a single element in YOLO
+            # results. Converting them directly using ``float()`` or ``int()``
+            # raises a ``DeprecationWarning`` on newer NumPy versions. ``item()``
+            # safely extracts the scalar value.
+            conf = float(b.conf[0].item())
             if conf < self.conf_thr:
                 continue
             x1, y1, x2, y2 = b.xyxy[0].tolist()
-            cls_id = int(b.cls[0])
+            cls_id = int(b.cls[0].item())
             boxes.append({
                 "bbox": [x1, y1, x2, y2],
                 "cls": cls_id,
