@@ -1,4 +1,4 @@
-# BearVision – LLM Context Doc v1.0
+# BearVision – LLM Context Doc v1.1
 **Date:** 18‑07‑2025  
 **Author:** Mr. Bear (Bjørn Eskildsen)
 
@@ -31,7 +31,7 @@ BearTag/TrickTag ───▶ BLE ───▶ EDGE Unit (camera + ML) ───
 - **Battery:** Rechargeable Li‑Po; target ≥ 20 h active operation.
 
 ### 2.2 EDGE Unit
-- **Recommended HW (MVP):** Raspberry Pi 4 + Google Coral USB TPU.
+- **Recommended HW (MVP):** Raspberry Pi 5 with the official AI hat.
 - **Sensors:** 120° wide‑angle camera (≥ 1080p60), BLE dongle, GPS module.
 - **ML pipeline:**
   1. 10 s ring buffer (pre‑roll).
@@ -42,7 +42,7 @@ BearTag/TrickTag ───▶ BLE ───▶ EDGE Unit (camera + ML) ───
 - **User matching:** Session‑mode match on highest mean RSSI around event; ambiguous matches flagged to the app.
 
 ### 2.3 Cloud Platform
-- **Storage:** Object storage (S3‑compatible).
+- **Storage:** Google Drive (account: `BearVisionApp@gmail.com`).
 - **Post‑processing:** Stabilisation, slow‑motion, trick classification.
 - **APIs:** REST & WebSocket push notifications.
 - **Scalability:** Kubernetes / serverless functions.
@@ -79,8 +79,8 @@ BearTag/TrickTag ───▶ BLE ───▶ EDGE Unit (camera + ML) ───
 ## 6. Hardware benchmarks (YOLOv8n @ 720p)
 | Platform | FPS | Power | Price (DKK) |
 |----------|-----|-------|-------------|
-| RPi 4 (CPU only) | 2‑3 | 5 W | 500 |
-| RPi 4 + Coral | 15‑20 | 7 W | 800 |
+| RPi 4 (CPU only) | 2-3 | 5 W | 500 |
+| RPi 5 + AI hat | 15-20 | 7 W | 800 |
 | Jetson Orin Nano 8 GB | 40‑60 | 10 W | 1500 |
 
 ---
