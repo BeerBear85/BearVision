@@ -31,7 +31,7 @@ if __name__ == "__main__":
 
     logger = logging.getLogger(__name__)
 
-    input_video = os.path.abspath(os.path.join("test", "test_video", "TestMovie2.mp4"))
+    input_video = os.path.abspath(os.path.join("test", "input_video", "TestMovie1.mp4"))
 
     dnn_handler = DnnHandler("yolov8s")
     dnn_handler.init()

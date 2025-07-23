@@ -1,5 +1,3 @@
-#*.mp4
-#*.avi
 *.log
 *.pkl
 .idea
@@ -9,3 +7,4 @@ code/dnn_models/yolov3_608.weights
 android_app/.gradle/
 android_app/build/
 android_app/app/build/
+last_used_config.ini
