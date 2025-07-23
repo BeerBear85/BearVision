@@ -74,6 +74,26 @@ class GoogleDriveHandler:
                 parent_id = f.get('id')
         return parent_id
 
+    def _find_folder_id(self, folder_path: str) -> Optional[str]:
+        """Return folder id if it exists without creating new folders."""
+        self.connect()
+        parent_id = self.root_id
+        if not folder_path:
+            return parent_id
+        parts = Path(folder_path).parts
+        for name in parts:
+            query = (
+                f"'{parent_id}' in parents and name='{name}' "
+                "and mimeType='application/vnd.google-apps.folder' and trashed=false"
+            )
+            res = self.service.files().list(q=query, fields='files(id,name)').execute()
+            files = res.get('files', [])
+            if files:
+                parent_id = files[0]['id']
+            else:
+                return None
+        return parent_id
+
     def _find_file(self, folder_id: str, filename: str) -> Optional[str]:
         query = f"'{folder_id}' in parents and name='{filename}' and trashed=false"
         res = self.service.files().list(q=query, fields='files(id)').execute()
@@ -125,4 +145,17 @@ class GoogleDriveHandler:
         file_id = self._find_file(folder_id, name)
         if file_id:
             self.service.files().delete(fileId=file_id).execute()
+
+    def list_files(self, remote_path: str = '') -> list:
+        """Return the names of files inside the given Drive folder."""
+        self.connect()
+        remote_path = remote_path.strip('/')
+        folder_id = self._find_folder_id(remote_path)
+        if folder_id is None:
+            return []
+        res = self.service.files().list(
+            q=f"'{folder_id}' in parents and trashed=false",
+            fields='files(name)'
+        ).execute()
+        return [f['name'] for f in res.get('files', [])]
 
