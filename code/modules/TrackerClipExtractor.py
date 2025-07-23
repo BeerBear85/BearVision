@@ -62,7 +62,9 @@ class TrackerClipExtractor:
             if read_return_value == 20:  # GoPro video error
                 continue
 
-            if iterator is 0:
+            # Using "is" with a literal triggers a SyntaxWarning. We only need
+            # to compare the value of ``iterator``.
+            if iterator == 0:
                 # Init tracker
                 tmp_tracker.init(frame, arg_clip_spec.init_bbox)
                 tmp_tracker_return_code, tmp_bbox = tmp_tracker.update(frame)

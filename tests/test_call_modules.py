@@ -1,6 +1,7 @@
 import importlib
 import inspect
 import sys
+import asyncio
 from pathlib import Path
 
 MODULE_DIR = Path(__file__).resolve().parents[1] / 'code' / 'modules'
@@ -17,6 +18,9 @@ def _call_func(func):
         if p.default is inspect.Parameter.empty:
             args.append(None)
     try:
+        if inspect.iscoroutinefunction(func):
+            # Skip async functions to avoid hanging during tests
+            return
         func(*args)
     except BaseException:
         # Ignore any errors raised when calling with dummy args

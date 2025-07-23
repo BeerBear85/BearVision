@@ -167,7 +167,9 @@ class BearTracker:
         self.log_state(self.latest_state_estimate)
 
         #Tell if the X position is outside the frame
-        if (int(self.latest_state_estimate[0]) < 0) or (int(self.latest_state_estimate[0]) > arg_frame.shape[1]):
+        if (int(self.latest_state_estimate[0].item()) < 0) or (
+            int(self.latest_state_estimate[0].item()) > arg_frame.shape[1]
+        ):
             return False
         return True
 
@@ -185,8 +187,8 @@ class BearTracker:
 
         search_area_width = int(self.search_area_scale * tmp_x_sigma)
         search_area_height = int(self.search_area_scale * tmp_y_sigma)
-        search_area_x = int(self.latest_state_estimate[0] - 0.5 * search_area_width)
-        search_area_y = int(self.latest_state_estimate[1] - 0.5 * search_area_height)
+        search_area_x = int(self.latest_state_estimate[0].item() - 0.5 * search_area_width)
+        search_area_y = int(self.latest_state_estimate[1].item() - 0.5 * search_area_height)
         search_box = [search_area_x, search_area_y, search_area_width, search_area_height]
 
         # Range check
@@ -203,7 +205,7 @@ class BearTracker:
 
     def visualize_state(self, frame):
         tmp_color = (0, 0, 255) #red
-        tmp_pos = (int(self.latest_state_estimate[0]), int(self.latest_state_estimate[1]))
+        tmp_pos = (int(self.latest_state_estimate[0].item()), int(self.latest_state_estimate[1].item()))
         cv2.circle(frame, tmp_pos, 10, tmp_color, -1)
         cv2.putText(frame, "X-velocity : " + str(self.latest_state_estimate[2]), (120, 80), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (50, 170, 50), 2)
 
@@ -224,7 +226,12 @@ class BearTracker:
 
     def log_state(self, arg_state):
         """Log the state of the tracker"""
-        tmp_state_vec = [int(arg_state[0]), int(arg_state[1]), float(arg_state[2]), float(arg_state[3])]
+        tmp_state_vec = [
+            int(arg_state[0].item()),
+            int(arg_state[1].item()),
+            float(arg_state[2].item()),
+            float(arg_state[3].item()),
+        ]
         self.state_log.append(tmp_state_vec)
         logger.debug("X: %.2f, Y: %.2f, X-velocity: %.2f, Y-velocity: %.2f", tmp_state_vec[0], tmp_state_vec[1], tmp_state_vec[2], tmp_state_vec[3])
 
