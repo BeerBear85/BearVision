@@ -144,3 +144,18 @@ def test_upload_download_delete(tmp_path):
     with pytest.raises(FileNotFoundError):
         handler.download_file('folder/file.txt', str(tmp_path / 'missing.txt'))
 
+
+@mock.patch.object(GoogleDriveHandler, '_authenticate', lambda self: setattr(self, 'service', FakeDriveService()))
+def test_list_files(tmp_path):
+    handler = GoogleDriveHandler({'GOOGLE_DRIVE': {'root_folder': 'root'}})
+    handler.connect()
+
+    (tmp_path / 'src1.txt').write_text('a')
+    (tmp_path / 'src2.txt').write_text('b')
+
+    handler.upload_file(str(tmp_path / 'src1.txt'), 'folder/file1.txt')
+    handler.upload_file(str(tmp_path / 'src2.txt'), 'folder/file2.txt')
+
+    files = handler.list_files('folder')
+    assert sorted(files) == ['file1.txt', 'file2.txt']
+
