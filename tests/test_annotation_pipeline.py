@@ -80,6 +80,23 @@ def test_prelabel_yolo_detection():
     ]
 
 
+def test_prelabel_with_dnn_handler():
+    with mock.patch.object(ap, 'DnnHandler') as dh_mock:
+        instance = dh_mock.return_value
+        instance.init.return_value = None
+        instance.find_person.return_value = ([[1, 2, 3, 4]], [0.9])
+        yolo = ap.PreLabelYOLO(ap.YoloConfig(weights='yolov8s.onnx', conf_thr=0.5))
+        out = yolo.detect(np.zeros((10, 10, 3), dtype=np.uint8))
+    assert out == [
+        {
+            'bbox': [1, 2, 4, 6],
+            'cls': 0,
+            'label': 'wakeboarder',
+            'conf': 0.9,
+        }
+    ]
+
+
 def test_dataset_exporter(tmp_path):
     exporter = ap.DatasetExporter(ap.ExportConfig(output_dir=str(tmp_path)))
     item = {'frame': np.zeros((4, 4, 3), dtype=np.uint8), 'frame_idx': 1, 'video': str(tmp_path / 'vid.mp4')}

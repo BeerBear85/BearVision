@@ -7,7 +7,7 @@ quality:
   luma_min: 50
   luma_max: 200
 yolo:
-  weights: yolov8n.pt
+  weights: yolov8s.onnx
   conf_thr: 0.25
 export:
   output_dir: dataset

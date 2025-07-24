@@ -22,7 +22,7 @@ def test_pipeline_full(tmp_path):
         'videos': ['test/input_video/TestMovie1.mp4'],
         'sampling': {'fps': 1.0},
         'quality': {'blur': 0.0, 'luma_min': 0, 'luma_max': 255},
-        'yolo': {'weights': 'yolov8n.pt', 'conf_thr': 0.1},
+        'yolo': {'weights': 'yolov8s.onnx', 'conf_thr': 0.1},
         'export': {'output_dir': str(dataset_dir)},
     }
     cfg_path.write_text(yaml.dump(cfg))
@@ -37,29 +37,20 @@ def test_pipeline_full(tmp_path):
             'export': ap.ExportConfig(**data.get('export', {})),
         }
 
-    class DummyBox:
-        def __init__(self):
-            self.xyxy = [np.array([0, 0, 10, 10], dtype=float)]
-            self.conf = [np.array([0.9], dtype=float)]
-            self.cls = [np.array([0], dtype=float)]
-
-    class DummyResults:
-        def __init__(self):
-            self.boxes = [DummyBox()]
-
-    class DummyModel:
-        def __init__(self, weights):
-            self.names = {0: 'person'}
-        def __call__(self, frame):
-            return [DummyResults()]
-
-    with mock.patch.object(ap, 'YOLO', DummyModel), \
+    with mock.patch.object(ap, 'DnnHandler') as dh_mock, \
          mock.patch.object(ap, 'load_config', side_effect=load_cfg):
+        inst = dh_mock.return_value
+        inst.init.return_value = None
+        inst.find_person.return_value = ([[0, 0, 10, 10]], [0.9])
         ap.main(['run', str(cfg_path)])
 
     imgs = list((dataset_dir / 'images').glob('*.jpg'))
     lbls = list((dataset_dir / 'labels').glob('*.txt'))
     assert imgs, 'no images generated'
     assert lbls, 'no labels generated'
+
+    debug_path = dataset_dir / 'debug.jsonl'
+    content = debug_path.read_text().splitlines()
+    assert 'wakeboarder' in content[0]
 
     shutil.rmtree(dataset_dir)
