@@ -33,7 +33,7 @@ class GoproVideo:
 			print("========= error ========")
 			print(err)
 		out_string = out.decode('UTF-8');
-		create_time_str = re.findall("(?<=creation_time=)[\S\ \-\:]+", out_string)[0]
+                create_time_str = re.findall(r"(?<=creation_time=)[\S\ \-\:]+", out_string)[0]
 		#print(create_time_str)
 		self.creation_time = dt.datetime.strptime(create_time_str, "%Y-%m-%d %H:%M:%S")
 		
