@@ -8,6 +8,16 @@ import cv2
 import yaml
 from ultralytics import YOLO
 import argparse
+import sys
+
+# Import DnnHandler for optional ONNX inference
+MODULE_DIR = Path(__file__).resolve().parents[2] / "code" / "modules"
+if str(MODULE_DIR) not in sys.path:
+    sys.path.append(str(MODULE_DIR))
+try:
+    from DnnHandler import DnnHandler
+except Exception:  # pragma: no cover - DnnHandler might not be available
+    DnnHandler = None
 
 
 def load_config(path: str) -> Dict[str, Any]:
@@ -94,32 +104,54 @@ class PreLabelYOLO:
     """Run YOLO inference to produce bounding boxes."""
 
     def __init__(self, config: YoloConfig):
-        self.model = YOLO(config.weights)
         self.conf_thr = config.conf_thr
-        try:
-            self.names = self.model.names
-        except AttributeError:
-            self.names = {}
+        weights = config.weights
+        if weights.endswith(".onnx") and DnnHandler is not None:
+            model_name = Path(weights).stem
+            self.backend = "dnn"
+            self.model = DnnHandler(model_name)
+            self.model.init()
+            # single-class wakeboarder detection
+            self.names = {0: "wakeboarder"}
+        else:
+            self.backend = "ultralytics"
+            self.model = YOLO(weights)
+            try:
+                self.names = self.model.names
+            except AttributeError:
+                self.names = {}
 
     def detect(self, frame) -> List[Dict[str, Any]]:
-        results = self.model(frame)[0]
-        boxes = []
-        for b in results.boxes:
-            # `b.conf` and `b.cls` are numpy arrays with a single element in YOLO
-            # results. Converting them directly using ``float()`` or ``int()``
-            # raises a ``DeprecationWarning`` on newer NumPy versions. ``item()``
-            # safely extracts the scalar value.
-            conf = float(b.conf[0].item())
-            if conf < self.conf_thr:
-                continue
-            x1, y1, x2, y2 = b.xyxy[0].tolist()
-            cls_id = int(b.cls[0].item())
-            boxes.append({
-                "bbox": [x1, y1, x2, y2],
-                "cls": cls_id,
-                "label": self.names.get(cls_id, str(cls_id)),
-                "conf": conf,
-            })
+        boxes: List[Dict[str, Any]] = []
+        if self.backend == "dnn":
+            raw_boxes, confs = self.model.find_person(frame)
+            for bb, conf in zip(raw_boxes, confs):
+                x, y, w, h = bb
+                boxes.append(
+                    {
+                        "bbox": [x, y, x + w, y + h],
+                        "cls": 0,
+                        "label": self.names.get(0, "0"),
+                        "conf": float(conf),
+                    }
+                )
+        else:
+            results = self.model(frame)[0]
+            for b in results.boxes:
+                # `b.conf` and `b.cls` are numpy arrays with a single element in YOLO
+                conf = float(b.conf[0].item())
+                if conf < self.conf_thr:
+                    continue
+                x1, y1, x2, y2 = b.xyxy[0].tolist()
+                cls_id = int(b.cls[0].item())
+                boxes.append(
+                    {
+                        "bbox": [x1, y1, x2, y2],
+                        "cls": cls_id,
+                        "label": self.names.get(cls_id, str(cls_id)),
+                        "conf": conf,
+                    }
+                )
         return boxes
 
 
