@@ -5,13 +5,12 @@ from unittest import mock
 
 import numpy as np
 import yaml
-from typer.testing import CliRunner
 import shutil
 
 # Ensure the annotation module can be imported without ultralytics installed
 sys.modules['ultralytics'] = types.SimpleNamespace(YOLO=lambda *a, **k: None)
 
-MODULE_PATH = Path(__file__).resolve().parents[1] / 'pretraning' / 'annotation'
+MODULE_PATH = Path(__file__).resolve().parents[1] / 'pretraining' / 'annotation'
 sys.path.append(str(MODULE_PATH))
 import annotation_pipeline as ap
 
@@ -56,9 +55,7 @@ def test_pipeline_full(tmp_path):
 
     with mock.patch.object(ap, 'YOLO', DummyModel), \
          mock.patch.object(ap, 'load_config', side_effect=load_cfg):
-        runner = CliRunner()
-        result = runner.invoke(ap.app, ['run', str(cfg_path)])
-    assert result.exit_code == 0
+        ap.main(['run', str(cfg_path)])
 
     imgs = list((dataset_dir / 'images').glob('*.jpg'))
     lbls = list((dataset_dir / 'labels').glob('*.txt'))
