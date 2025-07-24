@@ -22,7 +22,7 @@ textfile.close()
 if (verbose):
 	print("filetext: " + filetext)
 
-start_time_ms  = int(re.findall("(?<=\"start\":)\d+", filetext)[0])
+start_time_ms  = int(re.findall(r"(?<=\"start\":)\d+", filetext)[0])
 
 if (verbose):
 	print("start_time_ms: " + str(start_time_ms))

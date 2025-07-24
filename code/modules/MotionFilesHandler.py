@@ -38,7 +38,7 @@ class MotionFilesHandler:
     def get_motion_file_list(arg_input_video_folder):
         tmp_options = ConfigurationHandler.get_configuration()
         tmp_motion_file_ending = tmp_options['MOTION_DETECTION']['motion_file_ending']
-        tmp_motion_file_ending_regex = re.compile(".+" + tmp_motion_file_ending + "\.csv$")
+        tmp_motion_file_ending_regex = re.compile(r".+" + tmp_motion_file_ending + r"\.csv$")
         motion_file_list = []
         for dir_file in os.scandir(arg_input_video_folder):
             # logger.debug("Checking if the following file is a motion start file: " + dir_file.name)
