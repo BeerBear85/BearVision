@@ -7,3 +7,5 @@ pyyaml
 ultralytics
 lxml
 opencv-python-headless
+google-auth
+google-api-python-client

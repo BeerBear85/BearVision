@@ -9,17 +9,19 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'code'))
 sys.path.insert(0, str(ROOT / 'code' / 'modules'))
 
+
 try:
     from modules.GoogleDriveHandler import GoogleDriveHandler
     from modules.ConfigurationHandler import ConfigurationHandler
-except Exception:
+except Exception as e:
+    print("Exception occurred while importing modules:", e)
     GoogleDriveHandler = None
 
 
 @pytest.mark.skipif(GoogleDriveHandler is None, reason="Google Drive dependencies missing")
 def test_google_drive_upload_download(tmp_path):
-    if not os.getenv('GOOGLE_CREDENTIAL_JSON'):
-        pytest.skip('GOOGLE_CREDENTIAL_JSON not set')
+    if not os.getenv('GOOGLE_CREDENTIALS_JSON'):
+        pytest.skip('GOOGLE_CREDENTIALS_JSON not set')
 
     cfg_path = ROOT / 'config.ini'
     ConfigurationHandler.read_config_file(str(cfg_path))
