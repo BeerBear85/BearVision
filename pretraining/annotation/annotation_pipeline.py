@@ -7,7 +7,7 @@ from typing import Iterator, List, Dict, Any
 import cv2
 import yaml
 from ultralytics import YOLO
-import typer
+import argparse
 
 
 def load_config(path: str) -> Dict[str, Any]:
@@ -215,9 +215,7 @@ class CvatExporter:
 
         tree = ET.ElementTree(root_el)
         tree.write(self.root / "annotations.xml", encoding="utf-8", xml_declaration=True)
-app = typer.Typer(help="Annotation dataset pipeline")
-@app.command()
-def run(config_path: str):
+def run(config_path: str) -> None:
     """Run the dataset generation pipeline."""
     cfg_dict = load_config(config_path)
     cfg = PipelineConfig(**cfg_dict)
@@ -235,8 +233,8 @@ def run(config_path: str):
         boxes = yolo.detect(item["frame"])
         exporter.save(item, boxes)
     exporter.close()
-@app.command()
-def preview(config_path: str):
+
+def preview(config_path: str) -> None:
     """Preview the pipeline output with bounding boxes on screen."""
     cfg_dict = load_config(config_path)
     cfg = PipelineConfig(**cfg_dict)
@@ -255,5 +253,31 @@ def preview(config_path: str):
         if cv2.waitKey(1) & 0xFF == ord("q"):
             break
     cv2.destroyAllWindows()
+
+
+def main(argv: list[str] | None = None) -> None:
+    parser = argparse.ArgumentParser(
+        description="Annotation dataset pipeline",
+    )
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    run_parser = subparsers.add_parser(
+        "run", help="Run the dataset generation pipeline"
+    )
+    run_parser.add_argument("config_path")
+
+    preview_parser = subparsers.add_parser(
+        "preview", help="Preview the pipeline output"
+    )
+    preview_parser.add_argument("config_path")
+
+    args = parser.parse_args(argv)
+
+    if args.command == "run":
+        run(args.config_path)
+    elif args.command == "preview":
+        preview(args.config_path)
+
+
 if __name__ == "__main__":
-    app()
+    main()

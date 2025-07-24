@@ -10,7 +10,7 @@ import numpy as np
 import types
 sys.modules['ultralytics'] = types.SimpleNamespace(YOLO=lambda *a, **k: None)
 
-MODULE_PATH = Path(__file__).resolve().parents[1] / 'pretraning' / 'annotation'
+MODULE_PATH = Path(__file__).resolve().parents[1] / 'pretraining' / 'annotation'
 sys.path.append(str(MODULE_PATH))
 import annotation_pipeline as ap
 
