@@ -1,1 +1,3 @@
+[MASTER]
 extension-pkg-whitelist=cv2
+ignore=obsolite_junk_box
