@@ -1,5 +1,6 @@
-# BearVision – LLM Context Doc v1.1
-**Date:** 18‑07‑2025  
+# BearVision – LLM Context Doc v1.2
+**Date:** 25‑07‑2025  
+**Version:** 1.2  
 **Author:** Mr. Bear (Bjørn Eskildsen)
 
 ---
@@ -11,13 +12,13 @@ This document gives Large Language Models (LLMs) a concise, unambiguous domain o
 
 ## 1. High‑level architecture
 ```
-BearTag/TrickTag ───▶ BLE ───▶ EDGE Unit (camera + ML) ───▶ 4G/Wi‑Fi ───▶ Cloud ───▶ API ───▶ Mobile/Web App
+BearTag/TrickTag ───▶ BLE ───▶ EDGE Unit = BLE + GoPro control + motion detection + clip tagging + processing ───▶ 4G/Wi‑Fi ───▶ Cloud ───▶ API ───▶ Mobile/Web App
 ```
 
 | Layer | Main function |
 |-------|---------------|
 | **Device** | Identify rider (BLE + accelerometer) |
-| **Edge** | Capture, crop, encode & buffer video |
+| **Edge** | EDGE Unit = BLE + GoPro control + motion detection + clip tagging + processing |
 | **Cloud** | Storage, post‑processing, API |
 | **App** | Registration, playback, user feedback |
 
@@ -31,15 +32,24 @@ BearTag/TrickTag ───▶ BLE ───▶ EDGE Unit (camera + ML) ───
 - **Battery:** Rechargeable Li‑Po; target ≥ 20 h active operation.
 
 ### 2.2 EDGE Unit
-- **Recommended HW (MVP):** Raspberry Pi 5 with the official AI hat.
-- **Sensors:** 120° wide‑angle camera (≥ 1080p60), BLE dongle, GPS module.
-- **ML pipeline:**
-  1. 10 s ring buffer (pre‑roll).
-  2. YOLOv8n rider detection → ROI crop & dynamic zoom ("Virtual Cameraman").
-  3. Post‑roll (2 s) + trim.
-  4. H.265 encode & write to local ring buffer (≥ 32 GB).
-  5. Async upload with exponential back‑off; delete oldest clips when < 20 % free space.
-- **User matching:** Session‑mode match on highest mean RSSI around event; ambiguous matches flagged to the app.
+- **Recommended HW (MVP):** Raspberry Pi 4 + BLE dongle.
+- **External camera:** GoPro HERO10+ (HindSight support).
+- **GoPro communication:** Bidirectional API for preview stream + HindSight clip triggering.
+- **Sensors:** BLE dongle, optional GPS module.
+- **Pipeline:**
+  1. Constant preview stream from GoPro via API.
+  2. Motion Detection module runs continuously on preview stream.
+  3. If motion is detected: trigger HindSight recording (15–30 s pre-roll).
+  4. Clip is fetched via API → tagged with `tag_id`, GPS, UTC timestamp.
+  5. Video sent to Process pipeline (ROI crop, virtual cameraman, compression).
+  6. Async upload to cloud; clip removed after successful upload.
+- **Note:** No local video recording is done on the EDGE device itself.
+
+### 2.2.1 Motion Detection
+- **Input:** Live preview stream from GoPro.
+- **Output:** Trigger signal to GoPro API to start HindSight clip capture.
+- **Function:** Constantly analyses motion in preview to detect potential tricks.
+- **Trigger sensitivity:** Tunable – optimised to reduce false positives (e.g., ripples or background riders).
 
 ### 2.3 Cloud Platform
 - **Storage:** Google Drive (account: `BearVisionApp@gmail.com`).
@@ -54,8 +64,9 @@ BearTag/TrickTag ───▶ BLE ───▶ EDGE Unit (camera + ML) ───
 ---
 
 ## 3. Data flow & timing
-1. **Tag approaches obstacle** → EDGE sees BLE RSSI > threshold.  
-2. **Computer vision** detects rider in the action zone.  
+1. **Tag approaches obstacle** → EDGE sees BLE RSSI > threshold.
+1.5. Motion Detection runs on GoPro preview stream. If motion is detected, HindSight recording is triggered.
+2. **Computer vision** detects rider in the action zone.
 3. **Pre‑roll + event + post‑roll** are stored and cropped.  
 4. Clip tagged with `tag_id`, GPS coords, UTC timestamp.  
 5. Uploaded to cloud; push notification to app.
@@ -106,3 +117,15 @@ BearTag/TrickTag ───▶ BLE ───▶ EDGE Unit (camera + ML) ───
 > **Vision:** Deliver wake‑boarders instant access to their best tricks, captured and framed like a professional camera operator – completely automatically.
 
 ---
+## Appendix A – Logical Block Overview
+
+BearTag/TrickTag ─▶ BLE ─▶ EDGE Unit ─▶ GoPro HERO10+
+                              │             ▲
+                              ▼             │
+                      Motion Detection ◀────┘
+                              │
+                              ▼
+                         Process pipeline ──▶ Cloud
+
+---
+Denne version beskriver overgangen fra EDGE-optagelse til GoPro HindSight som primær metode for klipfangst. Lokal videooptagelse er droppet. Preview-stream anvendes til konstant bevægelsesanalyse via ny Motion Detection-blok.
