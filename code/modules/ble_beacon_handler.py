@@ -2,6 +2,11 @@ import bleak
 import asyncio
 import ctypes
 import logging
+from configparser import ConfigParser
+from pathlib import Path
+
+import numpy as np
+from scipy.interpolate import interp1d
 
 logger = logging.getLogger(__name__)
 
@@ -9,6 +14,38 @@ KSENSOR_TYPE = 0x21
 MIN_SENSOR_ADV_LEN = 3
 SENSOR_MASK_VOLTAGE = 0x1
 SENSOR_MASK_ACC_AIX = 0x8
+
+MOVEMENT_THRESHOLD = 0.1  # [g]
+
+DEFAULT_RSSI_CONFIG = Path(__file__).resolve().parents[2] / "rssi_distance.ini"
+
+
+def load_rssi_distance_table(config_path=DEFAULT_RSSI_CONFIG):
+    parser = ConfigParser()
+    parser.read(config_path)
+    rssi_vals = parser.get("RSSI_TO_DISTANCE", "rssi_values", fallback="").split(",")
+    dist_vals = parser.get("RSSI_TO_DISTANCE", "distance_values", fallback="").split(",")
+    rssi = np.array([float(v) for v in rssi_vals if v], dtype=float)
+    dist = np.array([float(v) for v in dist_vals if v], dtype=float)
+    if len(rssi) == 0 or len(dist) == 0:
+        raise ValueError("Empty RSSI to distance table")
+    return interp1d(rssi, dist, fill_value="extrapolate")
+
+
+try:
+    RSSI_DISTANCE_FUNC = load_rssi_distance_table()
+except Exception as exc:  # pragma: no cover - best effort loading
+    logger.warning("Failed to load RSSI distance config: %s", exc)
+    RSSI_DISTANCE_FUNC = None
+
+
+def rssi_to_distance(rssi, func=None):
+    """Convert RSSI value to distance using interpolation."""
+    if func is None:
+        func = RSSI_DISTANCE_FUNC
+    if func is None:
+        raise ValueError("RSSI distance table not loaded")
+    return float(func(rssi))
 
 
 class AccSensorValue:
@@ -18,8 +55,12 @@ class AccSensorValue:
         self.z = None
         self.norm = None
         self.diff_from_1_g = None
+        self.is_moving = None
     def get_value_string(self):
-        return f'x: {self.x}, y: {self.y}, z: {self.z}, diff_from_1_g: {self.diff_from_1_g}'
+        return (
+            f'x: {self.x}, y: {self.y}, z: {self.z}, diff_from_1_g: '
+            f'{self.diff_from_1_g}, moving: {self.is_moving}'
+        )
 
 class BleBeaconHandler:
     def __init__(self):
@@ -77,6 +118,12 @@ class BleBeaconHandler:
                 data_dict['tx_power'] = advertisement_data.tx_power
                 data_dict['batteryLevel'] = battery_level
                 data_dict['acc_sensor'] = acc_sensor
+                try:
+                    distance = rssi_to_distance(advertisement_data.rssi)
+                except Exception as exc:  # pragma: no cover - shouldn't happen
+                    logger.debug("Distance conversion failed: %s", exc)
+                    distance = None
+                data_dict['distance'] = distance
                 logger.info('Adding meas to que: acc_sensor: %s' % (acc_sensor.get_value_string()))
                 await self.advertisement_queue.put(data_dict)
         return
@@ -125,6 +172,7 @@ class BleBeaconHandler:
             #calculate the norm
             accSensor.norm = (accSensor.x**2 + accSensor.y**2 + accSensor.z**2)**0.5
             accSensor.diff_from_1_g = abs(accSensor.norm - 1.0)
+            accSensor.is_moving = accSensor.diff_from_1_g > MOVEMENT_THRESHOLD
             #print(f'x: {accSensor.x}, y: {accSensor.y}, z: {accSensor.z}, norm: {accSensor.norm}, diff_from_1_g: {accSensor.diff_from_1_g}')
 
         return batteryLevel, accSensor
