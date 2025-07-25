@@ -9,3 +9,4 @@ lxml
 opencv-python-headless
 google-auth
 google-api-python-client
+open_gopro
