@@ -1,2 +1,2 @@
 [flake8]
-extend-exclude = obsolite_junk_box
+extend-exclude = obsolite_junk_box, external_modules
