@@ -40,7 +40,7 @@ jobs:
     - name: Write Google credentials to file
       run: |
         echo "${GOOGLE_CREDENTIALS_JSON}" > /tmp/credentials.json
-        echo /tmp/credentials.json
+        cat /tmp/credentials.json
 
 
     #- name: Lint with flake8
