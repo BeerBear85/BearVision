@@ -128,7 +128,7 @@ class GoogleDriveHandler:
             self.service = FakeDriveService()
             return
         creds = Credentials.from_service_account_info(info, scopes=['https://www.googleapis.com/auth/drive'])
-        self.service = build('drive', 'v3', credentials=creds)
+        self.service = build('drive', 'v3', credentials=creds, cache_discovery=False)
 
     def _ensure_root(self):
         if isinstance(self.config, ConfigParser):
