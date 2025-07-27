@@ -25,7 +25,10 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y libgl1 libglib2.0-0 libsm6 libxext6 ffmpeg
         ldconfig -p | grep libGL
-    - uses: actions/checkout@v4
+    - name: Checkout code (with LFS)
+      uses: actions/checkout@v4
+      with:
+        lfs: true
     - name: Set up Python 3.12
       uses: actions/setup-python@v3
       with:
