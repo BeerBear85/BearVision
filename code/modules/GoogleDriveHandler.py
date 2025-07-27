@@ -1,6 +1,7 @@
 import os
 import json
 import logging
+import base64
 from pathlib import Path
 from typing import Optional
 
@@ -30,8 +31,32 @@ class GoogleDriveHandler:
         else:
             gd_cfg = self.config.get('GOOGLE_DRIVE', {})
         key_name = gd_cfg.get('secret_key_name')
-        json_str = os.getenv(key_name, '') if key_name else ''
+        raw_value = os.getenv(key_name, '') if key_name else ''
+        if os.path.isfile(raw_value):
+            with open(raw_value, 'rb') as fh:
+                encoded_bytes = fh.read()
+        else:
+            encoded_bytes = raw_value.encode()
+        if not encoded_bytes:
+            json_str = ''
+        else:
+            try:
+                decoded = base64.b64decode(encoded_bytes)
+                json_str = decoded.decode('utf-8')
+            except Exception:
+                try:
+                    json_str = encoded_bytes.decode('utf-8')
+                except Exception:
+                    json_str = ''
+        info = None
         if not json_str or json_str == 'DUMMY':
+            info = None
+        else:
+            try:
+                info = json.loads(json_str)
+            except Exception:
+                info = None
+        if info is None:
             class FakeDriveService:
                 """Minimal in-memory fake of the Google Drive service."""
 
@@ -102,7 +127,6 @@ class GoogleDriveHandler:
 
             self.service = FakeDriveService()
             return
-        info = json.loads(json_str)
         creds = Credentials.from_service_account_info(info, scopes=['https://www.googleapis.com/auth/drive'])
         self.service = build('drive', 'v3', credentials=creds)
 
