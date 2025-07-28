@@ -145,7 +145,25 @@ class GoogleDriveHandler:
                 types.ModuleType('googleapiclient.discovery_cache'),
             )
 
-        self.service = build('drive', 'v3', credentials=creds, cache_discovery=False)
+        build_kwargs = {
+            'credentials': creds,
+            'cache_discovery': False,
+        }
+        # Older google-api-python-client versions lack the static discovery
+        # feature. Only pass the argument when supported and enable it only if
+        # the helper function is present to avoid AttributeErrors at runtime.
+        try:
+            import inspect
+            from googleapiclient import discovery_cache
+
+            sig = inspect.signature(build)
+            if 'static_discovery' in sig.parameters:
+                build_kwargs['static_discovery'] = hasattr(discovery_cache, 'get_static_doc')
+        except Exception:
+            # Fall back to disabling static discovery if any inspection fails.
+            build_kwargs['static_discovery'] = False
+
+        self.service = build('drive', 'v3', **build_kwargs)
 
     def _ensure_root(self):
         if isinstance(self.config, ConfigParser):
