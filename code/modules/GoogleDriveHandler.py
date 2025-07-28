@@ -127,7 +127,24 @@ class GoogleDriveHandler:
 
             self.service = FakeDriveService()
             return
-        creds = Credentials.from_service_account_info(info, scopes=['https://www.googleapis.com/auth/drive'])
+        creds = Credentials.from_service_account_info(
+            info, scopes=['https://www.googleapis.com/auth/drive']
+        )
+        # googleapiclient versions prior to 2.0 included a discovery_cache
+        # module which was later removed. Newer versions of the library still
+        # attempt to import this optional module, so provide a minimal stub if
+        # it is missing. This mirrors the behavior of the latest library which
+        # gracefully continues when the cache module cannot be imported.
+        try:
+            from googleapiclient import discovery_cache  # noqa: F401
+        except Exception:  # pragma: no cover - optional dependency
+            import sys
+
+            sys.modules.setdefault(
+                'googleapiclient.discovery_cache',
+                types.ModuleType('googleapiclient.discovery_cache'),
+            )
+
         self.service = build('drive', 'v3', credentials=creds, cache_discovery=False)
 
     def _ensure_root(self):
