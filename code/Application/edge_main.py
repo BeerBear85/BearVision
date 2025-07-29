@@ -1,6 +1,14 @@
 import logging
 import threading
 import time
+from pathlib import Path
+import sys
+
+MODULE_DIR = Path(__file__).resolve().parents[1] / "modules"
+sys.path.append(str(MODULE_DIR))
+
+from ConfigurationHandler import ConfigurationHandler
+from GoProController import GoProController
 
 
 logger = logging.getLogger(__name__)
@@ -19,8 +27,19 @@ def _moment_detector():
 
 
 def main() -> list[threading.Thread]:
-    """Start preview and moment detection threads."""
+    """Load configuration, setup GoPro and start edge threads."""
     logging.basicConfig(level=logging.INFO)
+
+    cfg_path = Path(__file__).resolve().parents[2] / "config.ini"
+    ConfigurationHandler.read_config_file(str(cfg_path))
+    logger.info("Loaded configuration from %s", cfg_path)
+
+    gopro = GoProController()
+    gopro.connect()
+    gopro.configure()
+    gopro.start_preview()
+    logger.info("GoPro setup complete")
+
     preview_thread = threading.Thread(target=_preview_algorithm, name="preview", daemon=True)
     moment_thread = threading.Thread(target=_moment_detector, name="detector", daemon=True)
     preview_thread.start()
