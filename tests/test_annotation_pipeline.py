@@ -6,9 +6,7 @@ from unittest import mock
 import cv2
 import numpy as np
 
-# Ensure the annotation module can be imported without ultralytics installed
-import types
-sys.modules['ultralytics'] = types.SimpleNamespace(YOLO=lambda *a, **k: None)
+from tests.stubs import ultralytics  # noqa: F401
 
 MODULE_PATH = Path(__file__).resolve().parents[1] / 'pretraining' / 'annotation'
 sys.path.append(str(MODULE_PATH))
