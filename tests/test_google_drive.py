@@ -23,6 +23,7 @@ except Exception:
     build_http = None
 
 
+@pytest.mark.skip(reason="disabled to avoid network usage")
 @pytest.mark.skipif(
     GoogleDriveHandler is None or build_http is None,
     reason="Google Drive dependencies missing or incompatible",
