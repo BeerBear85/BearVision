@@ -17,8 +17,16 @@ except Exception as e:
     print("Exception occurred while importing modules:", e)
     GoogleDriveHandler = None
 
+try:
+    from googleapiclient.http import build_http  # noqa: F401
+except Exception:
+    build_http = None
 
-@pytest.mark.skipif(GoogleDriveHandler is None, reason="Google Drive dependencies missing")
+
+@pytest.mark.skipif(
+    GoogleDriveHandler is None or build_http is None,
+    reason="Google Drive dependencies missing or incompatible",
+)
 def test_google_drive_upload_download(tmp_path):
     if not os.getenv('GOOGLE_CREDENTIALS_JSON'):
         pytest.skip('GOOGLE_CREDENTIALS_JSON not set')
