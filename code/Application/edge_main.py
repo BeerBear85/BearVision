@@ -8,16 +8,20 @@ logger = logging.getLogger(__name__)
 
 
 async def _preview_algorithm(event: asyncio.Event) -> None:
-    """Placeholder preview algorithm using asyncio."""
+    """Simulate preview processing and emit a motion event."""
+    counter = 0
     while True:
         await asyncio.sleep(0.1)
-        # In real code this would analyse the preview stream
-        # and set the event when motion is detected.
-        # event.set()
+        # In real code this would analyse the preview stream and
+        # call ``event.set()`` whenever motion is detected.
+        counter += 1
+        if counter % 50 == 0:
+            logger.debug("Motion detected in preview")
+            event.set()
 
 
 async def _hindsight_trigger(event: asyncio.Event) -> None:
-    """Wait for the motion event and trigger HindSight recording."""
+    """Wait for the motion event and log a HindSight trigger."""
     while True:
         await event.wait()
         event.clear()
