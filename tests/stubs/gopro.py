@@ -9,6 +9,7 @@ class FakeHttpCommand:
     def __init__(self):
         self.group = None
         self.downloaded = None
+        self.shutter = []
 
     async def get_media_list(self):
         import types
@@ -28,6 +29,10 @@ class FakeHttpCommand:
 
     async def set_preview_stream(self, *, mode, port=None):
         self.preview = (mode, port)
+        return DummyResp()
+
+    async def set_shutter(self, *, shutter):
+        self.shutter.append(shutter)
         return DummyResp()
 
 
