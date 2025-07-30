@@ -4,6 +4,7 @@ import logging
 from open_gopro import WirelessGoPro, models
 from open_gopro.models.constants import settings
 from open_gopro.models.streaming import StreamType, PreviewStreamOptions
+from open_gopro.models.constants import constants
 
 logger = logging.getLogger(__name__)
 
@@ -60,3 +61,12 @@ class GoProController:
         asyncio.run(self._gopro.streaming.start_stream(StreamType.PREVIEW, options))
         assert self._gopro.streaming.url is not None
         return self._gopro.streaming.url
+
+    def start_hindsight_clip(self, duration: float = 1.0) -> None:
+        """Trigger a HindSight capture on the camera."""
+        asyncio.run(self._start_hindsight_clip(duration))
+
+    async def _start_hindsight_clip(self, duration: float) -> None:
+        await self._gopro.http_command.set_shutter(shutter=constants.Toggle.ENABLE)
+        await asyncio.sleep(duration)
+        await self._gopro.http_command.set_shutter(shutter=constants.Toggle.DISABLE)
