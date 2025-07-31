@@ -48,12 +48,56 @@ class FakeHttpSettings:
 
 
 class FakeStreaming:
-    def __init__(self):
+    """Serve a video file over HTTP to emulate a live stream."""
+
+    def __init__(self, video_path: str | None = None):
+        from pathlib import Path
+
         self.url = None
+        self._server = None
+        self._thread = None
+        self.video_path = Path(video_path or "test/input_video/TestMovie1.mp4")
+
+    def _serve(self, port: int) -> None:
+        import http.server
+        import socketserver
+        import time
+
+        video = self.video_path
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):  # type: ignore
+                if self.path != "/stream":
+                    self.send_error(404)
+                    return
+                self.send_response(200)
+                self.send_header("Content-Type", "video/mp4")
+                self.end_headers()
+                with open(video, "rb") as f:
+                    while True:
+                        chunk = f.read(8192)
+                        if not chunk:
+                            break
+                        self.wfile.write(chunk)
+                        time.sleep(0.01)
+
+        self._server = socketserver.TCPServer(("127.0.0.1", port), Handler)
+        self._server.serve_forever()
 
     async def start_stream(self, stream_type, options):
-        self.url = f"udp://127.0.0.1:{options.port}"
+        import threading
+
+        port = options.port
+        self.url = f"http://127.0.0.1:{port}/stream"
+        self._thread = threading.Thread(target=self._serve, args=(port,), daemon=True)
+        self._thread.start()
         return DummyResp()
+
+    def stop(self) -> None:
+        if self._server is not None:
+            self._server.shutdown()
+        if self._thread is not None:
+            self._thread.join(timeout=1)
 
 
 class FakeGoPro:
