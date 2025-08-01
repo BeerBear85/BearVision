@@ -17,7 +17,12 @@ class MotionROISelector:
     def SelectROI(self, arg_input_video_folder):
         logger.debug("SelectROI() called")
         tmp_options = ConfigurationHandler.get_configuration()
-        tmpVideoFileName = filedialog.askopenfilename(initialdir = arg_input_video_folder, title = "Select video file")
+
+        if arg_input_video_folder is None:
+            logger.debug("No input folder provided, skipping ROI selection")
+            return None
+
+        tmpVideoFileName = filedialog.askopenfilename(initialdir=arg_input_video_folder, title="Select video file")
 
         MyGoproVideo = GoproVideo.GoproVideo(tmp_options)
         MyGoproVideo.init(tmpVideoFileName)
