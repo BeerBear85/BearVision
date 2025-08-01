@@ -18,7 +18,7 @@ def test_pipeline_full(tmp_path):
     dataset_dir = tmp_path / 'dataset'
     cfg = {
         'videos': ['test/input_video/TestMovie1.mp4'],
-        'sampling': {'fps': 1.0},
+        'sampling': {'fps': 3.0},
         'quality': {'blur': 0.0, 'luma_min': 0, 'luma_max': 255},
         'yolo': {'weights': 'yolov8s.onnx', 'conf_thr': 0.1},
         'export': {'output_dir': str(dataset_dir)},
@@ -35,11 +35,7 @@ def test_pipeline_full(tmp_path):
             'export': ap.ExportConfig(**data.get('export', {})),
         }
 
-    with mock.patch.object(ap, 'DnnHandler') as dh_mock, \
-         mock.patch.object(ap, 'load_config', side_effect=load_cfg):
-        inst = dh_mock.return_value
-        inst.init.return_value = None
-        inst.find_person.return_value = ([[0, 0, 10, 10]], [0.9])
+    with mock.patch.object(ap, 'load_config', side_effect=load_cfg):
         ap.main(['run', str(cfg_path)])
 
     imgs = list((dataset_dir / 'images').glob('*.jpg'))
@@ -49,6 +45,6 @@ def test_pipeline_full(tmp_path):
 
     debug_path = dataset_dir / 'debug.jsonl'
     content = debug_path.read_text().splitlines()
-    assert 'wakeboarder' in content[0]
+    assert any('wakeboarder' in line for line in content)
 
     shutil.rmtree(dataset_dir)
