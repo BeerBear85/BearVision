@@ -3,10 +3,13 @@ import threading
 import asyncio
 import time
 from pathlib import Path
-    from modules.GoProController import GoProController
+import sys
+
+MODULE_DIR = Path(__file__).resolve().parents[1] / "modules"
 sys.path.append(str(MODULE_DIR))
 
 from ConfigurationHandler import ConfigurationHandler
+from GoProController import GoProController
 
 
 logger = logging.getLogger(__name__)
@@ -38,8 +41,6 @@ async def _hindsight_trigger(event: asyncio.Event, gopro: GoProController | None
 def _run_async(event: asyncio.Event, gopro: GoProController | None) -> None:
     """Run preview and HindSight tasks in an event loop."""
     async def _runner() -> None:
-        if gopro:
-            gopro.start_preview()
         await asyncio.gather(
             _preview_algorithm(event),
             _hindsight_trigger(event, gopro),
