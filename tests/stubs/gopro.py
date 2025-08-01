@@ -86,7 +86,10 @@ class FakeStreaming:
                         self.wfile.write(chunk)
                         time.sleep(0.01)
 
-        self._server = socketserver.TCPServer(("127.0.0.1", port), Handler)
+        class ReusableTCPServer(socketserver.TCPServer):
+            allow_reuse_address = True
+
+        self._server = ReusableTCPServer(("127.0.0.1", port), Handler)
         self._server.serve_forever()
 
     async def start_stream(self, stream_type, options):
@@ -101,6 +104,7 @@ class FakeStreaming:
     def stop(self) -> None:
         if self._server is not None:
             self._server.shutdown()
+            self._server.server_close()
         if self._thread is not None:
             self._thread.join(timeout=1)
 
