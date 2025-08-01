@@ -30,6 +30,7 @@ def test_configure_and_preview():
         assert gopro.http_settings.hindsight.value is not None
         url = ctrl.start_preview(9000)
         assert url == 'http://127.0.0.1:9000/stream'
+        ctrl._gopro.streaming.stop()
 
 
 def test_start_hindsight_clip():
