@@ -61,18 +61,20 @@ def test_prelabel_yolo_detection():
     class DummyModel:
         def __init__(self, boxes):
             self.boxes = boxes
+            self.names = {0: 'person', 1: 'car'}
+
         def __call__(self, frame):
             return [DummyResults(self.boxes)]
 
-    d_boxes = [DummyBox([0, 0, 10, 10], 0.8, 1), DummyBox([0, 0, 5, 5], 0.2, 2)]
+    d_boxes = [DummyBox([0, 0, 10, 10], 0.8, 0), DummyBox([0, 0, 5, 5], 0.9, 1)]
     with mock.patch.object(ap, 'YOLO', return_value=DummyModel(d_boxes)):
         yolo = ap.PreLabelYOLO(ap.YoloConfig(weights='x.pt', conf_thr=0.5))
         out = yolo.detect(np.zeros((10, 10, 3), dtype=np.uint8))
     assert out == [
         {
             'bbox': [0, 0, 10, 10],
-            'cls': 1,
-            'label': '1',
+            'cls': 0,
+            'label': 'person',
             'conf': 0.8,
         }
     ]
