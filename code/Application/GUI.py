@@ -8,7 +8,7 @@ from MotionROISelector import MotionROISelector
 
 logger = logging.getLogger(__name__)
 
-#pa_default_input_video_folder = "test/input_video"
+#pa_default_input_video_folder = "tests/data"
 #pa_default_user_folder = "test/users"
 
 # The much better way is to use ENUMS as:

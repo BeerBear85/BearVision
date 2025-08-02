@@ -33,7 +33,7 @@ if __name__ == "__main__":
     logger = logging.getLogger(__name__)
 
     input_video_list = list()
-    input_video_list.append(os.path.abspath(os.path.join("test", "test_video", "TestMovie1.mp4")))
+    input_video_list.append(os.path.abspath(os.path.join("tests", "data", "TestMovie1.mp4")))
     input_video_list.append(os.path.abspath(os.path.join("test", "test_video", "TestMovie2.mp4")))
     input_video_list.append(os.path.abspath(os.path.join("test", "test_video", "TestMovie3.avi")))
     input_video_list.append(os.path.abspath(os.path.join("test", "test_video", "TestMovie4.avi")))
