@@ -142,13 +142,17 @@ class PreLabelYOLO:
                 conf = float(b.conf[0].item())
                 if conf < self.conf_thr:
                     continue
-                x1, y1, x2, y2 = b.xyxy[0].tolist()
                 cls_id = int(b.cls[0].item())
+                label = self.names.get(cls_id, str(cls_id))
+                # Only keep detections of persons to avoid exporting every frame
+                if label.lower() != "person" and cls_id != 0:
+                    continue
+                x1, y1, x2, y2 = b.xyxy[0].tolist()
                 boxes.append(
                     {
                         "bbox": [x1, y1, x2, y2],
                         "cls": cls_id,
-                        "label": self.names.get(cls_id, str(cls_id)),
+                        "label": label,
                         "conf": conf,
                     }
                 )
