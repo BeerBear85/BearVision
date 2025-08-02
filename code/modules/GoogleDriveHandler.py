@@ -1,11 +1,10 @@
 import os
-import json
 import logging
 import base64
+import pickle
 from pathlib import Path
 from typing import Optional
 
-from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload
 import types
@@ -30,33 +29,27 @@ class GoogleDriveHandler:
             gd_cfg = dict(self.config['GOOGLE_DRIVE']) if self.config.has_section('GOOGLE_DRIVE') else {}
         else:
             gd_cfg = self.config.get('GOOGLE_DRIVE', {})
-        key_name = gd_cfg.get('secret_key_name')
-        raw_value = os.getenv(key_name, '') if key_name else ''
-        if os.path.isfile(raw_value):
-            with open(raw_value, 'rb') as fh:
-                encoded_bytes = fh.read()
-        else:
-            encoded_bytes = raw_value.encode()
-        if not encoded_bytes:
-            json_str = ''
-        else:
+
+        secret_env = gd_cfg.get('client_secret_b64_env', 'GOOGLE_OAUTH_CLIENT_SECRET_B64')
+        secret_b64 = os.getenv(secret_env, '')
+
+        cred_path = Path('credentials.json')
+        if secret_b64 and not cred_path.exists():
             try:
-                decoded = base64.b64decode(encoded_bytes)
-                json_str = decoded.decode('utf-8')
+                cred_path.write_bytes(base64.b64decode(secret_b64))
             except Exception:
-                try:
-                    json_str = encoded_bytes.decode('utf-8')
-                except Exception:
-                    json_str = ''
-        info = None
-        if not json_str or json_str == 'DUMMY':
-            info = None
-        else:
+                cred_path.write_text('')
+
+        creds = None
+        token_path = Path('token.pickle')
+        if token_path.exists():
             try:
-                info = json.loads(json_str)
+                with token_path.open('rb') as fh:
+                    creds = pickle.load(fh)
             except Exception:
-                info = None
-        if info is None:
+                creds = None
+
+        if creds is None:
             class FakeDriveService:
                 """Minimal in-memory fake of the Google Drive service."""
 
@@ -127,9 +120,7 @@ class GoogleDriveHandler:
 
             self.service = FakeDriveService()
             return
-        creds = Credentials.from_service_account_info(
-            info, scopes=['https://www.googleapis.com/auth/drive']
-        )
+
         # googleapiclient versions prior to 2.0 included a discovery_cache
         # module which was later removed. Newer versions of the library still
         # attempt to import this optional module, so provide a minimal stub if
