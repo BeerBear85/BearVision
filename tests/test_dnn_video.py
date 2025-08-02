@@ -10,7 +10,7 @@ from DnnHandler import DnnHandler
 
 
 def test_dnn_video_person_detection():
-    video_path = Path('test/input_video/TestMovie1.mp4')
+    video_path = Path('tests/data/TestMovie1.mp4')
     assert video_path.is_file(), f'Missing {video_path}'
 
     cap = cv2.VideoCapture(str(video_path))

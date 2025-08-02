@@ -61,7 +61,7 @@ class FakeStreaming:
         self.url = None
         self._server = None
         self._thread = None
-        self.video_path = Path(video_path or "test/input_video/TestMovie1.mp4")
+        self.video_path = Path(video_path or "tests/data/TestMovie1.mp4")
 
     def _serve(self, port: int) -> None:
         import http.server

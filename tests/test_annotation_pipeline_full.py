@@ -17,7 +17,7 @@ def test_pipeline_full(tmp_path):
     cfg_path = tmp_path / 'cfg.yaml'
     dataset_dir = tmp_path / 'dataset'
     cfg = {
-        'videos': ['test/input_video/TestMovie1.mp4'],
+        'videos': ['tests/data/TestMovie1.mp4'],
         'sampling': {'fps': 3.0},
         'quality': {'blur': 0.0, 'luma_min': 0, 'luma_max': 255},
         'yolo': {'weights': 'yolov8s.onnx', 'conf_thr': 0.1},
