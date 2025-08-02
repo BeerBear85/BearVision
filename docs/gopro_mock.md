@@ -5,7 +5,7 @@ camera behaviour without hardware.
 
 ## Video files
 
-- `test/input_video/TestMovie1.mp4` – high resolution sample used for
+- `tests/data/TestMovie1.mp4` – high resolution sample used for
 the streaming endpoint.
 - `tests/data/preview_low.mp4` – low resolution version generated from
   the file above for preview algorithms.
@@ -13,7 +13,7 @@ the streaming endpoint.
 To regenerate the preview file run:
 
 ```bash
-python tools/make_preview_video.py test/input_video/TestMovie1.mp4 tests/data/preview_low.mp4
+python tools/make_preview_video.py tests/data/TestMovie1.mp4 tests/data/preview_low.mp4
 ```
 
 ## Streaming interface
