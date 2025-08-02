@@ -46,3 +46,18 @@ python pretraining/annotation/annotation_gui.py
 ```
 
 Choose a video and output directory, then press **Run** to watch the video with red bounding boxes while frames and labels are exported.
+
+## YOLOv8 Wakeboard Detector Training
+
+Fine-tune a YOLOv8 model on a folder of images and YOLO-format labels:
+
+```bash
+python pretraining/train_yolo.py /path/to/dataset --epochs 100 --batch 8 --onnx-out wakeboard.onnx
+```
+
+Prerequisites:
+
+- Install dependencies with `pip install -r requirements.txt`.
+- The dataset directory must contain images and matching `.txt` annotation files using YOLO coordinates.
+
+The script automatically creates train/val splits, fine-tunes the base model and exports the best weights as an ONNX file.
