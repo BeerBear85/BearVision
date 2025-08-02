@@ -29,15 +29,6 @@ def install_google_stubs():
     """Insert dummy google modules into sys.modules."""
     sys.modules.setdefault('google', types.ModuleType('google'))
 
-    oauth2_mod = types.ModuleType('google.oauth2')
-    service_account_mod = types.ModuleType('google.oauth2.service_account')
-    service_account_mod.Credentials = types.SimpleNamespace(
-        from_service_account_info=lambda info, scopes=None: DummyCreds()
-    )
-    oauth2_mod.service_account = service_account_mod
-    sys.modules['google.oauth2'] = oauth2_mod
-    sys.modules['google.oauth2.service_account'] = service_account_mod
-
     apiclient_mod = types.ModuleType('googleapiclient')
     disc_mod = types.ModuleType('googleapiclient.discovery')
     http_mod = types.ModuleType('googleapiclient.http')
@@ -121,16 +112,14 @@ class FakeDriveService:
 def setup_google_modules(monkeypatch, captured_info):
     """Patch google modules using the monkeypatch fixture."""
     install_google_stubs()
-    import google.oauth2.service_account as sa_mod
     import googleapiclient.discovery as disc_mod
     import googleapiclient.http as http_mod
 
-    def fake_from_info(info, scopes=None):
-        captured_info['info'] = info
-        return DummyCreds()
+    def fake_build(*a, **k):
+        captured_info['creds'] = k.get('credentials')
+        return 'service'
 
-    monkeypatch.setattr(sa_mod.Credentials, 'from_service_account_info', fake_from_info, raising=False)
-    monkeypatch.setattr(disc_mod, 'build', lambda *a, **k: 'service', raising=False)
+    monkeypatch.setattr(disc_mod, 'build', fake_build, raising=False)
     monkeypatch.setattr(http_mod, 'MediaFileUpload', DummyMediaFileUpload, raising=False)
     monkeypatch.setattr(http_mod, 'MediaIoBaseDownload', DummyMediaIoBaseDownload, raising=False)
 

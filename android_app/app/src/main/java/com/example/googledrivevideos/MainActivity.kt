@@ -6,7 +6,6 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.api.client.extensions.android.http.AndroidHttp
-import com.google.api.client.googleapis.auth.oauth2.GoogleCredential
 import com.google.api.client.json.gson.GsonFactory
 import com.google.api.services.drive.Drive
 import com.google.api.services.drive.model.FileList
@@ -35,13 +34,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupDriveService() {
-        val json = resources.openRawResource(R.raw.service_account)
-        val credential = GoogleCredential.fromStream(json)
-            .createScoped(listOf("https://www.googleapis.com/auth/drive.readonly"))
         driveService = Drive.Builder(
             AndroidHttp.newCompatibleTransport(),
             GsonFactory.getDefaultInstance(),
-            credential
+            null
         ).setApplicationName("DriveVideos").build()
     }
 
