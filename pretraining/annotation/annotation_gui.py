@@ -32,7 +32,7 @@ def run_pipeline(video_path: str, output_dir: str) -> None:
     cfg = PipelineConfig(
         videos=[video_path],
         sampling=SamplingConfig(step=1),
-        quality=QualityConfig(),
+        quality=QualityConfig(blur=0, luma_min=0, luma_max=500),
         yolo=YoloConfig(weights="yolov8s.onnx", conf_thr=0.25),
         export=ExportConfig(output_dir=output_dir, format="yolo"),
     )
