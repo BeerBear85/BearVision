@@ -263,6 +263,8 @@ def run(config_path: str) -> None:
         if not qf.check(item["frame"]):
             continue
         boxes = yolo.detect(item["frame"])
+        if not boxes:
+            continue
         exporter.save(item, boxes)
     exporter.close()
 
