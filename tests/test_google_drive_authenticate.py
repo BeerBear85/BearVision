@@ -2,6 +2,7 @@ import base64
 import pickle
 import sys
 from pathlib import Path
+import tempfile
 
 import pytest
 
@@ -26,12 +27,23 @@ def test_authenticate_uses_token_and_env(tmp_path, monkeypatch):
         pickle.dump(token_creds, fh)
 
     secret = base64.b64encode(b'{}').decode()
-    monkeypatch.setenv('GOOGLE_OAUTH_CLIENT_SECRET_B64', secret)
+    monkeypatch.setenv('SECRET_ENV', secret)
 
-    handler = GoogleDriveHandler({'GOOGLE_DRIVE': {}})
+    paths = []
+    orig_ntf = tempfile.NamedTemporaryFile
+
+    def fake_ntf(*args, **kwargs):
+        kwargs.setdefault('delete', False)
+        tmp = orig_ntf(*args, **kwargs)
+        paths.append(Path(tmp.name))
+        return tmp
+
+    monkeypatch.setattr(module.tempfile, 'NamedTemporaryFile', fake_ntf)
+
+    handler = GoogleDriveHandler({'GOOGLE_DRIVE': {'secret_key_name': 'SECRET_ENV'}})
     handler._authenticate()
 
     assert handler.service == 'service'
     assert isinstance(captured['creds'], DummyCreds)
-    assert Path('credentials.json').exists()
+    assert paths and not paths[0].exists()
 

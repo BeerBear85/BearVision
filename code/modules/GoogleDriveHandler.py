@@ -4,6 +4,7 @@ import base64
 import pickle
 from pathlib import Path
 from typing import Optional
+import tempfile
 
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload
@@ -29,15 +30,19 @@ class GoogleDriveHandler:
         else:
             gd_cfg = self.config.get('GOOGLE_DRIVE', {})
 
-        secret_env = gd_cfg.get('client_secret_b64_env', 'GOOGLE_OAUTH_CLIENT_SECRET_B64')
+        secret_env = gd_cfg.get('secret_key_name', 'GOOGLE_CREDENTIALS_JSON')
         secret_b64 = os.getenv(secret_env, '')
 
-        cred_path = Path('credentials.json')
-        if secret_b64 and not cred_path.exists():
+        cred_path = None
+        if secret_b64:
             try:
-                cred_path.write_bytes(base64.b64decode(secret_b64))
+                with tempfile.NamedTemporaryFile('wb', delete=False) as fh:
+                    fh.write(base64.b64decode(secret_b64))
+                    cred_path = Path(fh.name)
             except Exception:
-                cred_path.write_text('')
+                with tempfile.NamedTemporaryFile('w', delete=False) as fh:
+                    fh.write('')
+                    cred_path = Path(fh.name)
 
         creds = None
         token_path = Path('token.pickle')
@@ -87,6 +92,11 @@ class GoogleDriveHandler:
             build_kwargs['static_discovery'] = False
 
         self.service = build('drive', 'v3', **build_kwargs)
+        if cred_path and cred_path.exists():
+            try:
+                cred_path.unlink()
+            except Exception:
+                pass
 
     def _ensure_root(self):
         if isinstance(self.config, ConfigParser):
