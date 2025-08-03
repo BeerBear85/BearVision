@@ -288,8 +288,7 @@ def run(cfg: "PipelineConfig | str", show_preview: bool = False) -> None:
         if not qf.check(frame):
             continue
         boxes = yolo.detect(frame)
-        if not boxes:
-            continue
+
         if show_preview:
             disp = frame.copy()
             for b in boxes:
@@ -298,7 +297,9 @@ def run(cfg: "PipelineConfig | str", show_preview: bool = False) -> None:
             cv2.imshow("preview", disp)
             if cv2.waitKey(1) & 0xFF == ord("q"):
                 break
-        exporter.save(item, boxes)
+        if boxes:
+            exporter.save(item, boxes)
+        
 
     exporter.close()
     if show_preview:
