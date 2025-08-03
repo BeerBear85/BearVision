@@ -158,3 +158,27 @@ def test_run_skips_frames_without_detections(tmp_path):
     lbls = list((dataset_dir / 'labels').glob('*'))
     assert not imgs
     assert not lbls
+
+
+def test_run_with_preview(tmp_path):
+    video = create_dummy_video(tmp_path / 'v.mp4', num_frames=1)
+    cfg = ap.PipelineConfig(
+        videos=[str(video)],
+        sampling=ap.SamplingConfig(),
+        quality=ap.QualityConfig(blur=0.0, luma_min=0, luma_max=255),
+        yolo=ap.YoloConfig(weights='dummy.onnx', conf_thr=0.1),
+        export=ap.ExportConfig(output_dir=str(tmp_path / 'dataset')),
+    )
+    with mock.patch.object(ap, 'PreLabelYOLO') as MockYolo, \
+         mock.patch('cv2.imshow') as imshow_mock, \
+         mock.patch('cv2.waitKey', return_value=-1), \
+         mock.patch('cv2.destroyAllWindows'):
+        MockYolo.return_value.detect.return_value = [
+            {'bbox': [0, 0, 2, 2], 'cls': 0, 'conf': 1.0}
+        ]
+        ap.run(cfg, show_preview=True)
+    dataset_dir = tmp_path / 'dataset'
+    imgs = list((dataset_dir / 'images').glob('*.jpg'))
+    lbls = list((dataset_dir / 'labels').glob('*.txt'))
+    assert imgs and lbls
+    assert imshow_mock.called
