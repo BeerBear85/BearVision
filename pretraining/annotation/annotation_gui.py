@@ -6,7 +6,7 @@ import annotation_pipeline as ap
 
 
 def run_pipeline(video_path: str, output_dir: str) -> None:
-    """Run the annotation pipeline while displaying detection results."""
+    """Run the annotation pipeline and export a labeled dataset."""
 
     cfg = ap.PipelineConfig(
         videos=[video_path],
@@ -15,7 +15,7 @@ def run_pipeline(video_path: str, output_dir: str) -> None:
         yolo=ap.YoloConfig(weights="yolov8s.onnx", conf_thr=0.25),
         export=ap.ExportConfig(output_dir=output_dir),
     )
-    ap.preview(cfg)
+    ap.run(cfg, show_preview=True)
 
 
 class AnnotationGUI:

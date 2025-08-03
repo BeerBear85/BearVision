@@ -45,7 +45,7 @@ Run a minimal interface to preview YOLO detections and save the resulting datase
 python pretraining/annotation/annotation_gui.py
 ```
 
-Choose a video and output directory, then press **Run** to watch the video with red bounding boxes while frames and labels are exported.
+Choose a video and output directory, then press **Run** to watch the video with green bounding boxes while frames and labels are exported.
 
 ## YOLOv8 Wakeboard Detector Training
 

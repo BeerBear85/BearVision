@@ -260,12 +260,18 @@ class CvatExporter:
 
         tree = ET.ElementTree(root_el)
         tree.write(self.root / "annotations.xml", encoding="utf-8", xml_declaration=True)
-def run(cfg: "PipelineConfig | str") -> None:
+def run(cfg: "PipelineConfig | str", show_preview: bool = False) -> None:
     """Run the dataset generation pipeline.
 
-    Accepts either a path to a YAML configuration file or a preconstructed
-    :class:`PipelineConfig` instance. This makes it easier to drive the
-    pipeline programmatically from other modules such as the GUI.
+    Parameters
+    ----------
+    cfg:
+        Either a path to a YAML configuration file or a preconstructed
+        :class:`PipelineConfig` instance. This makes it easier to drive the
+        pipeline programmatically from other modules such as the GUI.
+    show_preview:
+        If ``True``, display a window with bounding boxes overlaid on the
+        frames while the dataset is exported.
     """
     cfg = _ensure_cfg(cfg)
 
@@ -276,14 +282,27 @@ def run(cfg: "PipelineConfig | str") -> None:
         exporter = CvatExporter(cfg.export)
     else:
         exporter = DatasetExporter(cfg.export)
+
     for item in ingest:
-        if not qf.check(item["frame"]):
+        frame = item["frame"]
+        if not qf.check(frame):
             continue
-        boxes = yolo.detect(item["frame"])
+        boxes = yolo.detect(frame)
         if not boxes:
             continue
+        if show_preview:
+            disp = frame.copy()
+            for b in boxes:
+                x1, y1, x2, y2 = map(int, b["bbox"])
+                cv2.rectangle(disp, (x1, y1), (x2, y2), (0, 255, 0), 2)
+            cv2.imshow("preview", disp)
+            if cv2.waitKey(1) & 0xFF == ord("q"):
+                break
         exporter.save(item, boxes)
+
     exporter.close()
+    if show_preview:
+        cv2.destroyAllWindows()
 
 def preview(cfg: "PipelineConfig | str") -> None:
     """Preview the pipeline output with bounding boxes on screen.
