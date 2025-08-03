@@ -2,47 +2,20 @@ import threading
 import tkinter as tk
 from tkinter import filedialog, messagebox
 
-import cv2
-
-# Import pipeline components
-from annotation_pipeline import (
-    PipelineConfig,
-    SamplingConfig,
-    QualityConfig,
-    YoloConfig,
-    VidIngest,
-    QualityFilter,
-    PreLabelYOLO,
-)
+import annotation_pipeline as ap
 
 
-def run_pipeline(video_path: str, _output_dir: str) -> None:
+def run_pipeline(video_path: str, output_dir: str) -> None:
     """Run the annotation pipeline while displaying detection results."""
 
-    cfg = PipelineConfig(
+    cfg = ap.PipelineConfig(
         videos=[video_path],
-        sampling=SamplingConfig(step=1),
-        quality=QualityConfig(blur=0, luma_min=0, luma_max=500),
-        yolo=YoloConfig(weights="yolov8s.onnx", conf_thr=0.25),
+        sampling=ap.SamplingConfig(step=1),
+        quality=ap.QualityConfig(blur=0, luma_min=0, luma_max=500),
+        yolo=ap.YoloConfig(weights="yolov8s.onnx", conf_thr=0.25),
+        export=ap.ExportConfig(output_dir=output_dir),
     )
-
-    ingest = VidIngest(cfg.videos, cfg.sampling)
-    qf = QualityFilter(cfg.quality)
-    yolo = PreLabelYOLO(cfg.yolo)
-
-    for item in ingest:
-        frame = item["frame"]
-        if not qf.check(frame):
-            continue
-        boxes = yolo.detect(frame)
-        for b in boxes:
-            x1, y1, x2, y2 = map(int, b["bbox"])
-            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
-        cv2.imshow("preview", frame)
-        if cv2.waitKey(1) & 0xFF == ord("q"):
-            break
-
-    cv2.destroyAllWindows()
+    ap.preview(cfg)
 
 
 class AnnotationGUI:
