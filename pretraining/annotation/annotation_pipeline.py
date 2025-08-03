@@ -159,6 +159,15 @@ class PreLabelYOLO:
         return boxes
 
 
+# Additional helper to normalize configuration input for run/preview
+def _ensure_cfg(cfg: "PipelineConfig | str") -> "PipelineConfig":
+    """Return a :class:`PipelineConfig` from a path or object."""
+    if isinstance(cfg, PipelineConfig):
+        return cfg
+    cfg_dict = load_config(cfg)
+    return PipelineConfig(**cfg_dict)
+
+
 class DatasetExporter:
     """Save frames, labels and debug information."""
 
@@ -251,10 +260,14 @@ class CvatExporter:
 
         tree = ET.ElementTree(root_el)
         tree.write(self.root / "annotations.xml", encoding="utf-8", xml_declaration=True)
-def run(config_path: str) -> None:
-    """Run the dataset generation pipeline."""
-    cfg_dict = load_config(config_path)
-    cfg = PipelineConfig(**cfg_dict)
+def run(cfg: "PipelineConfig | str") -> None:
+    """Run the dataset generation pipeline.
+
+    Accepts either a path to a YAML configuration file or a preconstructed
+    :class:`PipelineConfig` instance. This makes it easier to drive the
+    pipeline programmatically from other modules such as the GUI.
+    """
+    cfg = _ensure_cfg(cfg)
 
     ingest = VidIngest(cfg.videos, cfg.sampling)
     qf = QualityFilter(cfg.quality)
@@ -272,10 +285,14 @@ def run(config_path: str) -> None:
         exporter.save(item, boxes)
     exporter.close()
 
-def preview(config_path: str) -> None:
-    """Preview the pipeline output with bounding boxes on screen."""
-    cfg_dict = load_config(config_path)
-    cfg = PipelineConfig(**cfg_dict)
+def preview(cfg: "PipelineConfig | str") -> None:
+    """Preview the pipeline output with bounding boxes on screen.
+
+    The ``cfg`` argument may be a path to a YAML file or a
+    :class:`PipelineConfig` object. This mirrors :func:`run` so that callers
+    such as the GUI can construct configurations in code.
+    """
+    cfg = _ensure_cfg(cfg)
     ingest = VidIngest(cfg.videos, cfg.sampling)
     qf = QualityFilter(cfg.quality)
     yolo = PreLabelYOLO(cfg.yolo)
