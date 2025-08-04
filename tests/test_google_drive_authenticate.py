@@ -80,3 +80,39 @@ def test_authenticate_user_flow(tmp_path, monkeypatch):
     assert handler.service == 'service'
     assert isinstance(captured['creds'], DummyCreds)
 
+
+def test_authenticate_split_env(tmp_path, monkeypatch):
+    """Ensure credentials split across two env vars are concatenated."""
+    captured = {}
+    setup_google_modules(monkeypatch, captured)
+    monkeypatch.chdir(tmp_path)
+
+    import importlib
+    module = importlib.import_module('GoogleDriveHandler')
+    module = importlib.reload(module)
+    GoogleDriveHandler = module.GoogleDriveHandler
+
+    secret = base64.b64encode(b'{}').decode()
+    # Emulate splitting large credentials into two parts to mimic environment
+    # variable length constraints in real deployments.
+    first, second = secret[: len(secret)//2], secret[len(secret)//2 :]
+    monkeypatch.setenv('SECRET_ENV', first)
+    monkeypatch.setenv('SECRET_ENV2', second)
+
+    monkeypatch.setattr(
+        module.service_account.Credentials,
+        'from_service_account_info',
+        lambda *a, **k: DummyCreds(),
+        raising=False,
+    )
+
+    handler = GoogleDriveHandler({'GOOGLE_DRIVE': {
+        'secret_key_name': 'SECRET_ENV',
+        'secret_key_name_2': 'SECRET_ENV2',
+        'auth_mode': 'service',
+    }})
+    handler._authenticate()
+
+    assert handler.service == 'service'
+    assert isinstance(captured['creds'], DummyCreds)
+
