@@ -1,3 +1,5 @@
+"""Edge device entry point running lightweight detection alongside the GoPro."""
+
 import logging
 import threading
 import asyncio
@@ -16,12 +18,22 @@ logger = logging.getLogger(__name__)
 
 
 async def _preview_algorithm(event: asyncio.Event) -> None:
-    """Simulate preview processing and emit a motion event."""
+    """Analyse the preview stream and set ``event`` when motion is found.
+
+    Parameters
+    ----------
+    event : asyncio.Event
+        Synchronisation primitive used to notify other tasks of motion.
+
+    Returns
+    -------
+    None
+        The function runs forever and communicates via ``event``.
+    """
     counter = 0
     while True:
         await asyncio.sleep(0.1)
-        # In real code this would analyse the preview stream and
-        # call ``event.set()`` whenever motion is detected.
+        # Dummy loop increments a counter to simulate motion detection cadence.
         counter += 1
         if counter % 50 == 0:
             logger.debug("Motion detected in preview")
@@ -29,7 +41,15 @@ async def _preview_algorithm(event: asyncio.Event) -> None:
 
 
 async def _hindsight_trigger(event: asyncio.Event, gopro: GoProController | None) -> None:
-    """Wait for the motion event and optionally trigger a HindSight clip."""
+    """Wait for motion and optionally trigger a HindSight clip on the GoPro.
+
+    Parameters
+    ----------
+    event : asyncio.Event
+        Event signalled by ``_preview_algorithm`` when motion occurs.
+    gopro : GoProController | None
+        Connected GoPro controller or ``None`` when running without a camera.
+    """
     while True:
         await event.wait()
         event.clear()
@@ -39,7 +59,8 @@ async def _hindsight_trigger(event: asyncio.Event, gopro: GoProController | None
 
 
 def _run_async(event: asyncio.Event, gopro: GoProController | None) -> None:
-    """Run preview and HindSight tasks in an event loop."""
+    """Run preview and HindSight tasks in the same event loop."""
+
     async def _runner() -> None:
         await asyncio.gather(
             _preview_algorithm(event),
@@ -56,7 +77,18 @@ def _moment_detector() -> None:
 
 
 def main(gopro: GoProController | None = None) -> list[threading.Thread]:
-    """Load configuration, setup GoPro and start edge threads."""
+    """Configure environment, optionally setup GoPro and start worker threads.
+
+    Parameters
+    ----------
+    gopro : GoProController | None, optional
+        Existing GoPro controller. If ``None`` a new one is created.
+
+    Returns
+    -------
+    list[threading.Thread]
+        Started threads handling preview processing and moment detection.
+    """
     logging.basicConfig(level=logging.INFO)
 
     cfg_path = Path(__file__).resolve().parents[2] / "config.ini"
@@ -70,6 +102,7 @@ def main(gopro: GoProController | None = None) -> list[threading.Thread]:
     logger.info("GoPro setup complete")
 
     motion_event = asyncio.Event()
+    # Separate threads allow the async event loop and traditional blocking code to coexist.
     preview_thread = threading.Thread(
         target=_run_async,
         args=(motion_event, gopro),
