@@ -182,3 +182,72 @@ def test_run_with_preview(tmp_path):
     lbls = list((dataset_dir / 'labels').glob('*.txt'))
     assert imgs and lbls
     assert imshow_mock.called
+
+
+def test_interpolation_generates_missing_frames(tmp_path):
+    video = create_dummy_video(tmp_path / 'v.mp4', num_frames=3)
+    cfg = ap.PipelineConfig(
+        videos=[str(video)],
+        sampling=ap.SamplingConfig(),
+        quality=ap.QualityConfig(blur=0.0, luma_min=0, luma_max=255),
+        yolo=ap.YoloConfig(weights='dummy.onnx', conf_thr=0.1),
+        export=ap.ExportConfig(output_dir=str(tmp_path / 'dataset')),
+    )
+
+    call_idx = {'i': 0}
+
+    def side_effect(frame):
+        idx = call_idx['i']
+        call_idx['i'] += 1
+        if idx == 0:
+            return [{'bbox': [0, 0, 10, 10], 'cls': 0, 'label': 'person', 'conf': 1.0}]
+        if idx == 2:
+            return [{'bbox': [20, 20, 30, 30], 'cls': 0, 'label': 'person', 'conf': 1.0}]
+        return []
+
+    with mock.patch.object(ap, 'PreLabelYOLO') as MockYolo:
+        MockYolo.return_value.detect.side_effect = side_effect
+        ap.run(cfg)
+
+    dataset_dir = tmp_path / 'dataset'
+    imgs = sorted((dataset_dir / 'images').glob('*.jpg'))
+    lbls = sorted((dataset_dir / 'labels').glob('*.txt'))
+    assert len(imgs) == 3
+    assert len(lbls) == 3
+    mid_vals = lbls[1].read_text().strip().split()
+    # Center should lie midway between the two detections
+    assert abs(float(mid_vals[1]) - 15) < 1e-3
+    assert abs(float(mid_vals[2]) - 15) < 1e-3
+
+
+def test_interpolation_waits_for_keypress(tmp_path):
+    video = create_dummy_video(tmp_path / 'v.mp4', num_frames=3)
+    cfg = ap.PipelineConfig(
+        videos=[str(video)],
+        sampling=ap.SamplingConfig(),
+        quality=ap.QualityConfig(blur=0.0, luma_min=0, luma_max=255),
+        yolo=ap.YoloConfig(weights='dummy.onnx', conf_thr=0.1),
+        export=ap.ExportConfig(output_dir=str(tmp_path / 'dataset')),
+    )
+
+    call_idx = {'i': 0}
+
+    def side_effect(frame):
+        idx = call_idx['i']
+        call_idx['i'] += 1
+        if idx == 0:
+            return [{'bbox': [0, 0, 10, 10], 'cls': 0, 'label': 'person', 'conf': 1.0}]
+        if idx == 2:
+            return [{'bbox': [20, 20, 30, 30], 'cls': 0, 'label': 'person', 'conf': 1.0}]
+        return []
+
+    with mock.patch.object(ap, 'PreLabelYOLO') as MockYolo, \
+         mock.patch('cv2.imshow'), \
+         mock.patch('cv2.waitKey', return_value=-1) as wait_mock, \
+         mock.patch('cv2.destroyAllWindows'):
+        MockYolo.return_value.detect.side_effect = side_effect
+        ap.run(cfg, show_preview=True)
+
+    # The last waitKey call should be with 0, indicating the pause on the final
+    # frame awaiting user confirmation.
+    assert wait_mock.call_args_list[-1][0][0] == 0

@@ -6,6 +6,8 @@ from typing import Iterator, List, Dict, Any
 
 import cv2
 import yaml
+import numpy as np
+from scipy.interpolate import CubicSpline
 from ultralytics import YOLO
 import argparse
 import sys
@@ -261,17 +263,27 @@ class CvatExporter:
         tree = ET.ElementTree(root_el)
         tree.write(self.root / "annotations.xml", encoding="utf-8", xml_declaration=True)
 def run(cfg: "PipelineConfig | str", show_preview: bool = False) -> None:
-    """Run the dataset generation pipeline.
+    """Run the dataset generation pipeline with optional spline interpolation.
 
-    Parameters
-    ----------
-    cfg:
-        Either a path to a YAML configuration file or a preconstructed
-        :class:`PipelineConfig` instance. This makes it easier to drive the
-        pipeline programmatically from other modules such as the GUI.
-    show_preview:
-        If ``True``, display a window with bounding boxes overlaid on the
-        frames while the dataset is exported.
+    Purpose
+    -------
+    Export frames and bounding box annotations, estimating missing person
+    locations using spline interpolation so that low-quality models receive a
+    smoother training trajectory.
+
+    Inputs
+    ------
+    cfg: PipelineConfig | str
+        Pipeline configuration object or path to a YAML file describing one.
+    show_preview: bool, default ``False``
+        When ``True`` an OpenCV window shows the bounding boxes for each frame
+        and the final trajectory. The window waits for a keypress on the final
+        frame so users can confirm the interpolation.
+
+    Outputs
+    -------
+    None
+        The function writes image and label files to disk and returns ``None``.
     """
     cfg = _ensure_cfg(cfg)
 
@@ -283,25 +295,108 @@ def run(cfg: "PipelineConfig | str", show_preview: bool = False) -> None:
     else:
         exporter = DatasetExporter(cfg.export)
 
+    items: List[Dict[str, Any]] = []
+    # Collect frames and detections first so we can interpolate across the
+    # entire clip. This trades memory for simplicity and deterministic output.
     for item in ingest:
         frame = item["frame"]
         if not qf.check(frame):
             continue
-        boxes = yolo.detect(frame)
+        item["boxes"] = yolo.detect(frame)
+        items.append(item)
 
-        if show_preview:
-            disp = frame.copy()
-            for b in boxes:
-                x1, y1, x2, y2 = map(int, b["bbox"])
-                cv2.rectangle(disp, (x1, y1), (x2, y2), (0, 255, 0), 2)
-            cv2.imshow("preview", disp)
-            if cv2.waitKey(1) & 0xFF == ord("q"):
-                break
+    # Compute centers, widths and heights for frames with detections.
+    # Each entry stores the frame index and bounding box geometry for frames
+    # where a person was detected. We also keep class/label to reuse for
+    # interpolated boxes.
+    det_points: List[tuple[int, float, float, float, float, int, str]] = []
+    for item in items:
+        if item["boxes"]:
+            b = item["boxes"][0]  # assume single-person detection
+            x1, y1, x2, y2 = b["bbox"]
+            w = x2 - x1
+            h = y2 - y1
+            cx = x1 + w / 2
+            cy = y1 + h / 2
+            det_points.append(
+                (
+                    item["frame_idx"],
+                    cx,
+                    cy,
+                    w,
+                    h,
+                    b.get("cls", 0),
+                    b.get("label", "person"),
+                )
+            )
+
+    trajectory: List[tuple[int, int]] = []
+    if len(det_points) >= 2:
+        # Separate frame indices and box geometry for spline fitting.
+        frames = [p[0] for p in det_points]
+        cxs = [p[1] for p in det_points]
+        cys = [p[2] for p in det_points]
+        ws = [p[3] for p in det_points]
+        hs = [p[4] for p in det_points]
+        # Cubic splines provide smooth trajectories even with irregular spacing.
+        sx = CubicSpline(frames, cxs)
+        sy = CubicSpline(frames, cys)
+        sw = CubicSpline(frames, ws)
+        sh = CubicSpline(frames, hs)
+        first, last = frames[0], frames[-1]
+        idx_map = {it["frame_idx"]: it for it in items}
+        for fi in range(first, last + 1):
+            item = idx_map.get(fi)
+            if item is None:
+                # If a frame is missing (e.g. skipped due to sampling), we
+                # cannot interpolate its image so we simply ignore it.
+                continue
+            if not item["boxes"]:
+                cx = float(sx(fi))
+                cy = float(sy(fi))
+                w = float(sw(fi))
+                h = float(sh(fi))
+                x1 = cx - w / 2
+                y1 = cy - h / 2
+                x2 = cx + w / 2
+                y2 = cy + h / 2
+                # Confidence is set to zero to signal an estimated box.
+                item["boxes"] = [
+                    {
+                        "bbox": [x1, y1, x2, y2],
+                        "cls": det_points[0][5],
+                        "label": det_points[0][6],
+                        "conf": 0.0,
+                    }
+                ]
+            trajectory.append((int(float(sx(fi))), int(float(sy(fi)))))
+
+    for item in items:
+        boxes = item.get("boxes", [])
         if boxes:
+            if show_preview:
+                disp = item["frame"].copy()
+                for b in boxes:
+                    x1, y1, x2, y2 = map(int, b["bbox"])
+                    cv2.rectangle(disp, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                cv2.imshow("preview", disp)
+                if cv2.waitKey(1) & 0xFF == ord("q"):
+                    break
             exporter.save(item, boxes)
-        
 
     exporter.close()
+    if show_preview and trajectory:
+        # Display the final frame with the full interpolated trajectory so that
+        # annotators can visually verify the estimate before continuing.
+        final_item = next(
+            (it for it in items if it["frame_idx"] == det_points[-1][0]), None
+        )
+        if final_item is not None:
+            disp = final_item["frame"].copy()
+            pts = np.array(trajectory, dtype=int)
+            cv2.polylines(disp, [pts], False, (0, 0, 255), 2)
+            cv2.imshow("trajectory", disp)
+            cv2.waitKey(0)  # Wait for user confirmation
     if show_preview:
         cv2.destroyAllWindows()
 
