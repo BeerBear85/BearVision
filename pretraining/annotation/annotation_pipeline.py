@@ -11,6 +11,7 @@ from scipy.interpolate import CubicSpline
 from ultralytics import YOLO
 import argparse
 import sys
+from functools import wraps
 
 # Import DnnHandler for optional ONNX inference
 MODULE_DIR = Path(__file__).resolve().parents[2] / "code" / "modules"
@@ -22,6 +23,62 @@ except Exception:  # pragma: no cover - DnnHandler might not be available
     DnnHandler = None
 
 
+@dataclass
+class PipelineStatus:
+    """Keep track of pipeline progress for external observers.
+
+    Purpose
+    -------
+    Expose runtime state so that user interfaces can surface feedback on the
+    pipeline's execution without tightly coupling to internal implementation
+    details.
+
+    Attributes
+    ----------
+    last_function: str
+        Name of the most recently invoked function in this module.
+    current_frame: int
+        One-based index of the frame currently being processed.
+    total_frames: int
+        Total number of frames scheduled for processing in the current run.
+    """
+
+    last_function: str = ""
+    current_frame: int = 0
+    total_frames: int = 0
+
+
+status = PipelineStatus()
+
+
+def track(func):
+    """Decorator updating :data:`status` with the last function called.
+
+    Purpose
+    -------
+    Provide lightweight instrumentation by recording each decorated call. This
+    avoids invasive logging and keeps overhead minimal for performance.
+
+    Inputs
+    ------
+    func: Callable
+        Function to wrap.
+
+    Outputs
+    -------
+    Callable
+        Wrapped function that updates :data:`status` before executing.
+    """
+
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        status.last_function = func.__name__
+        return func(*args, **kwargs)
+
+    return wrapper
+
+
+@track
 def load_config(path: str) -> Dict[str, Any]:
     """Load YAML configuration file."""
     with open(path, "r", encoding="utf-8") as f:
@@ -65,6 +122,7 @@ class VidIngest:
         self.videos = videos
         self.config = config
 
+    @track
     def __iter__(self) -> Iterator[Dict[str, Any]]:
         for video_path in self.videos:
             cap = cv2.VideoCapture(video_path)
@@ -95,6 +153,7 @@ class QualityFilter:
         self.luma_min = config.luma_min
         self.luma_max = config.luma_max
 
+    @track
     def check(self, frame) -> bool:
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         blur_val = cv2.Laplacian(gray, cv2.CV_64F).var()
@@ -123,6 +182,7 @@ class PreLabelYOLO:
             except AttributeError:
                 self.names = {}
 
+    @track
     def detect(self, frame) -> List[Dict[str, Any]]:
         boxes: List[Dict[str, Any]] = []
         if self.backend == "dnn":
@@ -162,6 +222,7 @@ class PreLabelYOLO:
 
 
 # Additional helper to normalize configuration input for run/preview
+@track
 def _ensure_cfg(cfg: "PipelineConfig | str") -> "PipelineConfig":
     """Return a :class:`PipelineConfig` from a path or object."""
     if isinstance(cfg, PipelineConfig):
@@ -182,6 +243,7 @@ class DatasetExporter:
         self.debug_path = self.root / "debug.jsonl"
         self.debug_file = self.debug_path.open("w", encoding="utf-8")
 
+    @track
     def save(self, item: Dict[str, Any], boxes: List[Dict[str, Any]]):
         frame = item["frame"]
         idx = item["frame_idx"]
@@ -204,11 +266,11 @@ class DatasetExporter:
             "frame_idx": idx,
         }
         self.debug_file.write(json.dumps(debug) + "\n")
+
     def close(self):
         self.debug_file.close()
 
 
-class CvatExporter:
     """Save frames and annotations in CVAT format."""
 
     def __init__(self, config: ExportConfig):
@@ -217,6 +279,7 @@ class CvatExporter:
         self.img_dir.mkdir(parents=True, exist_ok=True)
         self.annotations: List[Dict[str, Any]] = []
 
+    @track
     def save(self, item: Dict[str, Any], boxes: List[Dict[str, Any]]):
         frame = item["frame"]
         idx = item["frame_idx"]
@@ -262,6 +325,9 @@ class CvatExporter:
 
         tree = ET.ElementTree(root_el)
         tree.write(self.root / "annotations.xml", encoding="utf-8", xml_declaration=True)
+
+
+@track
 def run(cfg: "PipelineConfig | str", show_preview: bool = False) -> None:
     """Run the dataset generation pipeline with optional spline interpolation.
 
@@ -304,6 +370,10 @@ def run(cfg: "PipelineConfig | str", show_preview: bool = False) -> None:
             continue
         item["boxes"] = yolo.detect(frame)
         items.append(item)
+    # The total count is known only after ingestion because quality checks can
+    # drop frames; we expose it here for progress displays.
+    status.total_frames = len(items)
+    status.current_frame = 0
 
     # Compute centers, widths and heights for frames with detections.
     # Each entry stores the frame index and bounding box geometry for frames
@@ -371,7 +441,8 @@ def run(cfg: "PipelineConfig | str", show_preview: bool = False) -> None:
                 ]
             trajectory.append((int(float(sx(fi))), int(float(sy(fi)))))
 
-    for item in items:
+    for idx, item in enumerate(items, start=1):
+        status.current_frame = idx
         boxes = item.get("boxes", [])
         if boxes:
             if show_preview:
@@ -400,6 +471,7 @@ def run(cfg: "PipelineConfig | str", show_preview: bool = False) -> None:
     if show_preview:
         cv2.destroyAllWindows()
 
+@track
 def preview(cfg: "PipelineConfig | str") -> None:
     """Preview the pipeline output with bounding boxes on screen.
 
