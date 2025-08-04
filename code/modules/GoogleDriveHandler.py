@@ -7,7 +7,9 @@ from typing import Optional
 
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload
-from google.oauth2 import service_account
+from google_auth_oauthlib.flow import InstalledAppFlow
+from googleapiclient.errors import HttpError
+from googleapiclient.discovery import build
 import types
 from configparser import ConfigParser
 
@@ -63,51 +65,30 @@ class GoogleDriveHandler:
         try:
             # Decode credentials in-memory to avoid temporary files which could
             # linger or introduce race conditions on shared systems.
-            info = json.loads(base64.b64decode(secret_b64).decode("utf-8"))
-            creds = service_account.Credentials.from_service_account_info(
-                info, scopes=["https://www.googleapis.com/auth/drive"]
-            )
+            secret_json  = json.loads(base64.b64decode(secret_b64).decode("utf-8"))
+            flow = InstalledAppFlow.from_client_config(secret_json, scopes=["https://www.googleapis.com/auth/drive.file"])
+            creds = flow.run_local_server(port=0)
+            with open("token.json", "w") as token:
+               token.write(creds.to_json())
+
+            #creds = service_account.Credentials.from_service_account_info(
+            #    info, scopes=["https://www.googleapis.com/auth/drive"]
+           #)
         except Exception as exc:  # pragma: no cover - defensive guard
             raise RuntimeError("Invalid Google Drive credentials") from exc
-
-        # googleapiclient versions prior to 2.0 included a discovery_cache
-        # module which was later removed. Newer versions of the library still
-        # attempt to import this optional module, so provide a minimal stub if
-        # it is missing. This mirrors the behavior of the latest library which
-        # gracefully continues when the cache module cannot be imported.
-        try:
-            from googleapiclient import discovery_cache  # noqa: F401
-        except Exception:  # pragma: no cover - optional dependency
-            import sys
-
-            sys.modules.setdefault(
-                "googleapiclient.discovery_cache",
-                types.ModuleType("googleapiclient.discovery_cache"),
-            )
+        
 
         build_kwargs = {
             "credentials": creds,
             "cache_discovery": False,  # disable to avoid local cache dependency
         }
-        # Older google-api-python-client versions lack the static discovery
-        # feature. Only pass the argument when supported and enable it only if
-        # the helper function is present to avoid AttributeErrors at runtime.
         try:
-            import inspect
-            from googleapiclient import discovery_cache
+            self.service = build("drive", "v3", **build_kwargs)
+        except HttpError as error:
+            # TODO(developer) - Handle errors from drive API.
+            print(f"An error occurred: {error}")
 
-            sig = inspect.signature(build)
-            if "static_discovery" in sig.parameters:
-                # Static discovery reduces startup latency when supported.
-                build_kwargs["static_discovery"] = hasattr(
-                    discovery_cache, "get_static_doc"
-                )
-        except Exception:
-            # Fall back to disabling static discovery if any inspection fails
-            # to keep authentication robust across library versions.
-            build_kwargs["static_discovery"] = False
 
-        self.service = build("drive", "v3", **build_kwargs)
 
     def _ensure_root(self):
         """
