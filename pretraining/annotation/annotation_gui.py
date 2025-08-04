@@ -28,6 +28,8 @@ def run_pipeline(video_path: str, output_dir: str) -> None:
         the final frame awaiting a keypress.
     """
 
+    # Reset progress so a new run starts with a clean status snapshot.
+    ap.status = ap.PipelineStatus()
     cfg = ap.PipelineConfig(
         videos=[video_path],
         sampling=ap.SamplingConfig(step=1),
@@ -61,6 +63,7 @@ class AnnotationGUI:
 
         self.video_path = tk.StringVar()
         self.output_dir = tk.StringVar()
+        self.status = tk.StringVar(value="Idle")
 
         tk.Button(
             master, text="Select Video", command=self.select_video
@@ -77,9 +80,31 @@ class AnnotationGUI:
         ).pack(fill="x")
 
         tk.Button(master, text="Run", command=self.start).pack(fill="x")
+        tk.Label(master, textvariable=self.status, anchor="w").pack(fill="x")
 
+        # Double the window's dimensions for better visibility without the
+        # caller needing to guess an appropriate size ahead of widget creation.
+        master.update_idletasks()
+        w, h = master.winfo_width(), master.winfo_height()
+        master.geometry(f"{w*2}x{h*2}")
+        self.refresh_status()
     def select_video(self) -> None:
-        """Prompt the user to select a video file."""
+        """Prompt the user to select a video file.
+
+        Purpose
+        -------
+        Allow users to browse for an input file without typing paths.
+
+        Inputs
+        ------
+        None
+            Uses a file dialog instead of parameters.
+
+        Outputs
+        -------
+        None
+            The chosen path is stored in ``self.video_path``.
+        """
         path = filedialog.askopenfilename(
             title="Select video",
             filetypes=[
@@ -91,13 +116,43 @@ class AnnotationGUI:
             self.video_path.set(path)
 
     def select_output(self) -> None:
-        """Prompt the user to select an output directory."""
+        """Prompt the user to select an output directory.
+
+        Purpose
+        -------
+        Collect the dataset destination from the user through a GUI dialog.
+
+        Inputs
+        ------
+        None
+            Destination is chosen interactively.
+
+        Outputs
+        -------
+        None
+            The path is stored in ``self.output_dir``.
+        """
         path = filedialog.askdirectory(title="Select output directory")
         if path:
             self.output_dir.set(path)
 
     def start(self) -> None:
-        """Launch the pipeline in a background thread."""
+        """Launch the pipeline in a background thread.
+
+        Purpose
+        -------
+        Kick off processing without freezing the GUI.
+
+        Inputs
+        ------
+        None
+            Uses previously selected paths stored on the instance.
+
+        Outputs
+        -------
+        None
+            A daemon thread is spawned to run the pipeline.
+        """
         video = self.video_path.get()
         output = self.output_dir.get()
         if not video or not output:
@@ -111,6 +166,36 @@ class AnnotationGUI:
             target=run_pipeline, args=(video, output), daemon=True
         )
         thread.start()
+
+    def refresh_status(self) -> None:
+        """Update the status label with pipeline progress.
+
+        Purpose
+        -------
+        Poll the :mod:`annotation_pipeline` module for its current execution
+        state so users can monitor long-running operations.
+
+        Inputs
+        ------
+        None
+            The method reads global pipeline status.
+
+        Outputs
+        -------
+        None
+            The GUI label ``self.status`` is updated and the method schedules
+            itself to run again.
+        """
+
+        st = ap.status
+        if st.total_frames:
+            text = f"{st.last_function} | frame {st.current_frame}/{st.total_frames}"
+        else:
+            text = st.last_function or "Idle"
+        self.status.set(text)
+        # Using ``after`` avoids blocking the main loop while providing periodic
+        # updates that are sufficient for human perception.
+        self.master.after(200, self.refresh_status)
 
 
 if __name__ == "__main__":

@@ -11,6 +11,7 @@ from scipy.interpolate import CubicSpline
 from ultralytics import YOLO
 import argparse
 import sys
+from functools import wraps
 
 # Import DnnHandler for optional ONNX inference
 MODULE_DIR = Path(__file__).resolve().parents[2] / "code" / "modules"
@@ -22,6 +23,62 @@ except Exception:  # pragma: no cover - DnnHandler might not be available
     DnnHandler = None
 
 
+@dataclass
+class PipelineStatus:
+    """Keep track of pipeline progress for external observers.
+
+    Purpose
+    -------
+    Expose runtime state so that user interfaces can surface feedback on the
+    pipeline's execution without tightly coupling to internal implementation
+    details.
+
+    Attributes
+    ----------
+    last_function: str
+        Name of the most recently invoked function in this module.
+    current_frame: int
+        One-based index of the frame currently being processed.
+    total_frames: int
+        Total number of frames scheduled for processing in the current run.
+    """
+
+    last_function: str = ""
+    current_frame: int = 0
+    total_frames: int = 0
+
+
+status = PipelineStatus()
+
+
+def track(func):
+    """Decorator updating :data:`status` with the last function called.
+
+    Purpose
+    -------
+    Provide lightweight instrumentation by recording each decorated call. This
+    avoids invasive logging and keeps overhead minimal for performance.
+
+    Inputs
+    ------
+    func: Callable
+        Function to wrap.
+
+    Outputs
+    -------
+    Callable
+        Wrapped function that updates :data:`status` before executing.
+    """
+
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        status.last_function = func.__name__
+        return func(*args, **kwargs)
+
+    return wrapper
+
+
+@track
 def load_config(path: str) -> Dict[str, Any]:
     """Load YAML configuration file."""
     with open(path, "r", encoding="utf-8") as f:
@@ -30,27 +87,111 @@ def load_config(path: str) -> Dict[str, Any]:
 
 @dataclass
 class SamplingConfig:
+    """Control how densely frames are sampled from the input videos.
+
+    Purpose
+    -------
+    Describe the temporal down-sampling strategy so that high frame rate
+    inputs do not overwhelm the pipeline.
+
+    Attributes
+    ----------
+    fps: float | None, default ``None``
+        Target frames-per-second rate. If ``None`` the ``step`` parameter is
+        used directly.
+    step: int, default ``1``
+        Fixed stride in frames when ``fps`` is unspecified.
+    """
+
     fps: float | None = None
     step: int = 1
 
 @dataclass
 class QualityConfig:
+    """Thresholds used to discard blurry or poorly lit frames.
+
+    Purpose
+    -------
+    Avoid exporting frames that are unlikely to yield useful training data by
+    checking focus (blur) and brightness (luma).
+
+    Attributes
+    ----------
+    blur: float, default ``100.0``
+        Minimum Laplacian variance allowed; lower values are considered blurry.
+    luma_min: int, default ``40``
+        Lower bound on the mean pixel intensity.
+    luma_max: int, default ``220``
+        Upper bound on the mean pixel intensity.
+    """
+
     blur: float = 100.0
     luma_min: int = 40
     luma_max: int = 220
 
 @dataclass
 class YoloConfig:
+    """Configuration for the YOLO pre-labeling stage.
+
+    Purpose
+    -------
+    Specify model weights and detection sensitivity so the pipeline can
+    bootstrap labels automatically.
+
+    Attributes
+    ----------
+    weights: str
+        Path to the YOLO weights file.
+    conf_thr: float, default ``0.25``
+        Confidence threshold below which detections are ignored.
+    """
+
     weights: str
     conf_thr: float = 0.25
 
 @dataclass
 class ExportConfig:
+    """Describe how and where annotations should be written.
+
+    Purpose
+    -------
+    Allow the pipeline to output datasets in multiple formats without
+    hard-coding file paths or layout.
+
+    Attributes
+    ----------
+    output_dir: str
+        Destination directory for exported files.
+    format: str, default ``"yolo"``
+        Output style, e.g. ``"yolo"`` or ``"cvat"``.
+    """
+
     output_dir: str
     format: str = "yolo"
 
 @dataclass
 class PipelineConfig:
+    """Aggregate configuration for a pipeline run.
+
+    Purpose
+    -------
+    Bundle all subordinate configuration sections so callers only pass a single
+    object around.
+
+    Attributes
+    ----------
+    videos: list[str]
+        Paths to input videos.
+    sampling: SamplingConfig
+        Controls temporal sampling.
+    quality: QualityConfig
+        Filters out unsuitable frames.
+    yolo: YoloConfig | None
+        Parameters for the pre-labeling model; ``None`` disables detection.
+    export: ExportConfig
+        Dataset export options.
+    """
+
     videos: List[str] = field(default_factory=list)
     sampling: SamplingConfig = field(default_factory=SamplingConfig)
     quality: QualityConfig = field(default_factory=QualityConfig)
@@ -62,16 +203,60 @@ class VidIngest:
     """Video ingestion with adaptive frame sampling."""
 
     def __init__(self, videos: List[str], config: SamplingConfig):
+        """Store video list and sampling configuration.
+
+        Purpose
+        -------
+        The constructor merely records parameters so that iteration can later
+        open files lazily, avoiding upfront validation work.
+
+        Inputs
+        ------
+        videos: list[str]
+            Paths to video files to be processed.
+        config: SamplingConfig
+            Controls frame skipping behaviour.
+
+        Outputs
+        -------
+        None
+            State is stored on the instance for later use.
+        """
         self.videos = videos
         self.config = config
 
+    @track
     def __iter__(self) -> Iterator[Dict[str, Any]]:
+        """Yield sampled frames from each video.
+
+        Purpose
+        -------
+        Abstract away the sampling logic so callers can simply iterate over
+        frames without worrying about frame rates or file handling.
+
+        Inputs
+        ------
+        None
+            The method uses instance attributes configured at construction.
+
+        Outputs
+        -------
+        Iterator[dict]
+            Each dictionary contains the video path, frame index and image
+            array for sampled frames.
+        """
         for video_path in self.videos:
             cap = cv2.VideoCapture(video_path)
             if not cap.isOpened():
                 continue
+            # Derive a stride based on desired FPS; fall back to a fixed step for
+            # robustness when metadata is missing.
             orig_fps = cap.get(cv2.CAP_PROP_FPS) or 30
-            step = int(max(1, orig_fps / self.config.fps)) if self.config.fps else self.config.step
+            step = (
+                int(max(1, orig_fps / self.config.fps))
+                if self.config.fps
+                else self.config.step
+            )
             frame_idx = 0
             while True:
                 ret, frame = cap.read()
@@ -91,11 +276,46 @@ class QualityFilter:
     """Filter frames based on blur and luma thresholds."""
 
     def __init__(self, config: QualityConfig):
+        """Record thresholds used during :meth:`check`.
+
+        Purpose
+        -------
+        Storing the thresholds separately keeps the `check` method lightweight
+        and avoids repeatedly accessing the config object.
+
+        Inputs
+        ------
+        config: QualityConfig
+            Contains blur and luma limits.
+
+        Outputs
+        -------
+        None
+            Instance attributes are set for later use.
+        """
         self.blur_thr = config.blur
         self.luma_min = config.luma_min
         self.luma_max = config.luma_max
 
+    @track
     def check(self, frame) -> bool:
+        """Return ``True`` if a frame passes quality thresholds.
+
+        Purpose
+        -------
+        Quickly discard frames that are too blurry or too dark/bright, which
+        reduces downstream processing and storage.
+
+        Inputs
+        ------
+        frame: ndarray
+            Image in BGR order as produced by OpenCV.
+
+        Outputs
+        -------
+        bool
+            ``True`` when the frame should be kept, ``False`` otherwise.
+        """
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         blur_val = cv2.Laplacian(gray, cv2.CV_64F).var()
         luma = gray.mean()
@@ -106,6 +326,24 @@ class PreLabelYOLO:
     """Run YOLO inference to produce bounding boxes."""
 
     def __init__(self, config: YoloConfig):
+        """Load the chosen YOLO model backend.
+
+        Purpose
+        -------
+        Dynamically select between an ONNX-based DNN handler and the
+        Ultralytics implementation, enabling flexibility without duplicating
+        inference code elsewhere.
+
+        Inputs
+        ------
+        config: YoloConfig
+            Source of the weights path and confidence threshold.
+
+        Outputs
+        -------
+        None
+            The model and metadata are stored on ``self`` for later detection.
+        """
         self.conf_thr = config.conf_thr
         weights = config.weights
         if weights.endswith(".onnx") and DnnHandler is not None:
@@ -123,7 +361,25 @@ class PreLabelYOLO:
             except AttributeError:
                 self.names = {}
 
+    @track
     def detect(self, frame) -> List[Dict[str, Any]]:
+        """Run inference on ``frame`` and return person detections.
+
+        Purpose
+        -------
+        Provide a uniform output structure regardless of backend, simplifying
+        downstream processing.
+
+        Inputs
+        ------
+        frame: ndarray
+            BGR image to analyze.
+
+        Outputs
+        -------
+        list[dict]
+            Bounding boxes with class, label and confidence fields.
+        """
         boxes: List[Dict[str, Any]] = []
         if self.backend == "dnn":
             raw_boxes, confs = self.model.find_person(frame)
@@ -162,6 +418,7 @@ class PreLabelYOLO:
 
 
 # Additional helper to normalize configuration input for run/preview
+@track
 def _ensure_cfg(cfg: "PipelineConfig | str") -> "PipelineConfig":
     """Return a :class:`PipelineConfig` from a path or object."""
     if isinstance(cfg, PipelineConfig):
@@ -174,6 +431,23 @@ class DatasetExporter:
     """Save frames, labels and debug information."""
 
     def __init__(self, config: ExportConfig):
+        """Prepare output directories and debug log.
+
+        Purpose
+        -------
+        Ensure required folders exist before any frames are processed, avoiding
+        repetitive checks inside the hot save loop.
+
+        Inputs
+        ------
+        config: ExportConfig
+            Carries the output directory path.
+
+        Outputs
+        -------
+        None
+            Directories are created and a debug file handle is opened.
+        """
         self.root = Path(config.output_dir)
         self.img_dir = self.root / "images"
         self.lbl_dir = self.root / "labels"
@@ -182,7 +456,27 @@ class DatasetExporter:
         self.debug_path = self.root / "debug.jsonl"
         self.debug_file = self.debug_path.open("w", encoding="utf-8")
 
+    @track
     def save(self, item: Dict[str, Any], boxes: List[Dict[str, Any]]):
+        """Write one frame and its annotations to disk.
+
+        Purpose
+        -------
+        Persist data in a YOLO-friendly layout while also logging rich
+        information for potential debugging or later analysis.
+
+        Inputs
+        ------
+        item: dict
+            Metadata and pixel data for the frame.
+        boxes: list[dict]
+            Bounding boxes associated with the frame.
+
+        Outputs
+        -------
+        None
+            Files are written to the export directory and debug log.
+        """
         frame = item["frame"]
         idx = item["frame_idx"]
         video_name = Path(item["video"]).stem
@@ -203,21 +497,62 @@ class DatasetExporter:
             "video": item["video"],
             "frame_idx": idx,
         }
+        # JSON Lines format allows streaming large debug logs without
+        # constructing a massive in-memory structure.
         self.debug_file.write(json.dumps(debug) + "\n")
-    def close(self):
-        self.debug_file.close()
 
+    def close(self):
+        """Flush and close the debug log."""
+        self.debug_file.close()
+        
 
 class CvatExporter:
-    """Save frames and annotations in CVAT format."""
+    """Save frames and annotations in CVAT XML format."""
 
     def __init__(self, config: ExportConfig):
+        """Create an image directory and buffer annotations.
+
+        Purpose
+        -------
+        CVAT expects a single XML with all boxes, so we accumulate annotations
+        in memory and defer writing until :meth:`close`.
+
+        Inputs
+        ------
+        config: ExportConfig
+            Specifies the output directory.
+
+        Outputs
+        -------
+        None
+            Directories are created and an in-memory list is initialised.
+        """
         self.root = Path(config.output_dir)
         self.img_dir = self.root / "images"
         self.img_dir.mkdir(parents=True, exist_ok=True)
         self.annotations: List[Dict[str, Any]] = []
 
+    @track
     def save(self, item: Dict[str, Any], boxes: List[Dict[str, Any]]):
+        """Append annotation metadata for one frame.
+
+        Purpose
+        -------
+        Images are written immediately to avoid large memory use, while box
+        metadata is stored for later XML serialization.
+
+        Inputs
+        ------
+        item: dict
+            Frame metadata including pixel data and identifiers.
+        boxes: list[dict]
+            Bounding boxes detected in the frame.
+
+        Outputs
+        -------
+        None
+            Updates the internal ``annotations`` list and saves an image.
+        """
         frame = item["frame"]
         idx = item["frame_idx"]
         video_name = Path(item["video"]).stem
@@ -232,6 +567,7 @@ class CvatExporter:
         })
 
     def close(self):
+        """Write accumulated annotations to ``annotations.xml``."""
         import xml.etree.ElementTree as ET
 
         root_el = ET.Element("annotations")
@@ -262,6 +598,9 @@ class CvatExporter:
 
         tree = ET.ElementTree(root_el)
         tree.write(self.root / "annotations.xml", encoding="utf-8", xml_declaration=True)
+
+
+@track
 def run(cfg: "PipelineConfig | str", show_preview: bool = False) -> None:
     """Run the dataset generation pipeline with optional spline interpolation.
 
@@ -304,6 +643,10 @@ def run(cfg: "PipelineConfig | str", show_preview: bool = False) -> None:
             continue
         item["boxes"] = yolo.detect(frame)
         items.append(item)
+    # The total count is known only after ingestion because quality checks can
+    # drop frames; we expose it here for progress displays.
+    status.total_frames = len(items)
+    status.current_frame = 0
 
     # Compute centers, widths and heights for frames with detections.
     # Each entry stores the frame index and bounding box geometry for frames
@@ -371,7 +714,8 @@ def run(cfg: "PipelineConfig | str", show_preview: bool = False) -> None:
                 ]
             trajectory.append((int(float(sx(fi))), int(float(sy(fi)))))
 
-    for item in items:
+    for idx, item in enumerate(items, start=1):
+        status.current_frame = idx
         boxes = item.get("boxes", [])
         if boxes:
             if show_preview:
@@ -400,12 +744,24 @@ def run(cfg: "PipelineConfig | str", show_preview: bool = False) -> None:
     if show_preview:
         cv2.destroyAllWindows()
 
+@track
 def preview(cfg: "PipelineConfig | str") -> None:
-    """Preview the pipeline output with bounding boxes on screen.
+    """Preview detections without exporting files.
 
-    The ``cfg`` argument may be a path to a YAML file or a
-    :class:`PipelineConfig` object. This mirrors :func:`run` so that callers
-    such as the GUI can construct configurations in code.
+    Purpose
+    -------
+    Provide a quick visual check of the pipeline configuration by rendering
+    bounding boxes directly to the screen.
+
+    Inputs
+    ------
+    cfg: PipelineConfig | str
+        Configuration object or path to one on disk.
+
+    Outputs
+    -------
+    None
+        Opens a window displaying frames until the user quits.
     """
     cfg = _ensure_cfg(cfg)
     ingest = VidIngest(cfg.videos, cfg.sampling)
@@ -426,6 +782,22 @@ def preview(cfg: "PipelineConfig | str") -> None:
 
 
 def main(argv: list[str] | None = None) -> None:
+    """Command-line entry point.
+
+    Purpose
+    -------
+    Parse CLI arguments and dispatch to the appropriate subcommand.
+
+    Inputs
+    ------
+    argv: list[str] | None
+        Argument list; defaults to :data:`sys.argv` when ``None``.
+
+    Outputs
+    -------
+    None
+        Executes requested subcommand and exits.
+    """
     parser = argparse.ArgumentParser(
         description="Annotation dataset pipeline",
     )
