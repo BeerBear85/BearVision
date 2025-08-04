@@ -4,7 +4,10 @@ import re
 
 
 class DummyCreds:
-    pass
+    """Simple credentials object used by stubs."""
+
+    def to_json(self):  # pragma: no cover - trivial
+        return "{}"
 
 
 class DummyMediaFileUpload:
@@ -32,13 +35,37 @@ def install_google_stubs():
     apiclient_mod = types.ModuleType('googleapiclient')
     disc_mod = types.ModuleType('googleapiclient.discovery')
     http_mod = types.ModuleType('googleapiclient.http')
+    errors_mod = types.ModuleType('googleapiclient.errors')
     disc_mod.build = lambda *a, **k: None
     http_mod.MediaFileUpload = DummyMediaFileUpload
     http_mod.MediaIoBaseDownload = DummyMediaIoBaseDownload
+    errors_mod.HttpError = type('HttpError', (Exception,), {})
 
     sys.modules['googleapiclient'] = apiclient_mod
     sys.modules['googleapiclient.discovery'] = disc_mod
     sys.modules['googleapiclient.http'] = http_mod
+    sys.modules['googleapiclient.errors'] = errors_mod
+
+    # Stub modules for authentication flows so the handler can be imported
+    oauthlib_mod = types.ModuleType('google_auth_oauthlib')
+    flow_mod = types.ModuleType('google_auth_oauthlib.flow')
+    flow_mod.InstalledAppFlow = types.SimpleNamespace(from_client_config=lambda *a, **k: DummyCreds())
+    oauthlib_mod.flow = flow_mod
+    sys.modules['google_auth_oauthlib'] = oauthlib_mod
+    sys.modules['google_auth_oauthlib.flow'] = flow_mod
+
+    oauth2_mod = types.ModuleType('google.oauth2')
+    service_mod = types.ModuleType('google.oauth2.service_account')
+
+    class _Creds:
+        @staticmethod
+        def from_service_account_info(*a, **k):
+            return DummyCreds()
+
+    service_mod.Credentials = _Creds
+    oauth2_mod.service_account = service_mod
+    sys.modules['google.oauth2'] = oauth2_mod
+    sys.modules['google.oauth2.service_account'] = service_mod
 
 
 class FakeDriveService:
