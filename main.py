@@ -1,25 +1,29 @@
+"""Entry point for launching the BearVision desktop application."""
 
-# Make main process create the new file and sub-processes append - probably not the nices way of doing this
+# Make main process create the new file and sub-processes append - not ideal but keeps log intact across runs.
 import logging
 
 if __name__ == "__main__":
-    write_mode = 'w'
+    write_mode = "w"
 else:
-    write_mode = 'a'
+    write_mode = "a"
 
-logging.basicConfig(filename='debug.log',
-                    level=logging.DEBUG,
-                    format='%(asctime)s:%(levelname)-8s:%(name)s:%(message)s',
-                    filemode=write_mode)
+logging.basicConfig(
+    filename="debug.log",
+    level=logging.DEBUG,
+    format="%(asctime)s:%(levelname)-8s:%(name)s:%(message)s",
+    filemode=write_mode,
+)
 
 if __name__ == "__main__":
     import sys
     import tkinter
     import os
 
-    sys.path.append(os.path.join('code', 'Modules'))
-    sys.path.append(os.path.join('code', 'Application'))
-    sys.path.append(os.path.join('code', 'external_modules'))
+    # Extend search path so local packages can be imported when running from source.
+    sys.path.append(os.path.join("code", "Modules"))
+    sys.path.append(os.path.join("code", "Application"))
+    sys.path.append(os.path.join("code", "external_modules"))
 
     from Application import Application
     from GUI import BearVisionGUI
@@ -32,10 +36,9 @@ if __name__ == "__main__":
     ConfigurationHandler.read_last_used_config_file()
     app_instance = Application()
 
-    #Start GUI
+    # Start GUI
     GUI_root = tkinter.Tk()
     my_gui = BearVisionGUI(GUI_root, app_instance)
     GUI_root.mainloop()
-
 
     logger.debug("-------------------------End-------------------------------------")
