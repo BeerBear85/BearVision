@@ -615,9 +615,11 @@ def run(cfg: "PipelineConfig | str", show_preview: bool = False) -> None:
     cfg: PipelineConfig | str
         Pipeline configuration object or path to a YAML file describing one.
     show_preview: bool, default ``False``
-        When ``True`` an OpenCV window shows the bounding boxes for each frame
-        and the final trajectory. The window waits for a keypress on the final
-        frame so users can confirm the interpolation.
+        When ``True`` an OpenCV window appears only after processing completes
+        to display the interpolated trajectory. If no trajectory can be
+        computed, the last processed frame with its detection is shown instead.
+        The window waits for a keypress on the final frame so users can confirm
+        the interpolation.
 
     Outputs
     -------
@@ -718,30 +720,40 @@ def run(cfg: "PipelineConfig | str", show_preview: bool = False) -> None:
         status.current_frame = idx
         boxes = item.get("boxes", [])
         if boxes:
-            if show_preview:
-                disp = item["frame"].copy()
-                for b in boxes:
-                    x1, y1, x2, y2 = map(int, b["bbox"])
-                    cv2.rectangle(disp, (x1, y1), (x2, y2), (0, 255, 0), 2)
-                cv2.imshow("preview", disp)
-                if cv2.waitKey(1) & 0xFF == ord("q"):
-                    break
+            # The per-frame preview was removed to keep the pipeline focused on
+            # throughput; rendering every frame is expensive and offers little
+            # additional value when the final trajectory can be reviewed
+            # separately.
             exporter.save(item, boxes)
 
     exporter.close()
-    if show_preview and trajectory:
-        # Display the final frame with the full interpolated trajectory so that
-        # annotators can visually verify the estimate before continuing.
-        final_item = next(
-            (it for it in items if it["frame_idx"] == det_points[-1][0]), None
-        )
-        if final_item is not None:
-            disp = final_item["frame"].copy()
-            pts = np.array(trajectory, dtype=int)
-            cv2.polylines(disp, [pts], False, (0, 0, 255), 2)
-            cv2.imshow("trajectory", disp)
-            cv2.waitKey(0)  # Wait for user confirmation
     if show_preview:
+        if trajectory:
+            # Display the final frame with the full interpolated trajectory so
+            # that annotators can visually verify the estimate before
+            # continuing.
+            final_item = next(
+                (it for it in items if it["frame_idx"] == det_points[-1][0]),
+                None,
+            )
+            if final_item is not None:
+                disp = final_item["frame"].copy()
+                pts = np.array(trajectory, dtype=int)
+                cv2.polylines(disp, [pts], False, (0, 0, 255), 2)
+                cv2.imshow("trajectory", disp)
+                cv2.waitKey(0)  # Wait for user confirmation
+        else:
+            # When no trajectory exists (e.g., short clips) still show the last
+            # processed frame with its detection so users receive feedback that
+            # processing succeeded.
+            last_item = items[-1] if items else None
+            if last_item is not None:
+                disp = last_item["frame"].copy()
+                for b in last_item.get("boxes", []):
+                    x1, y1, x2, y2 = map(int, b["bbox"])
+                    cv2.rectangle(disp, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                cv2.imshow("trajectory", disp)
+                cv2.waitKey(0)
         cv2.destroyAllWindows()
 
 @track

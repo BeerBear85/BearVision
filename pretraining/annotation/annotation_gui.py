@@ -64,6 +64,9 @@ class AnnotationGUI:
         self.video_path = tk.StringVar()
         self.output_dir = tk.StringVar()
         self.status = tk.StringVar(value="Idle")
+        # A separate variable tracks frame progress so that the textual
+        # description of the current step remains uncluttered by numbers.
+        self.frame_progress = tk.StringVar(value="Frame: 0/0")
 
         tk.Button(
             master, text="Select Video", command=self.select_video
@@ -81,6 +84,11 @@ class AnnotationGUI:
 
         tk.Button(master, text="Run", command=self.start).pack(fill="x")
         tk.Label(master, textvariable=self.status, anchor="w").pack(fill="x")
+        # Present the numeric progress in its own label so long jobs can be
+        # monitored at a glance without parsing additional status text.
+        tk.Label(master, textvariable=self.frame_progress, anchor="w").pack(
+            fill="x"
+        )
 
         # Double the window's dimensions for better visibility without the
         # caller needing to guess an appropriate size ahead of widget creation.
@@ -168,7 +176,7 @@ class AnnotationGUI:
         thread.start()
 
     def refresh_status(self) -> None:
-        """Update the status label with pipeline progress.
+        """Update status and frame-progress labels with pipeline progress.
 
         Purpose
         -------
@@ -183,16 +191,22 @@ class AnnotationGUI:
         Outputs
         -------
         None
-            The GUI label ``self.status`` is updated and the method schedules
-            itself to run again.
+            ``self.status`` and ``self.frame_progress`` are updated and the
+            method schedules itself to run again.
         """
 
         st = ap.status
+        # Always show the last function name; fall back to "Idle" when nothing
+        # has run yet for clarity at application start.
+        self.status.set(st.last_function or "Idle")
         if st.total_frames:
-            text = f"{st.last_function} | frame {st.current_frame}/{st.total_frames}"
+            # Expose deterministic frame counts so users know precisely how far
+            # along the pipeline is without relying on heuristics.
+            self.frame_progress.set(
+                f"Frame {st.current_frame}/{st.total_frames}"
+            )
         else:
-            text = st.last_function or "Idle"
-        self.status.set(text)
+            self.frame_progress.set("Frame: 0/0")
         # Using ``after`` avoids blocking the main loop while providing periodic
         # updates that are sufficient for human perception.
         self.master.after(200, self.refresh_status)
