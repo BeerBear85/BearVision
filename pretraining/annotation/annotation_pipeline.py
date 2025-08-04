@@ -8,6 +8,7 @@ import cv2
 import yaml
 import numpy as np
 from scipy.interpolate import CubicSpline
+from scipy.signal import butter, filtfilt
 from ultralytics import YOLO
 import argparse
 import sys
@@ -170,6 +171,24 @@ class ExportConfig:
     format: str = "yolo"
 
 @dataclass
+class TrajectoryConfig:
+    """Settings for smoothing the estimated motion path.
+
+    Purpose
+    -------
+    Allow callers to attenuate high-frequency jitter in the trajectory while
+    preserving temporal alignment via zero-phase filtering.
+
+    Attributes
+    ----------
+    cutoff_hz: float, default ``0.0``
+        Cutoff frequency of the Butterworth low-pass filter in Hertz. A value
+        of ``0.0`` disables filtering.
+    """
+
+    cutoff_hz: float = 0.0
+
+@dataclass
 class PipelineConfig:
     """Aggregate configuration for a pipeline run.
 
@@ -197,6 +216,7 @@ class PipelineConfig:
     quality: QualityConfig = field(default_factory=QualityConfig)
     yolo: YoloConfig | None = None
     export: ExportConfig = field(default_factory=lambda: ExportConfig(output_dir="dataset"))
+    trajectory: TrajectoryConfig = field(default_factory=TrajectoryConfig)
 
 
 class VidIngest:
@@ -424,7 +444,64 @@ def _ensure_cfg(cfg: "PipelineConfig | str") -> "PipelineConfig":
     if isinstance(cfg, PipelineConfig):
         return cfg
     cfg_dict = load_config(cfg)
-    return PipelineConfig(**cfg_dict)
+    sampling = cfg_dict.get("sampling", {})
+    if isinstance(sampling, dict):
+        sampling = SamplingConfig(**sampling)
+    quality = cfg_dict.get("quality", {})
+    if isinstance(quality, dict):
+        quality = QualityConfig(**quality)
+    yolo = cfg_dict.get("yolo")
+    if isinstance(yolo, dict):
+        yolo = YoloConfig(**yolo)
+    export = cfg_dict.get("export", {})
+    if isinstance(export, dict):
+        export = ExportConfig(**export)
+    trajectory = cfg_dict.get("trajectory", {})
+    if isinstance(trajectory, dict):
+        trajectory = TrajectoryConfig(**trajectory)
+    return PipelineConfig(
+        videos=cfg_dict.get("videos", []),
+        sampling=sampling,
+        quality=quality,
+        yolo=yolo,
+        export=export,
+        trajectory=trajectory,
+    )
+
+
+def _lowpass_filter(seq: List[float], cutoff_hz: float, sample_rate: float) -> List[float]:
+    """Apply zero-phase low-pass filtering to a sequence.
+
+    Purpose
+    -------
+    Suppress high-frequency jitter in the trajectory without introducing
+    latency, keeping filtered positions aligned with their original frames.
+
+    Inputs
+    ------
+    seq: list[float]
+        Sequence of samples representing either x or y coordinates.
+    cutoff_hz: float
+        Desired cutoff frequency in Hertz.
+    sample_rate: float
+        Sampling rate of ``seq`` in Hertz.
+
+    Outputs
+    -------
+    list[float]
+        Filtered sequence retaining the original length.
+    """
+
+    if cutoff_hz <= 0:
+        # Users can disable filtering by setting the cutoff to zero.
+        return seq
+    order = 1  # First order keeps attenuation mild and preserves realism.
+    nyq = 0.5 * sample_rate
+    normal_cutoff = cutoff_hz / nyq
+    b, a = butter(order, normal_cutoff, btype="low", analog=False)
+    # ``filtfilt`` runs the filter forward and backward, eliminating phase
+    # delay so that annotations remain time-aligned.
+    return filtfilt(b, a, seq).tolist()
 
 
 class DatasetExporter:
@@ -607,8 +684,8 @@ def run(cfg: "PipelineConfig | str", show_preview: bool = False) -> None:
     Purpose
     -------
     Export frames and bounding box annotations, estimating missing person
-    locations using spline interpolation so that low-quality models receive a
-    smoother training trajectory.
+    locations using spline interpolation and optional low-pass filtering so
+    that low-quality models receive a smoother training trajectory.
 
     Inputs
     ------
@@ -690,31 +767,50 @@ def run(cfg: "PipelineConfig | str", show_preview: bool = False) -> None:
         sh = CubicSpline(frames, hs)
         first, last = frames[0], frames[-1]
         idx_map = {it["frame_idx"]: it for it in items}
+        interp: List[tuple[int, float, float, float, float, float, Dict[str, Any]]] = []
         for fi in range(first, last + 1):
             item = idx_map.get(fi)
             if item is None:
                 # If a frame is missing (e.g. skipped due to sampling), we
                 # cannot interpolate its image so we simply ignore it.
                 continue
-            if not item["boxes"]:
-                cx = float(sx(fi))
-                cy = float(sy(fi))
+            cx = float(sx(fi))
+            cy = float(sy(fi))
+            if item["boxes"]:
+                # When a detection exists, reuse its size and confidence because
+                # those measurements are trusted over the spline prediction.
+                b = item["boxes"][0]
+                x1, y1, x2, y2 = b["bbox"]
+                w = x2 - x1
+                h = y2 - y1
+                conf = b.get("conf", 0.0)
+            else:
                 w = float(sw(fi))
                 h = float(sh(fi))
-                x1 = cx - w / 2
-                y1 = cy - h / 2
-                x2 = cx + w / 2
-                y2 = cy + h / 2
-                # Confidence is set to zero to signal an estimated box.
-                item["boxes"] = [
-                    {
-                        "bbox": [x1, y1, x2, y2],
-                        "cls": det_points[0][5],
-                        "label": det_points[0][6],
-                        "conf": 0.0,
-                    }
-                ]
-            trajectory.append((int(float(sx(fi))), int(float(sy(fi)))))
+                conf = 0.0  # Mark interpolated boxes with zero confidence
+            interp.append((fi, cx, cy, w, h, conf, item))
+
+        # Design the filter using the configured cutoff and sampling rate.
+        sample_rate = cfg.sampling.fps if cfg.sampling.fps else 30 / cfg.sampling.step
+        # ``30 / step`` mirrors the ingestion's fallback when FPS metadata is
+        # unavailable, keeping assumptions consistent across modules.
+        xs = _lowpass_filter([p[1] for p in interp], cfg.trajectory.cutoff_hz, sample_rate)
+        ys = _lowpass_filter([p[2] for p in interp], cfg.trajectory.cutoff_hz, sample_rate)
+
+        for (_fi, _cx, _cy, w, h, conf, item), cx, cy in zip(interp, xs, ys):
+            x1 = cx - w / 2
+            y1 = cy - h / 2
+            x2 = cx + w / 2
+            y2 = cy + h / 2
+            item["boxes"] = [
+                {
+                    "bbox": [x1, y1, x2, y2],
+                    "cls": det_points[0][5],
+                    "label": det_points[0][6],
+                    "conf": conf,
+                }
+            ]
+            trajectory.append((int(cx), int(cy)))
 
     for idx, item in enumerate(items, start=1):
         status.current_frame = idx

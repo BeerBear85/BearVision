@@ -9,6 +9,8 @@ quality:
 yolo:
   weights: yolov8s.onnx
   conf_thr: 0.25
+trajectory:
+  cutoff_hz: 0.1
 export:
   output_dir: dataset
   format: cvat
