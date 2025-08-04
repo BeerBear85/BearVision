@@ -89,7 +89,22 @@ class AnnotationGUI:
         master.geometry(f"{w*2}x{h*2}")
         self.refresh_status()
     def select_video(self) -> None:
-        """Prompt the user to select a video file."""
+        """Prompt the user to select a video file.
+
+        Purpose
+        -------
+        Allow users to browse for an input file without typing paths.
+
+        Inputs
+        ------
+        None
+            Uses a file dialog instead of parameters.
+
+        Outputs
+        -------
+        None
+            The chosen path is stored in ``self.video_path``.
+        """
         path = filedialog.askopenfilename(
             title="Select video",
             filetypes=[
@@ -101,13 +116,43 @@ class AnnotationGUI:
             self.video_path.set(path)
 
     def select_output(self) -> None:
-        """Prompt the user to select an output directory."""
+        """Prompt the user to select an output directory.
+
+        Purpose
+        -------
+        Collect the dataset destination from the user through a GUI dialog.
+
+        Inputs
+        ------
+        None
+            Destination is chosen interactively.
+
+        Outputs
+        -------
+        None
+            The path is stored in ``self.output_dir``.
+        """
         path = filedialog.askdirectory(title="Select output directory")
         if path:
             self.output_dir.set(path)
 
     def start(self) -> None:
-        """Launch the pipeline in a background thread."""
+        """Launch the pipeline in a background thread.
+
+        Purpose
+        -------
+        Kick off processing without freezing the GUI.
+
+        Inputs
+        ------
+        None
+            Uses previously selected paths stored on the instance.
+
+        Outputs
+        -------
+        None
+            A daemon thread is spawned to run the pipeline.
+        """
         video = self.video_path.get()
         output = self.output_dir.get()
         if not video or not output:
