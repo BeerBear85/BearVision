@@ -9,8 +9,7 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.errors import HttpError
-from googleapiclient.discovery import build
-import types
+from google.oauth2 import service_account
 from configparser import ConfigParser
 
 from ConfigurationHandler import ConfigurationHandler
@@ -39,8 +38,10 @@ class GoogleDriveHandler:
     def _authenticate(self):
         """
         Purpose:
-            Build an authenticated Google Drive service using service account
-            credentials stored in a base64-encoded environment variable.
+            Build an authenticated Google Drive service using credentials
+            stored in a base64-encoded environment variable. Depending on the
+            configuration, either an OAuth 2.0 user flow or a service account is
+            used.
         Inputs:
             None; relies on environment variables and instance configuration.
         Outputs:
@@ -56,6 +57,7 @@ class GoogleDriveHandler:
             gd_cfg = self.config.get("GOOGLE_DRIVE", {})
 
         secret_env = gd_cfg.get("secret_key_name", "GOOGLE_CREDENTIALS_JSON")
+        auth_mode = gd_cfg.get("auth_mode", "user").lower()
         secret_b64 = os.getenv(secret_env, "")
         if not secret_b64:
             raise RuntimeError(
@@ -63,20 +65,31 @@ class GoogleDriveHandler:
             )
 
         try:
-            # Decode credentials in-memory to avoid temporary files which could
-            # linger or introduce race conditions on shared systems.
-            secret_json  = json.loads(base64.b64decode(secret_b64).decode("utf-8"))
-            flow = InstalledAppFlow.from_client_config(secret_json, scopes=["https://www.googleapis.com/auth/drive.file"])
-            creds = flow.run_local_server(port=0)
-            with open("token.json", "w") as token:
-               token.write(creds.to_json())
+            # Credentials are decoded in memory to avoid writing temporary
+            # files which may leak secrets or require cleanup.
+            info = json.loads(base64.b64decode(secret_b64).decode("utf-8"))
 
-            #creds = service_account.Credentials.from_service_account_info(
-            #    info, scopes=["https://www.googleapis.com/auth/drive"]
-           #)
+            if auth_mode == "service":
+                # Service accounts are ideal for headless or automated
+                # environments where a user is not present.
+                creds = service_account.Credentials.from_service_account_info(
+                    info,
+                    scopes=["https://www.googleapis.com/auth/drive"],
+                )
+            else:
+                # OAuth flow is chosen to allow end-users to grant access from
+                # their own Google accounts. A dynamic port avoids collisions
+                # on multi-user systems.
+                flow = InstalledAppFlow.from_client_config(
+                    info, scopes=["https://www.googleapis.com/auth/drive.file"]
+                )
+                creds = flow.run_local_server(port=0)
+                # Persist the token for convenience so subsequent runs can
+                # reuse the refresh token instead of prompting every time.
+                with open("token.json", "w") as token:
+                    token.write(creds.to_json())
         except Exception as exc:  # pragma: no cover - defensive guard
             raise RuntimeError("Invalid Google Drive credentials") from exc
-        
 
         build_kwargs = {
             "credentials": creds,
@@ -85,7 +98,8 @@ class GoogleDriveHandler:
         try:
             self.service = build("drive", "v3", **build_kwargs)
         except HttpError as error:
-            # TODO(developer) - Handle errors from drive API.
+            # Network or API errors are surfaced to aid diagnostics rather than
+            # silently ignoring failures.
             print(f"An error occurred: {error}")
 
 
