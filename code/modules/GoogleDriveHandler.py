@@ -39,11 +39,14 @@ class GoogleDriveHandler:
         """
         Purpose:
             Build an authenticated Google Drive service using credentials
-            stored in a base64-encoded environment variable. Depending on the
-            configuration, either an OAuth 2.0 user flow or a service account is
-            used.
+            stored in one or two base64-encoded environment variables. Splitting
+            allows extremely long credential strings to be handled without
+            exceeding environment limits. Depending on the configuration, either
+            an OAuth 2.0 user flow or a service account is used.
         Inputs:
             None; relies on environment variables and instance configuration.
+            Expects the names ``secret_key_name`` and optionally
+            ``secret_key_name_2`` in the ``GOOGLE_DRIVE`` configuration section.
         Outputs:
             None; sets ``self.service`` when successful.
         """
@@ -57,8 +60,13 @@ class GoogleDriveHandler:
             gd_cfg = self.config.get("GOOGLE_DRIVE", {})
 
         secret_env = gd_cfg.get("secret_key_name", "GOOGLE_CREDENTIALS_JSON")
+        secret_env_2 = gd_cfg.get("secret_key_name_2", "GOOGLE_CREDENTIALS_B64_2")
         auth_mode = gd_cfg.get("auth_mode", "user").lower()
-        secret_b64 = os.getenv(secret_env, "")
+
+        # Concatenate the two environment variables. Splitting allows very large
+        # base64 strings to bypass shell-specific length limits while keeping the
+        # decoding logic simple.
+        secret_b64 = os.getenv(secret_env, "") + os.getenv(secret_env_2, "")
         if not secret_b64:
             raise RuntimeError(
                 f"Google Drive credentials not found. Set the '{secret_env}' environment variable.",
