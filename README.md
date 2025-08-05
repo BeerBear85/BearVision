@@ -47,6 +47,10 @@ python pretraining/annotation/annotation_gui.py
 
 Choose a video and output directory, then press **Run** to watch the video with green bounding boxes while frames and labels are exported.
 
+The pipeline automatically splits rider trajectories when no detections are
+seen for `detection_gap_timeout_s` seconds (default 3). Adjust this and other
+options in `pretraining/annotation/sample_config.yaml`.
+
 ## YOLOv8 Wakeboard Detector Training
 
 Fine-tune a YOLOv8 model on a folder of images and YOLO-format labels:

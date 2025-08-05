@@ -164,7 +164,7 @@ def test_run_with_preview(tmp_path):
     video = create_dummy_video(tmp_path / 'v.mp4', num_frames=1)
     cfg = ap.PipelineConfig(
         videos=[str(video)],
-        sampling=ap.SamplingConfig(),
+        sampling=ap.SamplingConfig(fps=5),
         quality=ap.QualityConfig(blur=0.0, luma_min=0, luma_max=255),
         yolo=ap.YoloConfig(weights='dummy.onnx', conf_thr=0.1),
         export=ap.ExportConfig(output_dir=str(tmp_path / 'dataset')),
@@ -188,7 +188,7 @@ def test_interpolation_generates_missing_frames(tmp_path):
     video = create_dummy_video(tmp_path / 'v.mp4', num_frames=3)
     cfg = ap.PipelineConfig(
         videos=[str(video)],
-        sampling=ap.SamplingConfig(),
+        sampling=ap.SamplingConfig(fps=5),
         quality=ap.QualityConfig(blur=0.0, luma_min=0, luma_max=255),
         yolo=ap.YoloConfig(weights='dummy.onnx', conf_thr=0.1),
         export=ap.ExportConfig(output_dir=str(tmp_path / 'dataset')),
@@ -251,3 +251,41 @@ def test_interpolation_waits_for_keypress(tmp_path):
     # The last waitKey call should be with 0, indicating the pause on the final
     # frame awaiting user confirmation.
     assert wait_mock.call_args_list[-1][0][0] == 0
+
+
+def test_split_trajectories_on_detection_gap(tmp_path):
+    video = create_dummy_video(tmp_path / 'v.mp4', num_frames=40, fps=5)
+    cfg = ap.PipelineConfig(
+        videos=[str(video)],
+        sampling=ap.SamplingConfig(fps=5),
+        quality=ap.QualityConfig(blur=0.0, luma_min=0, luma_max=255),
+        yolo=ap.YoloConfig(weights='dummy.onnx', conf_thr=0.1),
+        export=ap.ExportConfig(output_dir=str(tmp_path / 'dataset')),
+    )
+
+    def side_effect(frame):
+        idx = side_effect.call_idx
+        side_effect.call_idx += 1
+        if idx in (0, 1):
+            return [{'bbox': [0, 0, 10, 10], 'cls': 0, 'label': 'person', 'conf': 1.0}]
+        if idx in (25, 26):
+            return [{'bbox': [20, 20, 30, 30], 'cls': 0, 'label': 'person', 'conf': 1.0}]
+        return []
+
+    side_effect.call_idx = 0
+
+    with mock.patch.object(ap, 'PreLabelYOLO') as MockYolo:
+        MockYolo.return_value.detect.side_effect = side_effect
+        ap.run(cfg)
+
+    debug_path = tmp_path / 'dataset' / 'debug.jsonl'
+    records = [json.loads(l) for l in debug_path.read_text().splitlines()]
+    track_ids = {b['track_id'] for r in records for b in r['labels']}
+    assert track_ids == {1, 2}
+    track1_frames = [r['frame_idx'] for r in records if r['labels'][0]['track_id'] == 1]
+    assert max(track1_frames) == 16
+    last_track1 = max(
+        (r for r in records if r['labels'][0]['track_id'] == 1),
+        key=lambda r: r['frame_idx'],
+    )
+    assert last_track1['labels'][0]['conf'] == 0.0
