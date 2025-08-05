@@ -209,6 +209,9 @@ class PipelineConfig:
         Parameters for the pre-labeling model; ``None`` disables detection.
     export: ExportConfig
         Dataset export options.
+    detection_gap_timeout_s: float, default ``3.0``
+        Number of seconds without detections after which the current
+        trajectory is finalised and a new track is started.
     """
 
     videos: List[str] = field(default_factory=list)
@@ -217,6 +220,7 @@ class PipelineConfig:
     yolo: YoloConfig | None = None
     export: ExportConfig = field(default_factory=lambda: ExportConfig(output_dir="dataset"))
     trajectory: TrajectoryConfig = field(default_factory=TrajectoryConfig)
+    detection_gap_timeout_s: float = 3.0
 
 
 class VidIngest:
@@ -466,6 +470,7 @@ def _ensure_cfg(cfg: "PipelineConfig | str") -> "PipelineConfig":
         yolo=yolo,
         export=export,
         trajectory=trajectory,
+        detection_gap_timeout_s=cfg_dict.get("detection_gap_timeout_s", 3.0),
     )
 
 
@@ -504,6 +509,104 @@ def _lowpass_filter(seq: List[float], cutoff_hz: float, sample_rate: float) -> L
     return filtfilt(b, a, seq).tolist()
 
 
+def _export_segment(
+    segment_items: List[Dict[str, Any]],
+    det_points: List[tuple[int, float, float, float, float, int, str]],
+    exporter: "DatasetExporter | CvatExporter",
+    cfg: PipelineConfig,
+    sample_rate: float,
+    track_id: int,
+) -> tuple[List[tuple[int, int]], Dict[str, Any] | None]:
+    """Interpolate and export one trajectory segment.
+
+    Parameters
+    ----------
+    segment_items:
+        Frames belonging to the current segment in chronological order.
+    det_points:
+        Detection tuples ``(frame_idx, cx, cy, w, h, cls, label)`` for the
+        segment.
+    exporter:
+        Destination writer.
+    cfg:
+        Full pipeline configuration.
+    sample_rate:
+        Effective frames-per-second used for interpolation.
+    track_id:
+        Identifier assigned to this trajectory.
+
+    Returns
+    -------
+    tuple[list[tuple[int, int]], dict | None]
+        The smoothed trajectory and the last frame processed, used for
+        optional preview rendering.
+    """
+
+    trajectory: List[tuple[int, int]] = []
+    final_item: Dict[str, Any] | None = None
+
+    if len(det_points) >= 2:
+        frames = [p[0] for p in det_points]
+        cxs = [p[1] for p in det_points]
+        cys = [p[2] for p in det_points]
+        ws = [p[3] for p in det_points]
+        hs = [p[4] for p in det_points]
+        sx = CubicSpline(frames, cxs)
+        sy = CubicSpline(frames, cys)
+        sw = CubicSpline(frames, ws)
+        sh = CubicSpline(frames, hs)
+        idx_map = {it["frame_idx"]: it for it in segment_items}
+        first = segment_items[0]["frame_idx"]
+        last = segment_items[-1]["frame_idx"]
+        interp: List[tuple[int, float, float, float, float, float, Dict[str, Any]]] = []
+        for fi in range(first, last + 1):
+            item = idx_map.get(fi)
+            if item is None:
+                continue
+            cx = float(sx(fi))
+            cy = float(sy(fi))
+            if item.get("boxes"):
+                b = item["boxes"][0]
+                x1, y1, x2, y2 = b["bbox"]
+                w = x2 - x1
+                h = y2 - y1
+                conf = b.get("conf", 0.0)
+            else:
+                w = float(sw(fi))
+                h = float(sh(fi))
+                conf = 0.0
+            interp.append((fi, cx, cy, w, h, conf, item))
+
+        xs = _lowpass_filter([p[1] for p in interp], cfg.trajectory.cutoff_hz, sample_rate)
+        ys = _lowpass_filter([p[2] for p in interp], cfg.trajectory.cutoff_hz, sample_rate)
+
+        for (_fi, _cx, _cy, w, h, conf, item), cx, cy in zip(interp, xs, ys):
+            x1 = cx - w / 2
+            y1 = cy - h / 2
+            x2 = cx + w / 2
+            y2 = cy + h / 2
+            item["boxes"] = [
+                {
+                    "bbox": [x1, y1, x2, y2],
+                    "cls": det_points[0][5],
+                    "label": det_points[0][6],
+                    "conf": conf,
+                    "track_id": track_id,
+                }
+            ]
+            exporter.save(item, item["boxes"])
+            trajectory.append((int(cx), int(cy)))
+            final_item = item
+            status.current_frame += 1
+    else:
+        for item in segment_items:
+            if item.get("boxes"):
+                item["boxes"][0]["track_id"] = track_id
+                exporter.save(item, item["boxes"])
+                final_item = item
+                status.current_frame += 1
+
+    return trajectory, final_item
 class DatasetExporter:
     """Save frames, labels and debug information."""
 
@@ -752,105 +855,48 @@ def run(cfg: "PipelineConfig | str", show_preview: bool = False) -> None:
                 )
             )
 
+    sample_rate = cfg.sampling.fps if cfg.sampling.fps else 30 / cfg.sampling.step
+    gap_frames = int(cfg.detection_gap_timeout_s * sample_rate)
+    item_map = {it["frame_idx"]: it for it in items}
+
+    segments: List[List[tuple[int, float, float, float, float, int, str]]] = []
+    if det_points:
+        start = 0
+        for i in range(1, len(det_points)):
+            if det_points[i][0] - det_points[i - 1][0] > gap_frames:
+                segments.append(det_points[start:i])
+                start = i
+        segments.append(det_points[start:])
+
     trajectory: List[tuple[int, int]] = []
-    if len(det_points) >= 2:
-        # Separate frame indices and box geometry for spline fitting.
-        frames = [p[0] for p in det_points]
-        cxs = [p[1] for p in det_points]
-        cys = [p[2] for p in det_points]
-        ws = [p[3] for p in det_points]
-        hs = [p[4] for p in det_points]
-        # Cubic splines provide smooth trajectories even with irregular spacing.
-        sx = CubicSpline(frames, cxs)
-        sy = CubicSpline(frames, cys)
-        sw = CubicSpline(frames, ws)
-        sh = CubicSpline(frames, hs)
-        first, last = frames[0], frames[-1]
-        idx_map = {it["frame_idx"]: it for it in items}
-        interp: List[tuple[int, float, float, float, float, float, Dict[str, Any]]] = []
-        for fi in range(first, last + 1):
-            item = idx_map.get(fi)
-            if item is None:
-                # If a frame is missing (e.g. skipped due to sampling), we
-                # cannot interpolate its image so we simply ignore it.
-                continue
-            cx = float(sx(fi))
-            cy = float(sy(fi))
-            if item["boxes"]:
-                # When a detection exists, reuse its size and confidence because
-                # those measurements are trusted over the spline prediction.
-                b = item["boxes"][0]
-                x1, y1, x2, y2 = b["bbox"]
-                w = x2 - x1
-                h = y2 - y1
-                conf = b.get("conf", 0.0)
-            else:
-                w = float(sw(fi))
-                h = float(sh(fi))
-                conf = 0.0  # Mark interpolated boxes with zero confidence
-            interp.append((fi, cx, cy, w, h, conf, item))
-
-        # Design the filter using the configured cutoff and sampling rate.
-        sample_rate = cfg.sampling.fps if cfg.sampling.fps else 30 / cfg.sampling.step
-        # ``30 / step`` mirrors the ingestion's fallback when FPS metadata is
-        # unavailable, keeping assumptions consistent across modules.
-        xs = _lowpass_filter([p[1] for p in interp], cfg.trajectory.cutoff_hz, sample_rate)
-        ys = _lowpass_filter([p[2] for p in interp], cfg.trajectory.cutoff_hz, sample_rate)
-
-        for (_fi, _cx, _cy, w, h, conf, item), cx, cy in zip(interp, xs, ys):
-            x1 = cx - w / 2
-            y1 = cy - h / 2
-            x2 = cx + w / 2
-            y2 = cy + h / 2
-            item["boxes"] = [
-                {
-                    "bbox": [x1, y1, x2, y2],
-                    "cls": det_points[0][5],
-                    "label": det_points[0][6],
-                    "conf": conf,
-                }
-            ]
-            trajectory.append((int(cx), int(cy)))
-
-    for idx, item in enumerate(items, start=1):
-        status.current_frame = idx
-        boxes = item.get("boxes", [])
-        if boxes:
-            # The per-frame preview was removed to keep the pipeline focused on
-            # throughput; rendering every frame is expensive and offers little
-            # additional value when the final trajectory can be reviewed
-            # separately.
-            exporter.save(item, boxes)
+    preview_item: Dict[str, Any] | None = None
+    track_id = 0
+    for seg in segments:
+        track_id += 1
+        end_frame = seg[-1][0] + gap_frames
+        seg_items = [item_map[fi] for fi in range(seg[0][0], end_frame + 1) if fi in item_map]
+        traj, final_item = _export_segment(seg_items, seg, exporter, cfg, sample_rate, track_id)
+        if traj:
+            trajectory = traj
+        if final_item is not None:
+            preview_item = final_item
 
     exporter.close()
-    if show_preview:
+    if show_preview and preview_item is not None:
         if trajectory:
-            # Display the final frame with the full interpolated trajectory so
-            # that annotators can visually verify the estimate before
-            # continuing.
-            final_item = next(
-                (it for it in items if it["frame_idx"] == det_points[-1][0]),
-                None,
-            )
-            if final_item is not None:
-                disp = final_item["frame"].copy()
-                pts = np.array(trajectory, dtype=int)
-                cv2.polylines(disp, [pts], False, (0, 0, 255), 2)
-                cv2.imshow("trajectory", disp)
-                cv2.waitKey(0)  # Wait for user confirmation
+            disp = preview_item["frame"].copy()
+            pts = np.array(trajectory, dtype=int)
+            cv2.polylines(disp, [pts], False, (0, 0, 255), 2)
         else:
-            # When no trajectory exists (e.g., short clips) still show the last
-            # processed frame with its detection so users receive feedback that
-            # processing succeeded.
-            last_item = items[-1] if items else None
-            if last_item is not None:
-                disp = last_item["frame"].copy()
-                for b in last_item.get("boxes", []):
-                    x1, y1, x2, y2 = map(int, b["bbox"])
-                    cv2.rectangle(disp, (x1, y1), (x2, y2), (0, 255, 0), 2)
-                cv2.imshow("trajectory", disp)
-                cv2.waitKey(0)
+            disp = preview_item["frame"].copy()
+            for b in preview_item.get("boxes", []):
+                x1, y1, x2, y2 = map(int, b["bbox"])
+                cv2.rectangle(disp, (x1, y1), (x2, y2), (0, 255, 0), 2)
+        cv2.imshow("trajectory", disp)
+        cv2.waitKey(0)
         cv2.destroyAllWindows()
+
+    return None
 
 @track
 def preview(cfg: "PipelineConfig | str") -> None:

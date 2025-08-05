@@ -1,5 +1,6 @@
 videos:
   - path/to/video1.mp4
+detection_gap_timeout_s: 3.0
 sampling:
   fps: 2.0
 quality:
