@@ -17,7 +17,8 @@ jobs:
 
     runs-on: ubuntu-latest
     env:
-      GOOGLE_CREDENTIALS_JSON: ${{ secrets.GOOGLE_CREDENTIALS_JSON }}
+      STORAGE_CREDENTIALS_B64: ${{ secrets.STORAGE_CREDENTIALS_B64 }}
+      STORAGE_CREDENTIALS_B64_2: ${{ secrets.STORAGE_CREDENTIALS_B64_2 }}
 
     steps:
     - name: Install linux packages
@@ -38,17 +39,6 @@ jobs:
         python -m pip install --upgrade pip
         pip install flake8 pytest
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-    - name: Debug video file presence
-      run: |
-        ls -lh test/input_video
-        file test/input_video/TestMovie1.mp4
-        ffmpeg -i test/input_video/TestMovie1.mp4 || true
-    - name: Print env
-      run: echo "$GOOGLE_CREDENTIALS_JSON"
-    - name: Write Google credentials to file
-      run: |
-        echo "${GOOGLE_CREDENTIALS_JSON}" > /tmp/credentials.json
-        cat /tmp/credentials.json
 
 
     #- name: Lint with flake8
