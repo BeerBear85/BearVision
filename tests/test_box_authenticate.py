@@ -38,7 +38,7 @@ def test_authenticate_service(tmp_path, monkeypatch):
     secret = base64.b64encode(b'{}').decode()
     monkeypatch.setenv('SECRET_ENV', secret)
 
-    handler = BoxHandler({'BOX': {'secret_key_name': 'SECRET_ENV'}})
+    handler = BoxHandler({'STORAGE_COMMON': {'secret_key_name': 'SECRET_ENV'}, 'BOX': {}})
     handler._authenticate()
 
     assert handler.client == 'client'
@@ -62,7 +62,7 @@ def test_missing_primary_secret_raises(tmp_path, monkeypatch):
 
     BoxHandler = _import_handler()
 
-    handler = BoxHandler({'BOX': {}})
+    handler = BoxHandler({'STORAGE_COMMON': {}, 'BOX': {}})
     with pytest.raises(KeyError):
         handler._authenticate()
 
@@ -80,10 +80,13 @@ def test_authenticate_split_env(tmp_path, monkeypatch):
     monkeypatch.setenv('SECRET_ENV', first)
     monkeypatch.setenv('SECRET_ENV2', second)
 
-    handler = BoxHandler({'BOX': {
-        'secret_key_name': 'SECRET_ENV',
-        'secret_key_name_2': 'SECRET_ENV2',
-    }})
+    handler = BoxHandler({
+        'STORAGE_COMMON': {
+            'secret_key_name': 'SECRET_ENV',
+            'secret_key_name_2': 'SECRET_ENV2',
+        },
+        'BOX': {},
+    })
     handler._authenticate()
 
     assert handler.client == 'client'

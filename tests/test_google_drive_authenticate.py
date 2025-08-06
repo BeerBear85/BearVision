@@ -43,13 +43,15 @@ def test_authenticate_service_account(tmp_path, monkeypatch):
         raising=False,
     )
 
-    handler = GoogleDriveHandler({'GOOGLE_DRIVE': {
-        'secret_key_name': 'SECRET_ENV',
-
-        'secret_key_name_2': 'SECRET_ENV2',  # env var not set on purpose
-
-        'auth_mode': 'service',
-    }})
+    handler = GoogleDriveHandler({
+        'STORAGE_COMMON': {
+            'secret_key_name': 'SECRET_ENV',
+            'secret_key_name_2': 'SECRET_ENV2',  # env var not set on purpose
+        },
+        'GOOGLE_DRIVE': {
+            'auth_mode': 'service',
+        },
+    })
     handler._authenticate()
 
     assert handler.service == 'service'
@@ -76,7 +78,7 @@ def test_missing_primary_secret_raises(tmp_path, monkeypatch):
     module = importlib.reload(module)
     GoogleDriveHandler = module.GoogleDriveHandler
 
-    handler = GoogleDriveHandler({'GOOGLE_DRIVE': {}})
+    handler = GoogleDriveHandler({'STORAGE_COMMON': {}, 'GOOGLE_DRIVE': {}})
     with pytest.raises(KeyError):
         handler._authenticate()
 
@@ -119,11 +121,15 @@ def test_authenticate_user_flow(tmp_path, monkeypatch):
         types.SimpleNamespace(from_client_config=fake_from_client_config),
     )
 
-    handler = GoogleDriveHandler({'GOOGLE_DRIVE': {
-        'secret_key_name': 'SECRET_ENV',
-        'secret_key_name_2': 'SECRET_ENV2',  # explicit second name required
-        'auth_mode': 'user',
-    }})
+    handler = GoogleDriveHandler({
+        'STORAGE_COMMON': {
+            'secret_key_name': 'SECRET_ENV',
+            'secret_key_name_2': 'SECRET_ENV2',  # explicit second name required
+        },
+        'GOOGLE_DRIVE': {
+            'auth_mode': 'user',
+        },
+    })
     handler._authenticate()
 
     assert handler.service == 'service'
@@ -155,11 +161,15 @@ def test_authenticate_split_env(tmp_path, monkeypatch):
         raising=False,
     )
 
-    handler = GoogleDriveHandler({'GOOGLE_DRIVE': {
-        'secret_key_name': 'SECRET_ENV',
-        'secret_key_name_2': 'SECRET_ENV2',
-        'auth_mode': 'service',
-    }})
+    handler = GoogleDriveHandler({
+        'STORAGE_COMMON': {
+            'secret_key_name': 'SECRET_ENV',
+            'secret_key_name_2': 'SECRET_ENV2',
+        },
+        'GOOGLE_DRIVE': {
+            'auth_mode': 'service',
+        },
+    })
     handler._authenticate()
 
     assert handler.service == 'service'
