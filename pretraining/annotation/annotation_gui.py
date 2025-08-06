@@ -216,9 +216,15 @@ class AnnotationGUI:
         -------
         None
             After completion the Run button is re-enabled on the main thread.
+            Any exceptions are surfaced via a message box for visibility.
         """
         try:
             run_pipeline(self.base_cfg, video, output, self.on_frame)
+        except Exception as exc:  # pragma: no cover - GUI presentation
+            # Without this handler users receive no feedback when the pipeline
+            # fails (e.g. due to missing video/weights).  Showing a message box
+            # makes the failure explicit and keeps the GUI responsive.
+            self.master.after(0, lambda: messagebox.showerror("Pipeline error", str(exc)))
         finally:
             # ``after`` hands control back to the Tk main loop so widget state is
             # manipulated safely from the GUI thread. We also ensure any preview

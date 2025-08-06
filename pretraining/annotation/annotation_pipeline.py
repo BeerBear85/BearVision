@@ -281,11 +281,19 @@ class VidIngest:
         Iterator[dict]
             Each dictionary contains the video path, frame index and image
             array for sampled frames.
+
+        Raises
+        ------
+        FileNotFoundError
+            If a video cannot be opened, likely due to an invalid path or
+            unsupported codec.
         """
         for video_path in self.videos:
             cap = cv2.VideoCapture(video_path)
             if not cap.isOpened():
-                continue
+                # Failing silently makes the pipeline appear successful with no output;
+                # raising surfaces path or codec issues early for easier debugging.
+                raise FileNotFoundError(f"Cannot open video: {video_path}")
             # Derive a stride based on desired FPS; fall back to a fixed step for
             # robustness when metadata is missing.
             orig_fps = cap.get(cv2.CAP_PROP_FPS) or 30
