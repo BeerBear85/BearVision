@@ -6,9 +6,9 @@ sampling:
   fps: 2.0
   min_person_bbox_diagonal_ratio: 0.001
 quality:
-  blur: 120.0
-  luma_min: 50
-  luma_max: 200
+  blur: 1.0
+  luma_min: 1
+  luma_max: 20000
 yolo:
   weights: yolov8s.onnx
   conf_thr: 0.25
