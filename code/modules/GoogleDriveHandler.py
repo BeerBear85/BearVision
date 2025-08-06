@@ -45,9 +45,9 @@ class GoogleDriveHandler:
             an OAuth 2.0 user flow or a service account is used.
         Inputs:
             None; relies on environment variables and instance configuration.
-            Expects the names ``secret_key_name`` and ``secret_key_name_2`` in
-            the ``GOOGLE_DRIVE`` configuration section. Both are required so
-            misconfigurations are surfaced immediately.
+            Expects ``secret_key_name`` in the ``GOOGLE_DRIVE`` configuration
+            section and optionally ``secret_key_name_2`` when credentials are
+            split across two variables.
         Outputs:
             None; sets ``self.service`` when successful.
         """
@@ -72,19 +72,20 @@ class GoogleDriveHandler:
 
         try:
             secret_env_2 = gd_cfg["secret_key_name_2"]
-            # Requiring an explicit secondary name avoids silently using a
-            # hard-coded default, making deployments with split credentials
-            # more predictable.
-        except KeyError as exc:
-            raise KeyError(
-                "Missing 'secret_key_name_2' in GOOGLE_DRIVE configuration"
-            ) from exc
+            # A second key name allows very long secrets to be stored across
+            # two variables without hitting environment size limits.
+        except KeyError:
+            # Missing the second part is acceptable; fall back to an empty
+            # string so deployments that only use a single variable continue to
+            # work without additional configuration.
+            secret_env_2 = ""
+
 
         auth_mode = gd_cfg.get("auth_mode", "user").lower()
 
-        # Concatenate the two environment variables. Splitting allows very large
-        # base64 strings to bypass shell-specific length limits while keeping the
-        # decoding logic simple.
+        # Concatenate both environment variables. The second may be empty, but
+        # splitting across two variables lets extremely long base64 strings
+        # bypass shell limits while keeping decoding logic straightforward.
         secret_b64 = os.getenv(secret_env, "") + os.getenv(secret_env_2, "")
         if not secret_b64:
             raise RuntimeError(
