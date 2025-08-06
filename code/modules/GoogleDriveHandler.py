@@ -45,8 +45,9 @@ class GoogleDriveHandler:
             an OAuth 2.0 user flow or a service account is used.
         Inputs:
             None; relies on environment variables and instance configuration.
-            Expects the names ``secret_key_name`` and optionally
-            ``secret_key_name_2`` in the ``GOOGLE_DRIVE`` configuration section.
+            Expects the names ``secret_key_name`` and ``secret_key_name_2`` in
+            the ``GOOGLE_DRIVE`` configuration section. Both are required so
+            misconfigurations are surfaced immediately.
         Outputs:
             None; sets ``self.service`` when successful.
         """
@@ -59,8 +60,26 @@ class GoogleDriveHandler:
         else:
             gd_cfg = self.config.get("GOOGLE_DRIVE", {})
 
-        secret_env = gd_cfg.get("secret_key_name", "GOOGLE_CREDENTIALS_JSON")
-        secret_env_2 = gd_cfg.get("secret_key_name_2", "GOOGLE_CREDENTIALS_B64_2")
+        try:
+            secret_env = gd_cfg["secret_key_name"]
+            # Fail fast if configuration omits the primary secret name so
+            # missing credentials are caught during startup rather than at
+            # runtime when authentication is attempted.
+        except KeyError as exc:
+            raise KeyError(
+                "Missing 'secret_key_name' in GOOGLE_DRIVE configuration"
+            ) from exc
+
+        try:
+            secret_env_2 = gd_cfg["secret_key_name_2"]
+            # Requiring an explicit secondary name avoids silently using a
+            # hard-coded default, making deployments with split credentials
+            # more predictable.
+        except KeyError as exc:
+            raise KeyError(
+                "Missing 'secret_key_name_2' in GOOGLE_DRIVE configuration"
+            ) from exc
+
         auth_mode = gd_cfg.get("auth_mode", "user").lower()
 
         # Concatenate the two environment variables. Splitting allows very large
