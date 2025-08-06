@@ -1,45 +1,58 @@
 import threading
 import tkinter as tk
 from tkinter import filedialog, messagebox
+from pathlib import Path
+import copy
+
+import cv2
+from PIL import Image, ImageTk
+import numpy as np
+from typing import Callable
 
 import annotation_pipeline as ap
 
 
-def run_pipeline(video_path: str, output_dir: str) -> None:
+def run_pipeline(
+    cfg: ap.PipelineConfig,
+    video_path: str,
+    output_dir: str,
+    frame_callback: Callable[[np.ndarray], None],
+) -> None:
     """Execute the pipeline for one video and export a dataset.
 
     Purpose
     -------
-    Construct a configuration and invoke :func:`annotation_pipeline.run` so
-    that frames, labels and an interpolated trajectory are generated for the
-    supplied video.
+    Reuse a base configuration and invoke :func:`annotation_pipeline.run` so
+    that frames, labels and interpolated trajectories are generated for the
+    chosen video while emitting per-frame previews.
 
     Inputs
     ------
+    cfg: ap.PipelineConfig
+        Base configuration object which will be copied to avoid mutating
+        caller state.
     video_path: str
         Path to the source video file.
     output_dir: str
         Directory where the dataset will be written.
+    frame_callback: Callable[[np.ndarray], None]
+        Function receiving each processed frame for preview rendering.
 
     Outputs
     -------
     None
-        Files are written to ``output_dir`` and the preview window pauses on
-        the final frame awaiting a keypress.
+        Files are written to ``output_dir`` and ``frame_callback`` is invoked
+        for every exported frame.
     """
 
     # Reset progress so a new run starts with a clean status snapshot.
     ap.status = ap.PipelineStatus()
-    cfg = ap.PipelineConfig(
-        videos=[video_path],
-        sampling=ap.SamplingConfig(step=1),
-        quality=ap.QualityConfig(blur=0, luma_min=0, luma_max=500),
-        yolo=ap.YoloConfig(weights="yolov8s.onnx", conf_thr=0.25),
-        export=ap.ExportConfig(output_dir=output_dir),
-    )
-    # ``show_preview`` enables the trajectory overlay and keypress pause at the
-    # end of processing, giving users a chance to validate results.
-    ap.run(cfg, show_preview=True)
+    cfg = copy.deepcopy(cfg)
+    cfg.videos = [video_path]
+    cfg.export.output_dir = output_dir
+    # The callback feeds the GUI a copy of each frame, allowing responsive
+    # previews without spawning additional OpenCV windows.
+    ap.run(cfg, show_preview=False, frame_callback=frame_callback)
 
 
 class AnnotationGUI:
@@ -61,6 +74,13 @@ class AnnotationGUI:
         self.master = master
         master.title("Annotation Pipeline")
 
+        # Load configuration so preview scaling can be adjusted via YAML without
+        # touching the code. Path resolution stays relative to this file.
+        cfg_path = Path(__file__).with_name("sample_config.yaml")
+        self.base_cfg = ap._ensure_cfg(str(cfg_path))
+        self.preview_scaling = self.base_cfg.preview_scaling
+        ap.status = ap.PipelineStatus()  # Reset status so GUI starts in "Idle".
+
         self.video_path = tk.StringVar()
         self.output_dir = tk.StringVar()
         self.status = tk.StringVar(value="Idle")
@@ -68,27 +88,25 @@ class AnnotationGUI:
         # description of the current step remains uncluttered by numbers.
         self.frame_progress = tk.StringVar(value="Frame: 0/0")
 
-        tk.Button(
-            master, text="Select Video", command=self.select_video
-        ).pack(fill="x")
-        tk.Label(
-            master, textvariable=self.video_path, anchor="w"
-        ).pack(fill="x")
+        tk.Button(master, text="Select Video", command=self.select_video).pack(fill="x")
+        tk.Label(master, textvariable=self.video_path, anchor="w").pack(fill="x")
 
-        tk.Button(
-            master, text="Select Output", command=self.select_output
-        ).pack(fill="x")
-        tk.Label(
-            master, textvariable=self.output_dir, anchor="w"
-        ).pack(fill="x")
+        tk.Button(master, text="Select Output", command=self.select_output).pack(fill="x")
+        tk.Label(master, textvariable=self.output_dir, anchor="w").pack(fill="x")
 
-        tk.Button(master, text="Run", command=self.start).pack(fill="x")
+        # Keep a reference to the Run button so we can disable it during
+        # processing, preventing duplicate launches.
+        self.run_btn = tk.Button(master, text="Run", command=self.start)
+        self.run_btn.pack(fill="x")
         tk.Label(master, textvariable=self.status, anchor="w").pack(fill="x")
         # Present the numeric progress in its own label so long jobs can be
         # monitored at a glance without parsing additional status text.
-        tk.Label(master, textvariable=self.frame_progress, anchor="w").pack(
-            fill="x"
-        )
+        tk.Label(master, textvariable=self.frame_progress, anchor="w").pack(fill="x")
+
+        # Dedicated preview pane sits at the bottom and shows each processed
+        # frame scaled down for responsiveness.
+        self.preview_label = tk.Label(master)
+        self.preview_label.pack(side="bottom")
 
         # Double the window's dimensions for better visibility without the
         # caller needing to guess an appropriate size ahead of widget creation.
@@ -168,12 +186,90 @@ class AnnotationGUI:
                 "Missing paths", "Please select video and output directory"
             )
             return
-
+        # Disable the button immediately so accidental double-clicks do not
+        # spawn multiple pipeline instances competing for resources.
+        self.run_btn.config(state=tk.DISABLED)
         # Running in a thread keeps the GUI responsive during processing.
         thread = threading.Thread(
-            target=run_pipeline, args=(video, output), daemon=True
+            target=self._run_pipeline_thread, args=(video, output), daemon=True
         )
         thread.start()
+
+    def _run_pipeline_thread(self, video: str, output: str) -> None:
+        """Execute the pipeline and re-enable the Run button when done.
+
+        Purpose
+        -------
+        Isolate long-running work from the GUI thread while ensuring the
+        interface becomes usable again once processing completes.
+
+        Inputs
+        ------
+        video: str
+            Path to the video selected by the user.
+        output: str
+            Destination directory for generated annotations.
+
+        Outputs
+        -------
+        None
+            After completion the Run button is re-enabled on the main thread.
+        """
+        try:
+            run_pipeline(self.base_cfg, video, output, self.on_frame)
+        finally:
+            # ``after`` hands control back to the Tk main loop so widget state is
+            # manipulated safely from the GUI thread.
+            self.master.after(0, lambda: self.run_btn.config(state=tk.NORMAL))
+
+    def on_frame(self, frame: np.ndarray) -> None:
+        """Schedule display of a processed frame on the main thread.
+
+        Purpose
+        -------
+        The pipeline emits frames from a worker thread. Tkinter widgets must be
+        updated on the main thread, so this method defers actual rendering via
+        :meth:`tk.Tk.after`.
+
+        Inputs
+        ------
+        frame: numpy.ndarray
+            BGR image as produced by OpenCV.
+
+        Outputs
+        -------
+        None
+            The frame is forwarded to :meth:`_update_preview` asynchronously.
+        """
+        self.master.after(0, lambda f=frame: self._update_preview(f))
+
+    def _update_preview(self, frame: np.ndarray) -> None:
+        """Render a scaled preview image in the bottom pane.
+
+        Purpose
+        -------
+        Convert the BGR frame from OpenCV to a Tk-compatible format and downscale
+        it according to ``preview_scaling`` so frequent updates remain
+        responsive.
+
+        Inputs
+        ------
+        frame: numpy.ndarray
+            Full-resolution frame from the pipeline.
+
+        Outputs
+        -------
+        None
+            ``self.preview_label`` is updated to show the latest frame.
+        """
+        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)  # Tkinter expects RGB order.
+        h, w = rgb.shape[:2]
+        scaled = cv2.resize(rgb, (int(w * self.preview_scaling), int(h * self.preview_scaling)))
+        img = ImageTk.PhotoImage(Image.fromarray(scaled))
+        # Keep a reference to avoid Python's garbage collector disposing the image
+        # while Tkinter still displays it.
+        self.preview_label.configure(image=img)
+        self.preview_label.image = img
 
     def refresh_status(self) -> None:
         """Update status and frame-progress labels with pipeline progress.

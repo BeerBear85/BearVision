@@ -2,7 +2,7 @@
 from dataclasses import dataclass, field
 import json
 from pathlib import Path
-from typing import Iterator, List, Dict, Any
+from typing import Iterator, List, Dict, Any, Callable
 
 import cv2
 import yaml
@@ -212,6 +212,9 @@ class PipelineConfig:
     detection_gap_timeout_s: float, default ``3.0``
         Number of seconds without detections after which the current
         trajectory is finalised and a new track is started.
+    preview_scaling: float, default ``0.2``
+        Factor by which frames are downscaled for live previews. Lower values
+        reduce CPU overhead at the cost of detail.
     """
 
     videos: List[str] = field(default_factory=list)
@@ -221,6 +224,7 @@ class PipelineConfig:
     export: ExportConfig = field(default_factory=lambda: ExportConfig(output_dir="dataset"))
     trajectory: TrajectoryConfig = field(default_factory=TrajectoryConfig)
     detection_gap_timeout_s: float = 3.0
+    preview_scaling: float = 0.2
 
 
 class VidIngest:
@@ -471,6 +475,7 @@ def _ensure_cfg(cfg: "PipelineConfig | str") -> "PipelineConfig":
         export=export,
         trajectory=trajectory,
         detection_gap_timeout_s=cfg_dict.get("detection_gap_timeout_s", 3.0),
+        preview_scaling=cfg_dict.get("preview_scaling", 0.2),
     )
 
 
@@ -516,6 +521,7 @@ def _export_segment(
     cfg: PipelineConfig,
     sample_rate: float,
     track_id: int,
+    frame_callback: Callable[[np.ndarray], None] | None = None,
 ) -> tuple[List[tuple[int, int]], Dict[str, Any] | None]:
     """Interpolate and export one trajectory segment.
 
@@ -534,6 +540,9 @@ def _export_segment(
         Effective frames-per-second used for interpolation.
     track_id:
         Identifier assigned to this trajectory.
+    frame_callback:
+        Optional function invoked with each frame after saving. Allows callers
+        to render progress previews without polluting the core processing loop.
 
     Returns
     -------
@@ -598,6 +607,12 @@ def _export_segment(
             trajectory.append((int(cx), int(cy)))
             final_item = item
             status.current_frame += 1
+            if frame_callback:
+                disp = item["frame"].copy()  # Copy so overlays don't alter saved data.
+                for b in item.get("boxes", []):
+                    x1, y1, x2, y2 = map(int, b["bbox"])
+                    cv2.rectangle(disp, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                frame_callback(disp)
     else:
         for item in segment_items:
             if item.get("boxes"):
@@ -605,6 +620,12 @@ def _export_segment(
                 exporter.save(item, item["boxes"])
                 final_item = item
                 status.current_frame += 1
+                if frame_callback:
+                    disp = item["frame"].copy()  # Avoid mutating frame that gets written.
+                    for b in item.get("boxes", []):
+                        x1, y1, x2, y2 = map(int, b["bbox"])
+                        cv2.rectangle(disp, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                    frame_callback(disp)
 
     return trajectory, final_item
 class DatasetExporter:
@@ -781,7 +802,11 @@ class CvatExporter:
 
 
 @track
-def run(cfg: "PipelineConfig | str", show_preview: bool = False) -> None:
+def run(
+    cfg: "PipelineConfig | str",
+    show_preview: bool = False,
+    frame_callback: Callable[[np.ndarray], None] | None = None,
+) -> None:
     """Run the dataset generation pipeline with optional spline interpolation.
 
     Purpose
@@ -800,6 +825,10 @@ def run(cfg: "PipelineConfig | str", show_preview: bool = False) -> None:
         computed, the last processed frame with its detection is shown instead.
         The window waits for a keypress on the final frame so users can confirm
         the interpolation.
+    frame_callback: Callable[[np.ndarray], None] | None, optional
+        Function invoked with each processed frame after saving. Enables
+        callers such as GUIs to display live previews without modifying the
+        core export logic. ``None`` disables callbacks.
 
     Outputs
     -------
@@ -875,7 +904,9 @@ def run(cfg: "PipelineConfig | str", show_preview: bool = False) -> None:
         track_id += 1
         end_frame = seg[-1][0] + gap_frames
         seg_items = [item_map[fi] for fi in range(seg[0][0], end_frame + 1) if fi in item_map]
-        traj, final_item = _export_segment(seg_items, seg, exporter, cfg, sample_rate, track_id)
+        traj, final_item = _export_segment(
+            seg_items, seg, exporter, cfg, sample_rate, track_id, frame_callback
+        )
         if traj:
             trajectory = traj
         if final_item is not None:
