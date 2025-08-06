@@ -677,8 +677,9 @@ def _export_segment(
             exporter.save(item, item["boxes"])
             trajectory.append((int(cx), int(cy)))
             final_item = item
-            status.current_frame += 1
             if frame_callback:
+                # Show every interpolated frame even if seen before so users can
+                # follow the smoothing process step by step.
                 disp = item["frame"].copy()  # Copy so overlays don't alter saved data.
                 for b in item.get("boxes", []):
                     x1, y1, x2, y2 = map(int, b["bbox"])
@@ -690,7 +691,6 @@ def _export_segment(
                 item["boxes"][0]["track_id"] = track_id
                 exporter.save(item, item["boxes"])
                 final_item = item
-                status.current_frame += 1
                 if frame_callback:
                     disp = item["frame"].copy()  # Avoid mutating frame that gets written.
                     for b in item.get("boxes", []):
@@ -919,6 +919,16 @@ def run(
         exporter = CvatExporter(cfg.export)
     else:
         exporter = DatasetExporter(cfg.export)
+    # Determine total frame count using metadata so progress displays cover the
+    # entire video rather than just sampled frames.
+    total_frames = 0
+    for vid in cfg.videos:
+        cap = cv2.VideoCapture(vid)
+        if cap.isOpened():
+            total_frames += int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) or 0
+        cap.release()
+    status.total_frames = total_frames
+    status.current_frame = 0
 
     items: List[Dict[str, Any]] = []
     # Collect frames and detections first so we can interpolate across the
@@ -926,6 +936,7 @@ def run(
     for item in ingest:
         frame = item["frame"]
         if not qf.check(frame):
+            status.current_frame += 1  # reflect discarded frames in progress
             continue
         # Filter detections before storing them. Applying this here ensures that
         # interpolation and subsequent processing operate only on meaningful
@@ -955,10 +966,13 @@ def run(
                     + "\n"
                 )
         items.append(item)
-    # The total count is known only after ingestion because quality checks can
-    # drop frames; we expose it here for progress displays.
-    status.total_frames = len(items)
-    status.current_frame = 0
+        status.current_frame += 1
+        if frame_callback:
+            disp = item["frame"].copy()
+            for b in item.get("boxes", []):
+                x1, y1, x2, y2 = map(int, b["bbox"])
+                cv2.rectangle(disp, (x1, y1), (x2, y2), (0, 255, 0), 2)
+            frame_callback(disp)
 
     # Compute centers, widths and heights for frames with detections.
     # Each entry stores the frame index and bounding box geometry for frames
@@ -1006,7 +1020,13 @@ def run(
         end_frame = seg[-1][0] + gap_frames
         seg_items = [item_map[fi] for fi in range(seg[0][0], end_frame + 1) if fi in item_map]
         traj, final_item = _export_segment(
-            seg_items, seg, exporter, cfg, sample_rate, track_id, frame_callback
+            seg_items,
+            seg,
+            exporter,
+            cfg,
+            sample_rate,
+            track_id,
+            frame_callback,
         )
         if traj:
             trajectory = traj
