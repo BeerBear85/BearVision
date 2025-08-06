@@ -36,6 +36,7 @@ def test_authenticate_service_account(tmp_path, monkeypatch):
 
     handler = GoogleDriveHandler({'GOOGLE_DRIVE': {
         'secret_key_name': 'SECRET_ENV',
+        'secret_key_name_2': 'SECRET_ENV2',  # explicit second name required
         'auth_mode': 'service',
     }})
     handler._authenticate()
@@ -73,6 +74,7 @@ def test_authenticate_user_flow(tmp_path, monkeypatch):
 
     handler = GoogleDriveHandler({'GOOGLE_DRIVE': {
         'secret_key_name': 'SECRET_ENV',
+        'secret_key_name_2': 'SECRET_ENV2',  # explicit second name required
         'auth_mode': 'user',
     }})
     handler._authenticate()

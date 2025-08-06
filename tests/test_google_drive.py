@@ -29,8 +29,18 @@ except Exception:
     reason="Google Drive dependencies missing or incompatible",
 )
 def test_google_drive_upload_download(tmp_path):
-    if not os.getenv('GOOGLE_CREDENTIALS_JSON'):
-        pytest.skip('GOOGLE_CREDENTIALS_JSON not set')
+    """
+    Purpose:
+        Upload and then download a file to verify round-trip behavior against
+        Google Drive. Network interactions are skipped in normal test runs.
+    Inputs:
+        tmp_path (Path): Temporary directory fixture provided by pytest.
+    Outputs:
+        None; assertions validate that the uploaded content matches the
+        downloaded content.
+    """
+    if not os.getenv('GOOGLE_CREDENTIALS_B64'):
+        pytest.skip('GOOGLE_CREDENTIALS_B64 not set')
 
     cfg_path = ROOT / 'config.ini'
     ConfigurationHandler.read_config_file(str(cfg_path))
