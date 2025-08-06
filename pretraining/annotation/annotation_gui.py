@@ -87,7 +87,9 @@ class AnnotationGUI:
         self.status = tk.StringVar(value="Idle")
         # A separate variable tracks frame progress so that the textual
         # description of the current step remains uncluttered by numbers.
-        self.frame_progress = tk.StringVar(value="Frame: 0/0")
+        # Use a descriptive label so users immediately understand the numbers
+        # represent processed frames out of the total available in the video.
+        self.frame_progress = tk.StringVar(value="Processed: 0/0 frames")
 
         tk.Button(master, text="Select Video", command=self.select_video).pack(fill="x")
         tk.Label(master, textvariable=self.video_path, anchor="w").pack(fill="x")
@@ -337,13 +339,13 @@ class AnnotationGUI:
         # has run yet for clarity at application start.
         self.status.set(st.last_function or "Idle")
         if st.total_frames:
-            # Expose deterministic frame counts so users know precisely how far
-            # along the pipeline is without relying on heuristics.
+            # Present progress as "processed/total" to clarify that sampling may
+            # result in the first value being lower than the total frame count.
             self.frame_progress.set(
-                f"Frame {st.current_frame}/{st.total_frames}"
+                f"Processed: {st.current_frame}/{st.total_frames} frames"
             )
         else:
-            self.frame_progress.set("Frame: 0/0")
+            self.frame_progress.set("Processed: 0/0 frames")
         # Using ``after`` avoids blocking the main loop while providing periodic
         # updates that are sufficient for human perception.
         self.master.after(200, self.refresh_status)

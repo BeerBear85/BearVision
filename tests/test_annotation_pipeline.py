@@ -248,6 +248,27 @@ def test_run_respects_custom_min_diagonal_ratio(tmp_path):
     assert not recs[0].get('discarded_boxes')
 
 
+def test_status_reports_total_and_processed_frames(tmp_path):
+    """Status should expose total frames and live processed count."""
+    video = create_dummy_video(tmp_path / 'v.mp4', num_frames=4)
+    cfg = ap.PipelineConfig(
+        videos=[str(video)],
+        sampling=ap.SamplingConfig(step=2),
+        quality=ap.QualityConfig(blur=0.0, luma_min=0, luma_max=255),
+        yolo=ap.YoloConfig(weights='dummy.onnx', conf_thr=0.1),
+        export=ap.ExportConfig(output_dir=str(tmp_path / 'dataset')),
+    )
+    with mock.patch.object(ap, 'PreLabelYOLO') as MockYolo:
+        MockYolo.return_value.detect.return_value = []
+        frames = []
+        ap.run(cfg, frame_callback=lambda f: frames.append(f))
+
+    # Total frames reflect video metadata; current_frame counts sampled frames.
+    assert ap.status.total_frames == 4
+    assert ap.status.current_frame == 2
+    assert len(frames) == 2
+
+
 def test_run_with_preview(tmp_path):
     video = create_dummy_video(tmp_path / 'v.mp4', num_frames=1)
     cfg = ap.PipelineConfig(
