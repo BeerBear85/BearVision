@@ -13,11 +13,37 @@ sys.path.append(str(MODULE_PATH))
 import annotation_pipeline as ap
 
 
-def create_dummy_video(path, num_frames=5, fps=5):
+def create_dummy_video(path, num_frames=5, fps=5, size=(64, 64)):
+    """Create a synthetic video for testing.
+
+    Purpose
+    -------
+    Produce deterministic pixel data so tests can reason about exact
+    coordinates without relying on external assets.
+
+    Inputs
+    ------
+    path: PathLike
+        Destination of the video file.
+    num_frames: int, default ``5``
+        Number of frames to encode.
+    fps: int, default ``5``
+        Frame rate of the generated video.
+    size: tuple[int, int], default ``(64, 64)``
+        Width and height of each frame.
+
+    Outputs
+    -------
+    Path
+        Location of the written video.
+    """
+
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-    writer = cv2.VideoWriter(str(path), fourcc, fps, (64, 64))
+    writer = cv2.VideoWriter(str(path), fourcc, fps, size)
+    w, h = size
     for i in range(num_frames):
-        frame = np.full((64, 64, 3), i, dtype=np.uint8)
+        # Using ``np.full`` ensures predictable content across all frames.
+        frame = np.full((h, w, 3), i, dtype=np.uint8)
         writer.write(frame)
     writer.release()
     return path
@@ -97,6 +123,22 @@ def test_prelabel_with_dnn_handler():
     ]
 
 
+def test_filter_small_person_boxes_rejects():
+    """Tiny person detection should be discarded."""
+    boxes = [{'bbox': [0, 0, 1, 1], 'cls': 0, 'label': 'person'}]
+    kept, discarded = ap.filter_small_person_boxes(boxes, (2000, 2000), 0.001)
+    assert not kept
+    assert discarded and discarded[0]['bbox'] == [0, 0, 1, 1]
+
+
+def test_filter_small_person_boxes_accepts():
+    """Normal-sized detections remain untouched."""
+    boxes = [{'bbox': [0, 0, 100, 100], 'cls': 0, 'label': 'person'}]
+    kept, discarded = ap.filter_small_person_boxes(boxes, (200, 200), 0.001)
+    assert kept == boxes
+    assert not discarded
+
+
 def test_dataset_exporter(tmp_path):
     exporter = ap.DatasetExporter(ap.ExportConfig(output_dir=str(tmp_path)))
     item = {'frame': np.zeros((4, 4, 3), dtype=np.uint8), 'frame_idx': 1, 'video': str(tmp_path / 'vid.mp4')}
@@ -158,6 +200,52 @@ def test_run_skips_frames_without_detections(tmp_path):
     lbls = list((dataset_dir / 'labels').glob('*'))
     assert not imgs
     assert not lbls
+
+
+def test_run_filters_tiny_person_detections(tmp_path):
+    """Detections smaller than the diagonal ratio are removed."""
+    video = create_dummy_video(tmp_path / 'v.mp4', num_frames=1, size=(2000, 2000))
+    cfg = ap.PipelineConfig(
+        videos=[str(video)],
+        sampling=ap.SamplingConfig(fps=5),
+        quality=ap.QualityConfig(blur=0.0, luma_min=0, luma_max=255),
+        yolo=ap.YoloConfig(weights='dummy.onnx', conf_thr=0.1),
+        export=ap.ExportConfig(output_dir=str(tmp_path / 'dataset')),
+    )
+    with mock.patch.object(ap, 'PreLabelYOLO') as MockYolo:
+        MockYolo.return_value.detect.return_value = [
+            {'bbox': [0, 0, 1, 1], 'cls': 0, 'label': 'person', 'conf': 1.0}
+        ]
+        ap.run(cfg)
+    dataset_dir = tmp_path / 'dataset'
+    imgs = list((dataset_dir / 'images').glob('*'))
+    lbls = list((dataset_dir / 'labels').glob('*'))
+    assert not imgs and not lbls
+    recs = [json.loads(l) for l in (dataset_dir / 'debug.jsonl').read_text().splitlines()]
+    assert recs and recs[0]['discarded_boxes']
+
+
+def test_run_respects_custom_min_diagonal_ratio(tmp_path):
+    """Changing the ratio allows keeping otherwise tiny detections."""
+    video = create_dummy_video(tmp_path / 'v.mp4', num_frames=1, size=(2000, 2000))
+    cfg = ap.PipelineConfig(
+        videos=[str(video)],
+        sampling=ap.SamplingConfig(fps=5, min_person_bbox_diagonal_ratio=0.0),
+        quality=ap.QualityConfig(blur=0.0, luma_min=0, luma_max=255),
+        yolo=ap.YoloConfig(weights='dummy.onnx', conf_thr=0.1),
+        export=ap.ExportConfig(output_dir=str(tmp_path / 'dataset')),
+    )
+    with mock.patch.object(ap, 'PreLabelYOLO') as MockYolo:
+        MockYolo.return_value.detect.return_value = [
+            {'bbox': [0, 0, 1, 1], 'cls': 0, 'label': 'person', 'conf': 1.0}
+        ]
+        ap.run(cfg)
+    dataset_dir = tmp_path / 'dataset'
+    imgs = list((dataset_dir / 'images').glob('*'))
+    lbls = list((dataset_dir / 'labels').glob('*'))
+    assert imgs and lbls
+    recs = [json.loads(l) for l in (dataset_dir / 'debug.jsonl').read_text().splitlines()]
+    assert not recs[0].get('discarded_boxes')
 
 
 def test_run_with_preview(tmp_path):

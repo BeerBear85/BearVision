@@ -51,6 +51,12 @@ The pipeline automatically splits rider trajectories when no detections are
 seen for `detection_gap_timeout_s` seconds (default 3). Adjust this and other
 options in `pretraining/annotation/sample_config.yaml`.
 
+Tiny person detections can be ignored by tuning
+`min_person_bbox_diagonal_ratio` (default `0.001`). The value represents the
+minimum fraction of the image diagonal a person's bounding box must span to be
+kept. Raise it to discard more distant subjects or lower it to retain smaller
+ones.
+
 ## YOLOv8 Wakeboard Detector Training
 
 Fine-tune a YOLOv8 model on a folder of images and YOLO-format labels:

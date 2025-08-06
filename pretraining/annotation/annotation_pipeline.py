@@ -2,7 +2,7 @@
 from dataclasses import dataclass, field
 import json
 from pathlib import Path
-from typing import Iterator, List, Dict, Any
+from typing import Iterator, List, Dict, Any, Callable
 
 import cv2
 import yaml
@@ -13,6 +13,7 @@ from ultralytics import YOLO
 import argparse
 import sys
 from functools import wraps
+import logging
 
 # Import DnnHandler for optional ONNX inference
 MODULE_DIR = Path(__file__).resolve().parents[2] / "code" / "modules"
@@ -22,6 +23,9 @@ try:
     from DnnHandler import DnnHandler
 except Exception:  # pragma: no cover - DnnHandler might not be available
     DnnHandler = None
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -102,10 +106,15 @@ class SamplingConfig:
         used directly.
     step: int, default ``1``
         Fixed stride in frames when ``fps`` is unspecified.
+    min_person_bbox_diagonal_ratio: float, default ``0.001``
+        Smallest allowable ratio between a person's bounding-box diagonal and
+        the image diagonal. Detections below this threshold are discarded to
+        reduce noise from distant subjects.
     """
 
     fps: float | None = None
     step: int = 1
+    min_person_bbox_diagonal_ratio: float = 0.001
 
 @dataclass
 class QualityConfig:
@@ -212,6 +221,9 @@ class PipelineConfig:
     detection_gap_timeout_s: float, default ``3.0``
         Number of seconds without detections after which the current
         trajectory is finalised and a new track is started.
+    preview_scaling: float, default ``0.2``
+        Factor by which frames are downscaled for live previews. Lower values
+        reduce CPU overhead at the cost of detail.
     """
 
     videos: List[str] = field(default_factory=list)
@@ -221,6 +233,7 @@ class PipelineConfig:
     export: ExportConfig = field(default_factory=lambda: ExportConfig(output_dir="dataset"))
     trajectory: TrajectoryConfig = field(default_factory=TrajectoryConfig)
     detection_gap_timeout_s: float = 3.0
+    preview_scaling: float = 0.2
 
 
 class VidIngest:
@@ -441,6 +454,60 @@ class PreLabelYOLO:
         return boxes
 
 
+def filter_small_person_boxes(
+    boxes: List[Dict[str, Any]],
+    image_shape: tuple[int, int],
+    min_ratio: float,
+) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    """Split detections into kept and discarded based on diagonal ratio.
+
+    Purpose
+    -------
+    Remove exceedingly small person detections that are unlikely to be
+    meaningful while leaving other classes untouched.
+
+    Inputs
+    ------
+    boxes: list[dict]
+        Detections produced by the model. Only entries labelled ``person`` are
+        considered for filtering.
+    image_shape: tuple[int, int]
+        Image height and width used to compute the full-image diagonal.
+    min_ratio: float
+        Minimum allowed ratio between the box diagonal and the image diagonal.
+
+    Outputs
+    -------
+    tuple[list[dict], list[dict]]
+        First list contains boxes that pass the filter, second list holds
+        discarded boxes along with their computed ratio for logging.
+    """
+
+    kept: List[Dict[str, Any]] = []
+    discarded: List[Dict[str, Any]] = []
+    img_h, img_w = image_shape[:2]
+    img_diag = float(np.hypot(img_w, img_h))
+    for b in boxes:
+        label = b.get("label", "").lower()
+        if label != "person" and b.get("cls") != 0:
+            # Only filter persons; other classes are kept verbatim.
+            kept.append(b)
+            continue
+        x1, y1, x2, y2 = b["bbox"]
+        bb_diag = float(np.hypot(x2 - x1, y2 - y1))
+        ratio = bb_diag / img_diag
+        if ratio < min_ratio:
+            logger.debug(
+                "Discarding person detection with diagonal ratio %.6f (threshold %.6f)",
+                ratio,
+                min_ratio,
+            )
+            discarded.append({"bbox": b["bbox"], "ratio": ratio})
+        else:
+            kept.append(b)
+    return kept, discarded
+
+
 # Additional helper to normalize configuration input for run/preview
 @track
 def _ensure_cfg(cfg: "PipelineConfig | str") -> "PipelineConfig":
@@ -471,6 +538,7 @@ def _ensure_cfg(cfg: "PipelineConfig | str") -> "PipelineConfig":
         export=export,
         trajectory=trajectory,
         detection_gap_timeout_s=cfg_dict.get("detection_gap_timeout_s", 3.0),
+        preview_scaling=cfg_dict.get("preview_scaling", 0.2),
     )
 
 
@@ -516,6 +584,7 @@ def _export_segment(
     cfg: PipelineConfig,
     sample_rate: float,
     track_id: int,
+    frame_callback: Callable[[np.ndarray], None] | None = None,
 ) -> tuple[List[tuple[int, int]], Dict[str, Any] | None]:
     """Interpolate and export one trajectory segment.
 
@@ -534,6 +603,9 @@ def _export_segment(
         Effective frames-per-second used for interpolation.
     track_id:
         Identifier assigned to this trajectory.
+    frame_callback:
+        Optional function invoked with each frame after saving. Allows callers
+        to render progress previews without polluting the core processing loop.
 
     Returns
     -------
@@ -598,6 +670,12 @@ def _export_segment(
             trajectory.append((int(cx), int(cy)))
             final_item = item
             status.current_frame += 1
+            if frame_callback:
+                disp = item["frame"].copy()  # Copy so overlays don't alter saved data.
+                for b in item.get("boxes", []):
+                    x1, y1, x2, y2 = map(int, b["bbox"])
+                    cv2.rectangle(disp, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                frame_callback(disp)
     else:
         for item in segment_items:
             if item.get("boxes"):
@@ -605,6 +683,12 @@ def _export_segment(
                 exporter.save(item, item["boxes"])
                 final_item = item
                 status.current_frame += 1
+                if frame_callback:
+                    disp = item["frame"].copy()  # Avoid mutating frame that gets written.
+                    for b in item.get("boxes", []):
+                        x1, y1, x2, y2 = map(int, b["bbox"])
+                        cv2.rectangle(disp, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                    frame_callback(disp)
 
     return trajectory, final_item
 class DatasetExporter:
@@ -677,6 +761,10 @@ class DatasetExporter:
             "video": item["video"],
             "frame_idx": idx,
         }
+        if item.get("discarded_boxes"):
+            # Including discarded detections in the log aids post-run auditing
+            # without cluttering the exported dataset.
+            debug["discarded_boxes"] = item["discarded_boxes"]
         # JSON Lines format allows streaming large debug logs without
         # constructing a massive in-memory structure.
         self.debug_file.write(json.dumps(debug) + "\n")
@@ -781,7 +869,11 @@ class CvatExporter:
 
 
 @track
-def run(cfg: "PipelineConfig | str", show_preview: bool = False) -> None:
+def run(
+    cfg: "PipelineConfig | str",
+    show_preview: bool = False,
+    frame_callback: Callable[[np.ndarray], None] | None = None,
+) -> None:
     """Run the dataset generation pipeline with optional spline interpolation.
 
     Purpose
@@ -800,6 +892,10 @@ def run(cfg: "PipelineConfig | str", show_preview: bool = False) -> None:
         computed, the last processed frame with its detection is shown instead.
         The window waits for a keypress on the final frame so users can confirm
         the interpolation.
+    frame_callback: Callable[[np.ndarray], None] | None, optional
+        Function invoked with each processed frame after saving. Enables
+        callers such as GUIs to display live previews without modifying the
+        core export logic. ``None`` disables callbacks.
 
     Outputs
     -------
@@ -823,7 +919,33 @@ def run(cfg: "PipelineConfig | str", show_preview: bool = False) -> None:
         frame = item["frame"]
         if not qf.check(frame):
             continue
-        item["boxes"] = yolo.detect(frame)
+        # Filter detections before storing them. Applying this here ensures that
+        # interpolation and subsequent processing operate only on meaningful
+        # boxes, avoiding needless work on specks far away in the frame.
+        boxes = yolo.detect(frame)
+        boxes, discarded = filter_small_person_boxes(
+            boxes,
+            frame.shape,
+            cfg.sampling.min_person_bbox_diagonal_ratio,
+        )
+        item["boxes"] = boxes
+        if discarded:
+            item["discarded_boxes"] = discarded
+            if not boxes and isinstance(exporter, DatasetExporter):
+                # Record discarded detections even when nothing is exported so
+                # analysts can audit which frames were skipped and why.
+                exporter.debug_file.write(
+                    json.dumps(
+                        {
+                            "image": None,
+                            "labels": [],
+                            "video": item["video"],
+                            "frame_idx": item["frame_idx"],
+                            "discarded_boxes": discarded,
+                        }
+                    )
+                    + "\n"
+                )
         items.append(item)
     # The total count is known only after ingestion because quality checks can
     # drop frames; we expose it here for progress displays.
@@ -875,7 +997,9 @@ def run(cfg: "PipelineConfig | str", show_preview: bool = False) -> None:
         track_id += 1
         end_frame = seg[-1][0] + gap_frames
         seg_items = [item_map[fi] for fi in range(seg[0][0], end_frame + 1) if fi in item_map]
-        traj, final_item = _export_segment(seg_items, seg, exporter, cfg, sample_rate, track_id)
+        traj, final_item = _export_segment(
+            seg_items, seg, exporter, cfg, sample_rate, track_id, frame_callback
+        )
         if traj:
             trajectory = traj
         if final_item is not None:
@@ -925,7 +1049,14 @@ def preview(cfg: "PipelineConfig | str") -> None:
         frame = item["frame"]
         if not qf.check(frame):
             continue
+        # Preview mirrors the main pipeline's filtering to ensure users see
+        # the same detections that would be exported.
         boxes = yolo.detect(frame)
+        boxes, _ = filter_small_person_boxes(
+            boxes,
+            frame.shape,
+            cfg.sampling.min_person_bbox_diagonal_ratio,
+        )
         for b in boxes:
             x1, y1, x2, y2 = map(int, b["bbox"])
             cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
