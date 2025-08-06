@@ -97,7 +97,8 @@ def install_box_stubs():
     mod = types.ModuleType("boxsdk")
     mod.JWTAuth = DummyJWTAuth
     mod.Client = DummyClient
-    sys.modules.setdefault("boxsdk", mod)
+    # Overwrite any real boxsdk installation to keep tests hermetic
+    sys.modules["boxsdk"] = mod
 
 
 def setup_box_modules(monkeypatch, captured):

@@ -51,26 +51,40 @@ class BoxHandler:
             secrets to bypass OS limits.
         Inputs:
             None directly; relies on configuration values ``secret_key_name`` and
-            optionally ``secret_key_name_2`` inside the ``BOX`` section.
+            optionally ``secret_key_name_2`` inside the ``STORAGE_COMMON``
+            section. Service specific values from ``BOX`` are still honored to
+            allow overrides.
         Outputs:
             None; ``self.client`` is set on success.
         """
         if isinstance(self.config, ConfigParser):
+            common_cfg = (
+                dict(self.config["STORAGE_COMMON"])
+                if self.config.has_section("STORAGE_COMMON")
+                else {}
+            )
             box_cfg = (
-                dict(self.config["BOX"]) if self.config.has_section("BOX") else {}
+                dict(self.config["BOX"])
+                if self.config.has_section("BOX")
+                else {}
             )
         else:
+            common_cfg = self.config.get("STORAGE_COMMON", {})
             box_cfg = self.config.get("BOX", {})
 
-        try:
-            secret_env = box_cfg["secret_key_name"]
-            # Fail fast if configuration omits the primary secret name so
-            # missing credentials are detected during startup instead of
-            # mid-operation.
-        except KeyError as exc:
-            raise KeyError("Missing 'secret_key_name' in BOX configuration") from exc
+        secret_env = common_cfg.get("secret_key_name") or box_cfg.get("secret_key_name")
+        if not secret_env:
+            # Centralizing the secret name in STORAGE_COMMON avoids duplication,
+            # but we still fail fast when it is missing so deployments discover
+            # misconfiguration immediately.
+            raise KeyError(
+                "Missing 'secret_key_name' in STORAGE_COMMON or BOX configuration"
+            )
 
-        secret_env_2 = box_cfg.get("secret_key_name_2", "")
+        secret_env_2 = (
+            common_cfg.get("secret_key_name_2")
+            or box_cfg.get("secret_key_name_2", "")  # allow service overrides
+        )
 
         secret_b64 = os.getenv(secret_env, "")
         if secret_env_2:
