@@ -9,30 +9,29 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'code'))
 sys.path.insert(0, str(ROOT / 'code' / 'modules'))
 
-
 try:
-    from modules.GoogleDriveHandler import GoogleDriveHandler
+    from modules.BoxHandler import BoxHandler
     from modules.ConfigurationHandler import ConfigurationHandler
 except Exception as e:
     print("Exception occurred while importing modules:", e)
-    GoogleDriveHandler = None
+    BoxHandler = None
 
 try:
-    from googleapiclient.http import build_http  # noqa: F401
+    from boxsdk import Client  # noqa: F401
 except Exception:
-    build_http = None
+    Client = None
 
 
 @pytest.mark.skip(reason="disabled to avoid network usage")
 @pytest.mark.skipif(
-    GoogleDriveHandler is None or build_http is None,
-    reason="Google Drive dependencies missing or incompatible",
+    BoxHandler is None or Client is None,
+    reason="Box dependencies missing or incompatible",
 )
-def test_google_drive_upload_download(tmp_path):
+def test_box_upload_download(tmp_path):
     """
     Purpose:
         Upload and then download a file to verify round-trip behavior against
-        Google Drive. Network interactions are skipped in normal test runs.
+        Box. Network interactions are skipped in normal test runs.
     Inputs:
         tmp_path (Path): Temporary directory fixture provided by pytest.
     Outputs:
@@ -44,7 +43,7 @@ def test_google_drive_upload_download(tmp_path):
 
     cfg_path = ROOT / 'config.ini'
     ConfigurationHandler.read_config_file(str(cfg_path))
-    handler = GoogleDriveHandler()
+    handler = BoxHandler()
 
     text = f"test-{uuid.uuid4().hex}"
     local_file = tmp_path / 'upload.txt'
