@@ -45,10 +45,12 @@ class GoogleDriveHandler:
             an OAuth 2.0 user flow or a service account is used.
         Inputs:
             None; relies on environment variables and instance configuration.
+
             ``secret_key_name`` is required in the ``GOOGLE_DRIVE`` section and
             names the primary environment variable. ``secret_key_name_2`` is
             optional and, when provided, holds the name of a secondary variable
             containing the remaining credential characters.
+
         Outputs:
             None; sets ``self.service`` when successful.
         """
@@ -73,6 +75,7 @@ class GoogleDriveHandler:
 
         try:
             secret_env_2 = gd_cfg["secret_key_name_2"]
+
             # The second environment variable is optional; when present it lets
             # deployments split credentials to bypass shell length limits.
         except KeyError:
