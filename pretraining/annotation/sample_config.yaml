@@ -3,6 +3,7 @@ videos:
 detection_gap_timeout_s: 3.0
 sampling:
   fps: 2.0
+  min_person_bbox_diagonal_ratio: 0.001
 quality:
   blur: 120.0
   luma_min: 50
