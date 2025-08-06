@@ -45,8 +45,10 @@ class GoogleDriveHandler:
             an OAuth 2.0 user flow or a service account is used.
         Inputs:
             None; relies on environment variables and instance configuration.
-            Expects the names ``secret_key_name`` and optionally
-            ``secret_key_name_2`` in the ``GOOGLE_DRIVE`` configuration section.
+            ``secret_key_name`` is required in the ``GOOGLE_DRIVE`` section and
+            names the primary environment variable. ``secret_key_name_2`` is
+            optional and, when provided, holds the name of a secondary variable
+            containing the remaining credential characters.
         Outputs:
             None; sets ``self.service`` when successful.
         """
@@ -59,14 +61,34 @@ class GoogleDriveHandler:
         else:
             gd_cfg = self.config.get("GOOGLE_DRIVE", {})
 
-        secret_env = gd_cfg.get("secret_key_name", "GOOGLE_CREDENTIALS_JSON")
-        secret_env_2 = gd_cfg.get("secret_key_name_2", "GOOGLE_CREDENTIALS_B64_2")
+        try:
+            secret_env = gd_cfg["secret_key_name"]
+            # Fail fast if configuration omits the primary secret name so
+            # missing credentials are caught during startup rather than at
+            # runtime when authentication is attempted.
+        except KeyError as exc:
+            raise KeyError(
+                "Missing 'secret_key_name' in GOOGLE_DRIVE configuration"
+            ) from exc
+
+        try:
+            secret_env_2 = gd_cfg["secret_key_name_2"]
+            # The second environment variable is optional; when present it lets
+            # deployments split credentials to bypass shell length limits.
+        except KeyError:
+            # If not provided, treat as empty string so later concatenation does
+            # not need special cases.
+            secret_env_2 = ""
+
         auth_mode = gd_cfg.get("auth_mode", "user").lower()
 
         # Concatenate the two environment variables. Splitting allows very large
         # base64 strings to bypass shell-specific length limits while keeping the
         # decoding logic simple.
-        secret_b64 = os.getenv(secret_env, "") + os.getenv(secret_env_2, "")
+        secret_b64 = os.getenv(secret_env, "")
+        if secret_env_2:
+            # Only attempt to load the secondary part when configured.
+            secret_b64 += os.getenv(secret_env_2, "")
         if not secret_b64:
             raise RuntimeError(
                 f"Google Drive credentials not found. Set the '{secret_env}' environment variable.",
