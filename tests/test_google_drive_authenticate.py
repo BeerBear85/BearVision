@@ -14,7 +14,16 @@ from tests.stubs.google_api import setup_google_modules, DummyCreds
 
 
 def test_authenticate_service_account(tmp_path, monkeypatch):
-    """Ensure service account credentials are used when configured."""
+    """
+    Purpose:
+        Ensure service account authentication succeeds even when the secondary
+        credential environment variable is absent.
+    Inputs:
+        tmp_path (Path): Temporary directory for isolating test artifacts.
+        monkeypatch: Pytest fixture to modify environment and modules.
+    Outputs:
+        None; assertions validate that the service object is created.
+    """
     captured = {}
     setup_google_modules(monkeypatch, captured)
     monkeypatch.chdir(tmp_path)
@@ -36,7 +45,9 @@ def test_authenticate_service_account(tmp_path, monkeypatch):
 
     handler = GoogleDriveHandler({'GOOGLE_DRIVE': {
         'secret_key_name': 'SECRET_ENV',
-        'secret_key_name_2': 'SECRET_ENV2',  # explicit second name required
+
+        'secret_key_name_2': 'SECRET_ENV2',  # env var not set on purpose
+
         'auth_mode': 'service',
     }})
     handler._authenticate()
@@ -45,8 +56,42 @@ def test_authenticate_service_account(tmp_path, monkeypatch):
     assert isinstance(captured['creds'], DummyCreds)
 
 
+def test_missing_primary_secret_raises(tmp_path, monkeypatch):
+    """
+    Purpose:
+        Verify that omitting ``secret_key_name`` from the configuration triggers
+        a ``KeyError`` as the primary credential is mandatory.
+    Inputs:
+        tmp_path (Path): Temporary directory for test isolation.
+        monkeypatch: Fixture used to stub google modules.
+    Outputs:
+        None; the test passes if ``KeyError`` is raised.
+    """
+    captured = {}
+    setup_google_modules(monkeypatch, captured)
+    monkeypatch.chdir(tmp_path)
+
+    import importlib
+    module = importlib.import_module('GoogleDriveHandler')
+    module = importlib.reload(module)
+    GoogleDriveHandler = module.GoogleDriveHandler
+
+    handler = GoogleDriveHandler({'GOOGLE_DRIVE': {}})
+    with pytest.raises(KeyError):
+        handler._authenticate()
+
+
 def test_authenticate_user_flow(tmp_path, monkeypatch):
-    """Verify OAuth user flow is used when auth_mode='user'."""
+    """
+    Purpose:
+        Verify OAuth user flow is used when `auth_mode` is set to ``user`` and
+        no secondary credential name is configured.
+    Inputs:
+        tmp_path (Path): Temporary directory for isolation.
+        monkeypatch: Pytest fixture for patching modules and environment.
+    Outputs:
+        None; assertions check that authentication completes.
+    """
     captured = {}
     setup_google_modules(monkeypatch, captured)
     monkeypatch.chdir(tmp_path)
@@ -68,9 +113,11 @@ def test_authenticate_user_flow(tmp_path, monkeypatch):
     def fake_from_client_config(*a, **k):  # pragma: no cover - simple stub
         return DummyFlow()
 
-    monkeypatch.setattr(module, 'InstalledAppFlow', types.SimpleNamespace(
-        from_client_config=fake_from_client_config
-    ))
+    monkeypatch.setattr(
+        module,
+        'InstalledAppFlow',
+        types.SimpleNamespace(from_client_config=fake_from_client_config),
+    )
 
     handler = GoogleDriveHandler({'GOOGLE_DRIVE': {
         'secret_key_name': 'SECRET_ENV',

@@ -45,9 +45,12 @@ class GoogleDriveHandler:
             an OAuth 2.0 user flow or a service account is used.
         Inputs:
             None; relies on environment variables and instance configuration.
-            Expects the names ``secret_key_name`` and ``secret_key_name_2`` in
-            the ``GOOGLE_DRIVE`` configuration section. Both are required so
-            misconfigurations are surfaced immediately.
+
+            ``secret_key_name`` is required in the ``GOOGLE_DRIVE`` section and
+            names the primary environment variable. ``secret_key_name_2`` is
+            optional and, when provided, holds the name of a secondary variable
+            containing the remaining credential characters.
+
         Outputs:
             None; sets ``self.service`` when successful.
         """
@@ -72,20 +75,23 @@ class GoogleDriveHandler:
 
         try:
             secret_env_2 = gd_cfg["secret_key_name_2"]
-            # Requiring an explicit secondary name avoids silently using a
-            # hard-coded default, making deployments with split credentials
-            # more predictable.
-        except KeyError as exc:
-            raise KeyError(
-                "Missing 'secret_key_name_2' in GOOGLE_DRIVE configuration"
-            ) from exc
+
+            # The second environment variable is optional; when present it lets
+            # deployments split credentials to bypass shell length limits.
+        except KeyError:
+            # If not provided, treat as empty string so later concatenation does
+            # not need special cases.
+            secret_env_2 = ""
 
         auth_mode = gd_cfg.get("auth_mode", "user").lower()
 
         # Concatenate the two environment variables. Splitting allows very large
         # base64 strings to bypass shell-specific length limits while keeping the
         # decoding logic simple.
-        secret_b64 = os.getenv(secret_env, "") + os.getenv(secret_env_2, "")
+        secret_b64 = os.getenv(secret_env, "")
+        if secret_env_2:
+            # Only attempt to load the secondary part when configured.
+            secret_b64 += os.getenv(secret_env_2, "")
         if not secret_b64:
             raise RuntimeError(
                 f"Google Drive credentials not found. Set the '{secret_env}' environment variable.",
