@@ -13,6 +13,7 @@ from ultralytics import YOLO
 import argparse
 import sys
 from functools import wraps
+import logging
 
 # Import DnnHandler for optional ONNX inference
 MODULE_DIR = Path(__file__).resolve().parents[2] / "code" / "modules"
@@ -22,6 +23,9 @@ try:
     from DnnHandler import DnnHandler
 except Exception:  # pragma: no cover - DnnHandler might not be available
     DnnHandler = None
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -102,10 +106,15 @@ class SamplingConfig:
         used directly.
     step: int, default ``1``
         Fixed stride in frames when ``fps`` is unspecified.
+    min_person_bbox_diagonal_ratio: float, default ``0.001``
+        Smallest allowable ratio between a person's bounding-box diagonal and
+        the image diagonal. Detections below this threshold are discarded to
+        reduce noise from distant subjects.
     """
 
     fps: float | None = None
     step: int = 1
+    min_person_bbox_diagonal_ratio: float = 0.001
 
 @dataclass
 class QualityConfig:
@@ -445,6 +454,60 @@ class PreLabelYOLO:
         return boxes
 
 
+def filter_small_person_boxes(
+    boxes: List[Dict[str, Any]],
+    image_shape: tuple[int, int],
+    min_ratio: float,
+) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    """Split detections into kept and discarded based on diagonal ratio.
+
+    Purpose
+    -------
+    Remove exceedingly small person detections that are unlikely to be
+    meaningful while leaving other classes untouched.
+
+    Inputs
+    ------
+    boxes: list[dict]
+        Detections produced by the model. Only entries labelled ``person`` are
+        considered for filtering.
+    image_shape: tuple[int, int]
+        Image height and width used to compute the full-image diagonal.
+    min_ratio: float
+        Minimum allowed ratio between the box diagonal and the image diagonal.
+
+    Outputs
+    -------
+    tuple[list[dict], list[dict]]
+        First list contains boxes that pass the filter, second list holds
+        discarded boxes along with their computed ratio for logging.
+    """
+
+    kept: List[Dict[str, Any]] = []
+    discarded: List[Dict[str, Any]] = []
+    img_h, img_w = image_shape[:2]
+    img_diag = float(np.hypot(img_w, img_h))
+    for b in boxes:
+        label = b.get("label", "").lower()
+        if label != "person" and b.get("cls") != 0:
+            # Only filter persons; other classes are kept verbatim.
+            kept.append(b)
+            continue
+        x1, y1, x2, y2 = b["bbox"]
+        bb_diag = float(np.hypot(x2 - x1, y2 - y1))
+        ratio = bb_diag / img_diag
+        if ratio < min_ratio:
+            logger.debug(
+                "Discarding person detection with diagonal ratio %.6f (threshold %.6f)",
+                ratio,
+                min_ratio,
+            )
+            discarded.append({"bbox": b["bbox"], "ratio": ratio})
+        else:
+            kept.append(b)
+    return kept, discarded
+
+
 # Additional helper to normalize configuration input for run/preview
 @track
 def _ensure_cfg(cfg: "PipelineConfig | str") -> "PipelineConfig":
@@ -698,6 +761,10 @@ class DatasetExporter:
             "video": item["video"],
             "frame_idx": idx,
         }
+        if item.get("discarded_boxes"):
+            # Including discarded detections in the log aids post-run auditing
+            # without cluttering the exported dataset.
+            debug["discarded_boxes"] = item["discarded_boxes"]
         # JSON Lines format allows streaming large debug logs without
         # constructing a massive in-memory structure.
         self.debug_file.write(json.dumps(debug) + "\n")
@@ -852,7 +919,33 @@ def run(
         frame = item["frame"]
         if not qf.check(frame):
             continue
-        item["boxes"] = yolo.detect(frame)
+        # Filter detections before storing them. Applying this here ensures that
+        # interpolation and subsequent processing operate only on meaningful
+        # boxes, avoiding needless work on specks far away in the frame.
+        boxes = yolo.detect(frame)
+        boxes, discarded = filter_small_person_boxes(
+            boxes,
+            frame.shape,
+            cfg.sampling.min_person_bbox_diagonal_ratio,
+        )
+        item["boxes"] = boxes
+        if discarded:
+            item["discarded_boxes"] = discarded
+            if not boxes and isinstance(exporter, DatasetExporter):
+                # Record discarded detections even when nothing is exported so
+                # analysts can audit which frames were skipped and why.
+                exporter.debug_file.write(
+                    json.dumps(
+                        {
+                            "image": None,
+                            "labels": [],
+                            "video": item["video"],
+                            "frame_idx": item["frame_idx"],
+                            "discarded_boxes": discarded,
+                        }
+                    )
+                    + "\n"
+                )
         items.append(item)
     # The total count is known only after ingestion because quality checks can
     # drop frames; we expose it here for progress displays.
@@ -956,7 +1049,14 @@ def preview(cfg: "PipelineConfig | str") -> None:
         frame = item["frame"]
         if not qf.check(frame):
             continue
+        # Preview mirrors the main pipeline's filtering to ensure users see
+        # the same detections that would be exported.
         boxes = yolo.detect(frame)
+        boxes, _ = filter_small_person_boxes(
+            boxes,
+            frame.shape,
+            cfg.sampling.min_person_bbox_diagonal_ratio,
+        )
         for b in boxes:
             x1, y1, x2, y2 = map(int, b["bbox"])
             cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
