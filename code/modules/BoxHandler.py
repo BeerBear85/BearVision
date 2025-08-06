@@ -2,19 +2,31 @@ import os
 import base64
 import json
 from pathlib import Path
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 import logging
 from configparser import ConfigParser
-
-from boxsdk import JWTAuth, Client
+import importlib
 
 from ConfigurationHandler import ConfigurationHandler
+
+if TYPE_CHECKING:  # pragma: no cover - for type checkers only
+    from boxsdk import Client
 
 logger = logging.getLogger(__name__)
 
 
 class BoxHandler:
-    """Handle upload/download to Box under a fixed root folder."""
+    """
+    Purpose:
+        Provide utilities for uploading, downloading and managing files on Box
+        under a predefined root folder.
+    Inputs:
+        Configuration data is supplied to :meth:`__init__` and may be a mapping
+        or ``ConfigParser`` instance with a ``BOX`` section.
+    Outputs:
+        Instances expose methods that operate on Box; no value is returned when
+        creating the object.
+    """
 
     def __init__(self, config: Optional[dict] = None):
         """
@@ -28,7 +40,7 @@ class BoxHandler:
             None
         """
         self.config = config or ConfigurationHandler.get_configuration()
-        self.client: Optional[Client] = None
+        self.client: Optional["Client"] = None
         self.root_id: Optional[str] = None
 
     def _authenticate(self):
@@ -62,18 +74,25 @@ class BoxHandler:
 
         secret_b64 = os.getenv(secret_env, "")
         if secret_env_2:
-            # Concatenating the two pieces keeps the decoding logic simple while
-            # still allowing deployments to split secrets across variables.
+            # Concatenate the two pieces to allow very long secrets to be
+            # provided without complicating the decoding logic.
             secret_b64 += os.getenv(secret_env_2, "")
         if not secret_b64:
             raise RuntimeError(
                 f"Box credentials not found. Set the '{secret_env}' environment variable."
             )
 
+        # Import the Box SDK only when needed so that tests can inject stubs
+        # and deployments without the dependency can still import this module.
+        try:
+            boxsdk = importlib.import_module("boxsdk")
+        except Exception as exc:  # pragma: no cover - dependency missing
+            raise RuntimeError("boxsdk library is required for Box operations") from exc
+
         try:
             info = json.loads(base64.b64decode(secret_b64).decode("utf-8"))
-            auth = JWTAuth.from_settings_dictionary(info)
-            self.client = Client(auth)
+            auth = boxsdk.JWTAuth.from_settings_dictionary(info)
+            self.client = boxsdk.Client(auth)
         except Exception as exc:  # pragma: no cover - defensive guard
             raise RuntimeError("Invalid Box credentials") from exc
 
