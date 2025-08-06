@@ -5,7 +5,6 @@ from pathlib import Path
 import copy
 
 import cv2
-from PIL import Image, ImageTk
 import numpy as np
 from typing import Callable
 
@@ -50,8 +49,10 @@ def run_pipeline(
     cfg = copy.deepcopy(cfg)
     cfg.videos = [video_path]
     cfg.export.output_dir = output_dir
-    # The callback feeds the GUI a copy of each frame, allowing responsive
-    # previews without spawning additional OpenCV windows.
+    # The callback feeds the GUI a copy of each frame.  We set
+    # ``show_preview`` to ``False`` because the GUI now controls preview
+    # rendering in its own OpenCV window rather than relying on the pipeline's
+    # post-run display.
     ap.run(cfg, show_preview=False, frame_callback=frame_callback)
 
 
@@ -103,10 +104,11 @@ class AnnotationGUI:
         # monitored at a glance without parsing additional status text.
         tk.Label(master, textvariable=self.frame_progress, anchor="w").pack(fill="x")
 
-        # Dedicated preview pane sits at the bottom and shows each processed
-        # frame scaled down for responsiveness.
-        self.preview_label = tk.Label(master)
-        self.preview_label.pack(side="bottom")
+        # The GUI used to embed previews directly in the window, but on some
+        # platforms that resulted in blank output.  Instead we delegate frame
+        # display to an OpenCV window created on demand, yielding more reliable
+        # cross-platform behaviour while keeping the Tk widgets minimal.
+        self._preview_window: str | None = None
 
         # Double the window's dimensions for better visibility without the
         # caller needing to guess an appropriate size ahead of widget creation.
@@ -219,8 +221,10 @@ class AnnotationGUI:
             run_pipeline(self.base_cfg, video, output, self.on_frame)
         finally:
             # ``after`` hands control back to the Tk main loop so widget state is
-            # manipulated safely from the GUI thread.
+            # manipulated safely from the GUI thread. We also ensure any preview
+            # window is closed so subsequent runs start cleanly.
             self.master.after(0, lambda: self.run_btn.config(state=tk.NORMAL))
+            self.master.after(0, self._close_preview_window)
 
     def on_frame(self, frame: np.ndarray) -> None:
         """Schedule display of a processed frame on the main thread.
@@ -244,13 +248,14 @@ class AnnotationGUI:
         self.master.after(0, lambda f=frame: self._update_preview(f))
 
     def _update_preview(self, frame: np.ndarray) -> None:
-        """Render a scaled preview image in the bottom pane.
+        """Render a scaled preview image in a separate OpenCV window.
 
         Purpose
         -------
-        Convert the BGR frame from OpenCV to a Tk-compatible format and downscale
-        it according to ``preview_scaling`` so frequent updates remain
-        responsive.
+        Avoid issues with embedding previews directly in Tkinter by delegating
+        the display to an OpenCV-managed window.  This keeps the GUI responsive
+        and works reliably across platforms that struggle with Tk image
+        updates.
 
         Inputs
         ------
@@ -260,16 +265,46 @@ class AnnotationGUI:
         Outputs
         -------
         None
-            ``self.preview_label`` is updated to show the latest frame.
+            The ``preview`` window is updated with the latest frame.
         """
-        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)  # Tkinter expects RGB order.
-        h, w = rgb.shape[:2]
-        scaled = cv2.resize(rgb, (int(w * self.preview_scaling), int(h * self.preview_scaling)))
-        img = ImageTk.PhotoImage(Image.fromarray(scaled))
-        # Keep a reference to avoid Python's garbage collector disposing the image
-        # while Tkinter still displays it.
-        self.preview_label.configure(image=img)
-        self.preview_label.image = img
+        # Lazily create the window to avoid opening it during app start when no
+        # frames have been processed yet.
+        if self._preview_window is None:
+            self._preview_window = "preview"
+            # ``WINDOW_NORMAL`` allows user-resizable window for convenience.
+            cv2.namedWindow(self._preview_window, cv2.WINDOW_NORMAL)
+
+        # Downscale the frame so high-resolution videos don't overwhelm the
+        # display and to keep per-frame processing lightweight.
+        h, w = frame.shape[:2]
+        scaled = cv2.resize(frame, (int(w * self.preview_scaling), int(h * self.preview_scaling)))
+        cv2.imshow(self._preview_window, scaled)
+        # ``waitKey`` with small timeout lets OpenCV process its event queue
+        # without noticeably blocking the Tkinter loop.
+        cv2.waitKey(1)
+
+    def _close_preview_window(self) -> None:
+        """Destroy the OpenCV preview window if it was created.
+
+        Purpose
+        -------
+        Ensure resources tied to the preview are released after pipeline
+        completion, allowing subsequent runs to create a fresh window without
+        inheriting stale state.
+
+        Inputs
+        ------
+        None
+            Operates on the instance's internal window tracker.
+
+        Outputs
+        -------
+        None
+            Closes the window when present and resets the tracker.
+        """
+        if self._preview_window is not None:
+            cv2.destroyWindow(self._preview_window)
+            self._preview_window = None
 
     def refresh_status(self) -> None:
         """Update status and frame-progress labels with pipeline progress.
