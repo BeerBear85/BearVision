@@ -1,7 +1,6 @@
 videos:
   - path/to/video1.mp4
 detection_gap_timeout_s: 3.0
-preview_scaling: 0.2
 sampling:
   fps: 2.0
   min_person_bbox_diagonal_ratio: 0.001

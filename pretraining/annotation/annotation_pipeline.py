@@ -221,9 +221,6 @@ class PipelineConfig:
     detection_gap_timeout_s: float, default ``3.0``
         Number of seconds without detections after which the current
         trajectory is finalised and a new track is started.
-    preview_scaling: float, default ``0.2``
-        Factor by which frames are downscaled for live previews. Lower values
-        reduce CPU overhead at the cost of detail.
     """
 
     videos: List[str] = field(default_factory=list)
@@ -233,7 +230,6 @@ class PipelineConfig:
     export: ExportConfig = field(default_factory=lambda: ExportConfig(output_dir="dataset"))
     trajectory: TrajectoryConfig = field(default_factory=TrajectoryConfig)
     detection_gap_timeout_s: float = 3.0
-    preview_scaling: float = 0.2
 
 
 class VidIngest:
@@ -546,7 +542,6 @@ def _ensure_cfg(cfg: "PipelineConfig | str") -> "PipelineConfig":
         export=export,
         trajectory=trajectory,
         detection_gap_timeout_s=cfg_dict.get("detection_gap_timeout_s", 3.0),
-        preview_scaling=cfg_dict.get("preview_scaling", 0.2),
     )
 
 
@@ -593,6 +588,7 @@ def _export_segment(
     sample_rate: float,
     track_id: int,
     frame_callback: Callable[[np.ndarray], None] | None = None,
+    gui_mode: bool = False,
 ) -> tuple[List[tuple[int, int]], Dict[str, Any] | None]:
     """Interpolate and export one trajectory segment.
 
@@ -677,7 +673,7 @@ def _export_segment(
             exporter.save(item, item["boxes"])
             trajectory.append((int(cx), int(cy)))
             final_item = item
-            if frame_callback:
+            if frame_callback and gui_mode:
                 # Show every interpolated frame even if seen before so users can
                 # follow the smoothing process step by step.
                 disp = item["frame"].copy()  # Copy so overlays don't alter saved data.
@@ -691,7 +687,7 @@ def _export_segment(
                 item["boxes"][0]["track_id"] = track_id
                 exporter.save(item, item["boxes"])
                 final_item = item
-                if frame_callback:
+                if frame_callback and gui_mode:
                     disp = item["frame"].copy()  # Avoid mutating frame that gets written.
                     for b in item.get("boxes", []):
                         x1, y1, x2, y2 = map(int, b["bbox"])
@@ -881,6 +877,7 @@ def run(
     cfg: "PipelineConfig | str",
     show_preview: bool = False,
     frame_callback: Callable[[np.ndarray], None] | None = None,
+    gui_mode: bool = False,
 ) -> None:
     """Run the dataset generation pipeline with optional spline interpolation.
 
@@ -904,6 +901,10 @@ def run(
         Function invoked with each processed frame after saving. Enables
         callers such as GUIs to display live previews without modifying the
         core export logic. ``None`` disables callbacks.
+    gui_mode: bool, default ``False``
+        When ``True``, indicates the pipeline is running with GUI and the
+        frame callback should handle any preview scaling. When ``False``,
+        no preview callbacks are executed.
 
     Outputs
     -------
@@ -940,7 +941,7 @@ def run(
         
         if not qf.check(frame):
             # Still update preview for failed quality check frames
-            if frame_callback:
+            if frame_callback and gui_mode:
                 disp = item["frame"].copy()
                 frame_callback(disp)
             continue
@@ -973,7 +974,7 @@ def run(
                 )
         items.append(item)
         # Always call frame_callback for live preview updates, even for frames without detections
-        if frame_callback:
+        if frame_callback and gui_mode:
             disp = item["frame"].copy()
             for b in item.get("boxes", []):
                 x1, y1, x2, y2 = map(int, b["bbox"])
@@ -1033,6 +1034,7 @@ def run(
             sample_rate,
             track_id,
             frame_callback,
+            gui_mode,
         )
         if traj:
             trajectory = traj
