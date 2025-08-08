@@ -66,7 +66,7 @@ def run_pipeline(
     # ``show_preview`` to ``False`` because the GUI now controls preview
     # rendering in its own OpenCV window rather than relying on the pipeline's
     # post-run display.
-    ap.run(cfg, show_preview=False, frame_callback=frame_callback)
+    ap.run(cfg, show_preview=False, frame_callback=frame_callback, gui_mode=True)
 
 
 class AnnotationGUI(QMainWindow):
@@ -78,11 +78,11 @@ class AnnotationGUI(QMainWindow):
         self.setWindowTitle("Annotation Pipeline")
         self.setGeometry(100, 100, 900, 400)
         
-        # Load configuration so preview scaling can be adjusted via YAML without
-        # touching the code. Path resolution stays relative to this file.
+        # Load configuration for pipeline parameters
         cfg_path = Path(__file__).with_name("sample_config.yaml")
         self.base_cfg = ap._ensure_cfg(str(cfg_path))
-        self.preview_scaling = self.base_cfg.preview_scaling
+        # Calculate preview scaling based on preview panel size
+        self.preview_width = 280  # Maximum width for preview display
         ap.status = ap.PipelineStatus()  # Reset status so GUI starts in "Idle".
         
         # Central widget and main layout
@@ -242,12 +242,13 @@ class AnnotationGUI(QMainWindow):
 
     def _update_preview(self, frame: np.ndarray) -> None:
         """Render a scaled preview image in the Qt widget."""
-        # Downscale the frame so high-resolution videos don't overwhelm the
-        # display and to keep per-frame processing lightweight.
+        # Calculate preview scaling based on the preview panel width
+        # to ensure the preview fits nicely in the GUI
         h, w = frame.shape[:2]
+        scale_factor = self.preview_width / w if w > self.preview_width else 1.0
         scaled = cv2.resize(
             frame, 
-            (int(w * self.preview_scaling), int(h * self.preview_scaling))
+            (int(w * scale_factor), int(h * scale_factor))
         )
         
         # Convert BGR to RGB for Qt display
