@@ -21,12 +21,14 @@ jobs:
         cache: gradle
 
     - name: Validate Gradle wrapper
-      uses: gradle/wrapper-validation-action@v1
+      uses: gradle/actions/wrapper-validation@v3
+      with:
+        min-wrapper-count: 0
     - name: Grant execute permission for gradlew  
       run: chmod +x gradlew
       working-directory: android_app
     - name: Setup Gradle
-      uses: gradle/gradle-build-action@v2
+      uses: gradle/actions/setup-gradle@v3
       with:
         build-root-directory: android_app
     - name: Build with Gradle
