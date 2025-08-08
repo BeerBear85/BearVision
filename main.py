@@ -17,7 +17,6 @@ logging.basicConfig(
 
 if __name__ == "__main__":
     import sys
-    import tkinter
     import os
 
     # Extend search path so local packages can be imported when running from source.
@@ -26,7 +25,7 @@ if __name__ == "__main__":
     sys.path.append(os.path.join("code", "external_modules"))
 
     from Application import Application
-    from GUI import BearVisionGUI
+    from GUI_PyQt import BearVisionGUI, create_app
     from ConfigurationHandler import ConfigurationHandler
 
     logger = logging.getLogger(__name__)
@@ -37,8 +36,9 @@ if __name__ == "__main__":
     app_instance = Application()
 
     # Start GUI
-    GUI_root = tkinter.Tk()
-    my_gui = BearVisionGUI(GUI_root, app_instance)
-    GUI_root.mainloop()
+    app = create_app()
+    my_gui = BearVisionGUI(app_instance)
+    my_gui.show()
+    sys.exit(app.exec())
 
     logger.debug("-------------------------End-------------------------------------")
