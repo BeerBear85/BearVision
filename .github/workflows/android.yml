@@ -23,7 +23,7 @@ jobs:
     - name: Validate Gradle wrapper
       uses: gradle/actions/wrapper-validation@v3
       with:
-        min-wrapper-count: 0
+        min-wrapper-count: 1
     - name: Grant execute permission for gradlew  
       run: chmod +x gradlew
       working-directory: android_app
