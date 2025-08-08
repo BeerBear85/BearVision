@@ -10,9 +10,26 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'code', 'Applicati
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'code', 'Modules'))
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'pretraining', 'annotation'))
 
-from PySide6.QtWidgets import QApplication
-from PySide6.QtCore import QTimer
-from PySide6.QtGui import QPixmap
+# Handle PySide6 imports gracefully - if system dependencies are missing,
+# pytest will skip all tests in this module during collection
+try:
+    from PySide6.QtWidgets import QApplication
+    from PySide6.QtCore import QTimer  
+    from PySide6.QtGui import QPixmap
+    PYSIDE6_AVAILABLE = True
+except ImportError as e:
+    # Create placeholder classes to prevent NameError during test collection
+    QApplication = None
+    QTimer = None
+    QPixmap = None
+    PYSIDE6_AVAILABLE = False
+    PYSIDE6_IMPORT_ERROR = str(e)
+
+# Skip all tests if PySide6 dependencies are not available
+pytestmark = pytest.mark.skipif(
+    not PYSIDE6_AVAILABLE, 
+    reason=f"PySide6 dependencies not available: {PYSIDE6_IMPORT_ERROR if not PYSIDE6_AVAILABLE else 'Unknown error'}"
+)
 
 
 def test_create_app_headless():
@@ -139,6 +156,11 @@ def test_gui_widgets_functionality():
 if __name__ == "__main__":
     # Run tests manually for verification
     print("Testing headless GUI creation...")
+    
+    if not PYSIDE6_AVAILABLE:
+        print(f"⚠️  PySide6 dependencies not available: {PYSIDE6_IMPORT_ERROR}")
+        print("Tests will be skipped. Install PySide6 and system dependencies to run GUI tests.")
+        sys.exit(0)
     
     # Set headless mode
     os.environ['QT_QPA_PLATFORM'] = 'offscreen'
