@@ -12,10 +12,10 @@ import numpy as np
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QLineEdit, QPushButton, QFrame, QFileDialog, QMessageBox,
-    QSplitter
+    QSplitter, QScrollArea
 )
 from PySide6.QtCore import Qt, QTimer, Signal, QObject
-from PySide6.QtGui import QFont
+from PySide6.QtGui import QFont, QPixmap, QImage
 
 import annotation_pipeline as ap
 
@@ -135,9 +135,9 @@ class AnnotationGUI(QMainWindow):
         # Add left panel to splitter
         main_splitter.addWidget(left_panel)
         
-        # Right panel - Image preview (150px wide, flexible height)
+        # Right panel - Image preview (300px wide, flexible height)
         self.preview_panel = QFrame()
-        self.preview_panel.setFixedWidth(150)
+        self.preview_panel.setFixedWidth(300)
         self.preview_panel.setStyleSheet("background-color: lightgray; border: 1px solid gray;")
         preview_layout = QVBoxLayout(self.preview_panel)
         
@@ -146,22 +146,29 @@ class AnnotationGUI(QMainWindow):
         preview_label.setWordWrap(True)
         preview_layout.addWidget(preview_label)
         
-        placeholder_label = QLabel("(Processed frames will appear in separate OpenCV window)")
-        placeholder_label.setAlignment(Qt.AlignCenter)
-        placeholder_label.setWordWrap(True)
-        placeholder_label.setStyleSheet("color: gray; font-style: italic;")
-        preview_layout.addWidget(placeholder_label)
+        # Create scrollable area for the image
+        self.preview_scroll = QScrollArea()
+        self.preview_scroll.setWidgetResizable(True)
+        self.preview_scroll.setAlignment(Qt.AlignCenter)
+        
+        # Image label that will display the frames
+        self.preview_image_label = QLabel("No frames processed yet")
+        self.preview_image_label.setAlignment(Qt.AlignCenter)
+        self.preview_image_label.setStyleSheet("color: gray; font-style: italic;")
+        self.preview_image_label.setMinimumSize(280, 200)
+        
+        self.preview_scroll.setWidget(self.preview_image_label)
+        preview_layout.addWidget(self.preview_scroll)
         
         # Add preview panel to splitter
         main_splitter.addWidget(self.preview_panel)
         
         # Set splitter proportions
-        main_splitter.setSizes([750, 150])
+        main_splitter.setSizes([600, 300])
         
         # Initialize variables
         self.video_path = ""
         self.output_dir = ""
-        self._preview_window = None
         
         # Set up frame signals for thread-safe updates
         self.frame_signals = FrameSignals()
@@ -226,23 +233,15 @@ class AnnotationGUI(QMainWindow):
             # makes the failure explicit and keeps the GUI responsive.
             QMessageBox.critical(self, "Pipeline error", str(exc))
         finally:
-            # Re-enable the run button and close preview window
+            # Re-enable the run button
             self.run_btn.setEnabled(True)
-            self._close_preview_window()
 
     def on_frame(self, frame: np.ndarray) -> None:
         """Schedule display of a processed frame on the main thread."""
         self.frame_signals.frame_ready.emit(frame.copy())
 
     def _update_preview(self, frame: np.ndarray) -> None:
-        """Render a scaled preview image in a separate OpenCV window."""
-        # Lazily create the window to avoid opening it during app start when no
-        # frames have been processed yet.
-        if self._preview_window is None:
-            self._preview_window = "preview"
-            # ``WINDOW_NORMAL`` allows user-resizable window for convenience.
-            cv2.namedWindow(self._preview_window, cv2.WINDOW_NORMAL)
-
+        """Render a scaled preview image in the Qt widget."""
         # Downscale the frame so high-resolution videos don't overwhelm the
         # display and to keep per-frame processing lightweight.
         h, w = frame.shape[:2]
@@ -250,16 +249,23 @@ class AnnotationGUI(QMainWindow):
             frame, 
             (int(w * self.preview_scaling), int(h * self.preview_scaling))
         )
-        cv2.imshow(self._preview_window, scaled)
-        # ``waitKey`` with small timeout lets OpenCV process its event queue
-        # without noticeably blocking the Qt loop.
-        cv2.waitKey(1)
+        
+        # Convert BGR to RGB for Qt display
+        rgb_frame = cv2.cvtColor(scaled, cv2.COLOR_BGR2RGB)
+        
+        # Convert to QImage
+        h, w, ch = rgb_frame.shape
+        bytes_per_line = ch * w
+        qt_image = QImage(rgb_frame.data, w, h, bytes_per_line, QImage.Format_RGB888)
+        
+        # Convert to QPixmap and display
+        pixmap = QPixmap.fromImage(qt_image)
+        self.preview_image_label.setPixmap(pixmap)
+        self.preview_image_label.setScaledContents(False)
+        
+        # Adjust the label size to fit the image
+        self.preview_image_label.resize(pixmap.size())
 
-    def _close_preview_window(self) -> None:
-        """Destroy the OpenCV preview window if it was created."""
-        if self._preview_window is not None:
-            cv2.destroyWindow(self._preview_window)
-            self._preview_window = None
 
     def refresh_status(self) -> None:
         """Update status and frame-progress labels with pipeline progress."""
