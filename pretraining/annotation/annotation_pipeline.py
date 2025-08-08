@@ -935,8 +935,14 @@ def run(
     # entire clip. This trades memory for simplicity and deterministic output.
     for item in ingest:
         frame = item["frame"]
+        # Update current_frame to reflect the actual video frame index being processed
+        status.current_frame = item["frame_idx"] + 1  # frame_idx is 0-based, display as 1-based
+        
         if not qf.check(frame):
-            status.current_frame += 1  # reflect discarded frames in progress
+            # Still update preview for failed quality check frames
+            if frame_callback:
+                disp = item["frame"].copy()
+                frame_callback(disp)
             continue
         # Filter detections before storing them. Applying this here ensures that
         # interpolation and subsequent processing operate only on meaningful
@@ -966,7 +972,7 @@ def run(
                     + "\n"
                 )
         items.append(item)
-        status.current_frame += 1
+        # Always call frame_callback for live preview updates, even for frames without detections
         if frame_callback:
             disp = item["frame"].copy()
             for b in item.get("boxes", []):
