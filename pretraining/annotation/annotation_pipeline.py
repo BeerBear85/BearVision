@@ -936,6 +936,8 @@ def run(
     # entire clip. This trades memory for simplicity and deterministic output.
     for item in ingest:
         frame = item["frame"]
+        # Update current_frame to reflect the actual video frame index being processed
+        status.current_frame = item["frame_idx"]
         
         if not qf.check(frame):
             # Still update preview for failed quality check frames
@@ -943,8 +945,6 @@ def run(
                 disp = item["frame"].copy()
                 frame_callback(disp)
             continue
-        # Update current_frame to count frames that pass quality checks
-        status.current_frame += 1
         
         # Filter detections before storing them. Applying this here ensures that
         # interpolation and subsequent processing operate only on meaningful
