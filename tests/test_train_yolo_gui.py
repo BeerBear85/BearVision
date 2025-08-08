@@ -5,11 +5,18 @@ import tempfile
 import yaml
 from pathlib import Path
 from unittest.mock import patch, MagicMock
-
-# Import the GUI module
 import sys
+
+# Add pretraining directory to path
 sys.path.append(str(Path(__file__).parent.parent / "pretraining"))
 
+# Mock PySide6 for headless testing
+sys.modules['PySide6'] = MagicMock()
+sys.modules['PySide6.QtWidgets'] = MagicMock()
+sys.modules['PySide6.QtCore'] = MagicMock()
+sys.modules['PySide6.QtGui'] = MagicMock()
+
+# Now safely import the GUI module
 from train_yolo_gui import TrainYoloGUI, create_app
 
 
@@ -18,7 +25,8 @@ class TestTrainYoloGUIHeadless(unittest.TestCase):
     
     def setUp(self):
         """Set up test fixtures."""
-        self.app = create_app()
+        # Mock the QApplication for headless testing
+        self.app = MagicMock()
         
         # Create temporary config file
         self.temp_dir = Path(tempfile.mkdtemp())
