@@ -10,11 +10,40 @@ import sys
 # Add pretraining directory to path
 sys.path.append(str(Path(__file__).parent.parent / "pretraining"))
 
-# Mock PySide6 for headless testing
-sys.modules['PySide6'] = MagicMock()
-sys.modules['PySide6.QtWidgets'] = MagicMock()
-sys.modules['PySide6.QtCore'] = MagicMock()
-sys.modules['PySide6.QtGui'] = MagicMock()
+# Mock PySide6 for headless testing  
+mock_pyside6 = MagicMock()
+mock_widgets = MagicMock()
+mock_core = MagicMock()
+mock_gui = MagicMock()
+
+# Create mock classes that can be instantiated
+mock_qobject = MagicMock()
+mock_qthread = MagicMock()
+mock_qmainwindow = MagicMock()
+mock_qapplication = MagicMock()
+
+mock_core.QObject = mock_qobject
+mock_core.QThread = mock_qthread
+mock_widgets.QMainWindow = mock_qmainwindow
+mock_widgets.QApplication = mock_qapplication
+
+# Set up all the other widgets as MagicMocks
+for widget_name in ['QWidget', 'QVBoxLayout', 'QHBoxLayout', 'QLabel', 'QLineEdit', 
+                    'QPushButton', 'QFrame', 'QFileDialog', 'QMessageBox', 'QSplitter',
+                    'QScrollArea', 'QTextEdit', 'QSpinBox', 'QDoubleSpinBox', 'QComboBox',
+                    'QGroupBox', 'QFormLayout', 'QProgressBar']:
+    setattr(mock_widgets, widget_name, MagicMock())
+
+for core_name in ['Qt', 'QTimer', 'Signal']:
+    setattr(mock_core, core_name, MagicMock())
+    
+for gui_name in ['QFont', 'QTextCursor']:
+    setattr(mock_gui, gui_name, MagicMock())
+
+sys.modules['PySide6'] = mock_pyside6
+sys.modules['PySide6.QtWidgets'] = mock_widgets
+sys.modules['PySide6.QtCore'] = mock_core
+sys.modules['PySide6.QtGui'] = mock_gui
 
 # Now safely import the GUI module
 from train_yolo_gui import TrainYoloGUI, create_app
@@ -62,9 +91,13 @@ class TestTrainYoloGUIHeadless(unittest.TestCase):
     
     def test_config_loading(self):
         """Test configuration loading functionality."""
-        # Patch the config path
-        with patch.object(TrainYoloGUI, 'config_path', self.config_path):
+        # Create a temporary GUI instance and override its config_path
+        with patch('train_yolo_gui.Path') as mock_path:
+            # Make Path(__file__).parent resolve to our temp directory
+            mock_path.return_value.parent = self.temp_dir
             gui = TrainYoloGUI()
+            gui.config_path = self.config_path
+            gui.config = gui.load_config()
             
             # Check that configuration was loaded correctly
             self.assertEqual(gui.config['training']['model'], 'yolov8n.pt')
@@ -76,8 +109,11 @@ class TestTrainYoloGUIHeadless(unittest.TestCase):
         """Test configuration loading when file doesn't exist."""
         missing_path = self.temp_dir / "missing_config.yaml"
         
-        with patch.object(TrainYoloGUI, 'config_path', missing_path):
+        with patch('train_yolo_gui.Path') as mock_path:
+            mock_path.return_value.parent = self.temp_dir
             gui = TrainYoloGUI()
+            gui.config_path = missing_path
+            gui.config = gui.load_config()
             
             # Check that default configuration is used
             self.assertEqual(gui.config['training']['model'], 'yolov8x.pt')
@@ -86,8 +122,10 @@ class TestTrainYoloGUIHeadless(unittest.TestCase):
     
     def test_config_saving(self):
         """Test configuration saving functionality."""
-        with patch.object(TrainYoloGUI, 'config_path', self.config_path):
+        with patch('train_yolo_gui.Path') as mock_path:
+            mock_path.return_value.parent = self.temp_dir
             gui = TrainYoloGUI()
+            gui.config_path = self.config_path
             
             # Mock UI elements with test values
             gui.model_combo = MagicMock()
@@ -132,8 +170,10 @@ class TestTrainYoloGUIHeadless(unittest.TestCase):
     
     def test_input_validation_missing_directory(self):
         """Test input validation with missing data directory."""
-        with patch.object(TrainYoloGUI, 'config_path', self.config_path):
+        with patch('train_yolo_gui.Path') as mock_path:
+            mock_path.return_value.parent = self.temp_dir
             gui = TrainYoloGUI()
+            gui.config_path = self.config_path
             
             # Mock empty data directory
             gui.data_dir_edit = MagicMock()
@@ -144,8 +184,10 @@ class TestTrainYoloGUIHeadless(unittest.TestCase):
     
     def test_input_validation_nonexistent_directory(self):
         """Test input validation with non-existent data directory."""
-        with patch.object(TrainYoloGUI, 'config_path', self.config_path):
+        with patch('train_yolo_gui.Path') as mock_path:
+            mock_path.return_value.parent = self.temp_dir
             gui = TrainYoloGUI()
+            gui.config_path = self.config_path
             
             # Mock non-existent data directory
             gui.data_dir_edit = MagicMock()
@@ -160,8 +202,10 @@ class TestTrainYoloGUIHeadless(unittest.TestCase):
         test_data_dir = self.temp_dir / "no_images"
         test_data_dir.mkdir()
         
-        with patch.object(TrainYoloGUI, 'config_path', self.config_path):
+        with patch('train_yolo_gui.Path') as mock_path:
+            mock_path.return_value.parent = self.temp_dir
             gui = TrainYoloGUI()
+            gui.config_path = self.config_path
             
             # Mock data directory path
             gui.data_dir_edit = MagicMock()
@@ -179,8 +223,10 @@ class TestTrainYoloGUIHeadless(unittest.TestCase):
         # Create a test image
         (test_data_dir / "test.jpg").touch()
         
-        with patch.object(TrainYoloGUI, 'config_path', self.config_path):
+        with patch('train_yolo_gui.Path') as mock_path:
+            mock_path.return_value.parent = self.temp_dir
             gui = TrainYoloGUI()
+            gui.config_path = self.config_path
             
             # Mock data directory path
             gui.data_dir_edit = MagicMock()
@@ -201,8 +247,10 @@ class TestTrainYoloGUIHeadless(unittest.TestCase):
         (test_data_dir / "image2.png").touch()
         (test_data_dir / "image2.txt").touch()
         
-        with patch.object(TrainYoloGUI, 'config_path', self.config_path):
+        with patch('train_yolo_gui.Path') as mock_path:
+            mock_path.return_value.parent = self.temp_dir
             gui = TrainYoloGUI()
+            gui.config_path = self.config_path
             
             # Mock data directory path
             gui.data_dir_edit = MagicMock()
@@ -213,8 +261,11 @@ class TestTrainYoloGUIHeadless(unittest.TestCase):
     
     def test_populate_from_config(self):
         """Test UI population from configuration."""
-        with patch.object(TrainYoloGUI, 'config_path', self.config_path):
+        with patch('train_yolo_gui.Path') as mock_path:
+            mock_path.return_value.parent = self.temp_dir
             gui = TrainYoloGUI()
+            gui.config_path = self.config_path
+            gui.config = gui.load_config()
             
             # Mock UI elements
             gui.model_combo = MagicMock()
