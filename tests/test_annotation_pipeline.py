@@ -263,9 +263,11 @@ def test_status_reports_total_and_processed_frames(tmp_path):
         frames = []
         ap.run(cfg, frame_callback=lambda f: frames.append(f))
 
-    # Total frames reflect video metadata; current_frame counts sampled frames.
+    # Total frames reflect video metadata; processed_frame_count counts sampled frames.
+    # current_frame reflects the last video frame index processed.
     assert ap.status.total_frames == 4
-    assert ap.status.current_frame == 2
+    assert ap.status.processed_frame_count == 2
+    assert ap.status.current_frame == 2  # Last processed frame index (0-based)
     assert len(frames) == 2
 
 

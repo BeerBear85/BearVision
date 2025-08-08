@@ -43,14 +43,17 @@ class PipelineStatus:
     last_function: str
         Name of the most recently invoked function in this module.
     current_frame: int
-        One-based index of the frame currently being processed.
+        Index of the video frame currently being processed (0-based).
     total_frames: int
-        Total number of frames scheduled for processing in the current run.
+        Total number of frames in the video(s) being processed.
+    processed_frame_count: int
+        Count of frames that have passed quality checks and been processed.
     """
 
     last_function: str = ""
     current_frame: int = 0
     total_frames: int = 0
+    processed_frame_count: int = 0
 
 
 status = PipelineStatus()
@@ -673,13 +676,14 @@ def _export_segment(
             exporter.save(item, item["boxes"])
             trajectory.append((int(cx), int(cy)))
             final_item = item
-            if frame_callback and gui_mode:
+            if frame_callback:
                 # Show every interpolated frame even if seen before so users can
                 # follow the smoothing process step by step.
                 disp = item["frame"].copy()  # Copy so overlays don't alter saved data.
-                for b in item.get("boxes", []):
-                    x1, y1, x2, y2 = map(int, b["bbox"])
-                    cv2.rectangle(disp, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                if gui_mode:
+                    for b in item.get("boxes", []):
+                        x1, y1, x2, y2 = map(int, b["bbox"])
+                        cv2.rectangle(disp, (x1, y1), (x2, y2), (0, 255, 0), 2)
                 frame_callback(disp)
     else:
         for item in segment_items:
@@ -687,11 +691,12 @@ def _export_segment(
                 item["boxes"][0]["track_id"] = track_id
                 exporter.save(item, item["boxes"])
                 final_item = item
-                if frame_callback and gui_mode:
+                if frame_callback:
                     disp = item["frame"].copy()  # Avoid mutating frame that gets written.
-                    for b in item.get("boxes", []):
-                        x1, y1, x2, y2 = map(int, b["bbox"])
-                        cv2.rectangle(disp, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                    if gui_mode:
+                        for b in item.get("boxes", []):
+                            x1, y1, x2, y2 = map(int, b["bbox"])
+                            cv2.rectangle(disp, (x1, y1), (x2, y2), (0, 255, 0), 2)
                     frame_callback(disp)
 
     return trajectory, final_item
@@ -930,6 +935,7 @@ def run(
         cap.release()
     status.total_frames = total_frames
     status.current_frame = 0
+    status.processed_frame_count = 0
 
     items: List[Dict[str, Any]] = []
     # Collect frames and detections first so we can interpolate across the
@@ -945,6 +951,9 @@ def run(
                 disp = item["frame"].copy()
                 frame_callback(disp)
             continue
+        
+        # Increment processed frame count for frames that pass quality checks
+        status.processed_frame_count += 1
         
         # Filter detections before storing them. Applying this here ensures that
         # interpolation and subsequent processing operate only on meaningful
@@ -974,12 +983,14 @@ def run(
                     + "\n"
                 )
         items.append(item)
-        # Always call frame_callback for live preview updates, even for frames without detections
-        if frame_callback and gui_mode:
+        # Call frame_callback for live preview updates and testing, even for frames without detections
+        if frame_callback:
             disp = item["frame"].copy()
-            for b in item.get("boxes", []):
-                x1, y1, x2, y2 = map(int, b["bbox"])
-                cv2.rectangle(disp, (x1, y1), (x2, y2), (0, 255, 0), 2)
+            # Only add bounding box visualization in GUI mode to avoid cv2 dependency in tests
+            if gui_mode:
+                for b in item.get("boxes", []):
+                    x1, y1, x2, y2 = map(int, b["bbox"])
+                    cv2.rectangle(disp, (x1, y1), (x2, y2), (0, 255, 0), 2)
             frame_callback(disp)
 
     # Compute centers, widths and heights for frames with detections.
