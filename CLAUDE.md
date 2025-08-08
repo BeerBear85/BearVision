@@ -35,10 +35,13 @@ pytest -v
 ### Machine Learning Pipeline
 ```bash
 # Annotation GUI for creating training datasets
-python pretraining/annotation/annotation_gui.py
+python pretraining/annotation/annotation_gui_pyqt.py
 
-# Train YOLOv8 model on custom dataset
+# Train YOLOv8 model on custom dataset (CLI)
 python pretraining/train_yolo.py /path/to/dataset --epochs 100 --batch 8 --onnx-out wakeboard.onnx
+
+# Training GUI for easy YOLO model fine-tuning
+python pretraining/train_yolo_gui.py
 ```
 
 ## Architecture Overview

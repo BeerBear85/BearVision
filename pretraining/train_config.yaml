@@ -1,0 +1,16 @@
+# YOLOv8 Training Configuration
+# This file contains default parameters for the YOLO training GUI
+
+training:
+  model: "yolov8x.pt"           # Base model weights
+  epochs: 50                    # Number of training epochs
+  batch: 16                     # Training batch size  
+  imgsz: 640                    # Image size for training
+  device: null                  # Device to use (null for auto-detection)
+  val_ratio: 0.2               # Validation split ratio
+  onnx_out: "yolov8_finetuned.onnx"  # Output path for ONNX model
+
+paths:
+  data_dir: ""                  # Directory with images and YOLO .txt labels
+  last_image_dir: ""           # Last selected image directory
+  last_output_dir: ""          # Last selected output directory
