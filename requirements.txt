@@ -12,3 +12,4 @@ google-api-python-client
 google-auth-oauthlib
 open_gopro
 boxsdk
+PySide6
