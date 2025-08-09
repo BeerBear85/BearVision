@@ -883,6 +883,7 @@ def run(
     show_preview: bool = False,
     frame_callback: Callable[[np.ndarray], None] | None = None,
     gui_mode: bool = False,
+    trajectory_callback: Callable[[np.ndarray], None] | None = None,
 ) -> None:
     """Run the dataset generation pipeline with optional spline interpolation.
 
@@ -910,6 +911,10 @@ def run(
         When ``True``, indicates the pipeline is running with GUI and the
         frame callback should handle any preview scaling. When ``False``,
         no preview callbacks are executed.
+    trajectory_callback: Callable[[np.ndarray], None] | None, optional
+        Function invoked whenever a trajectory image is produced. Allows
+        front-ends to display the final path without waiting for the entire
+        pipeline to finish. ``None`` disables trajectory updates.
 
     Outputs
     -------
@@ -1052,9 +1057,22 @@ def run(
             trajectory = traj
         if final_item is not None:
             preview_item = final_item
+        if trajectory_callback and final_item is not None:
+            # Compose a display image for the trajectory callback. We overlay
+            # the smoothed path when available; otherwise fall back to bounding
+            # boxes so the caller still receives a visual summary.
+            disp = final_item["frame"].copy()
+            if traj:
+                pts = np.array(traj, dtype=int)
+                cv2.polylines(disp, [pts], False, (0, 0, 255), 2)
+            else:
+                for b in final_item.get("boxes", []):
+                    x1, y1, x2, y2 = map(int, b["bbox"])
+                    cv2.rectangle(disp, (x1, y1), (x2, y2), (0, 255, 0), 2)
+            trajectory_callback(disp)
 
     exporter.close()
-    if show_preview and preview_item is not None:
+    if preview_item is not None:
         if trajectory:
             disp = preview_item["frame"].copy()
             pts = np.array(trajectory, dtype=int)
@@ -1064,9 +1082,12 @@ def run(
             for b in preview_item.get("boxes", []):
                 x1, y1, x2, y2 = map(int, b["bbox"])
                 cv2.rectangle(disp, (x1, y1), (x2, y2), (0, 255, 0), 2)
-        cv2.imshow("trajectory", disp)
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()
+        if trajectory_callback:
+            trajectory_callback(disp)
+        if show_preview:
+            cv2.imshow("trajectory", disp)
+            cv2.waitKey(0)
+            cv2.destroyAllWindows()
 
     return None
 

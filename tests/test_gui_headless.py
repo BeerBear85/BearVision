@@ -106,9 +106,12 @@ def test_annotation_gui_creation_headless():
             assert gui.windowTitle() == "Annotation Pipeline"
             assert gui.video_path == ""
             assert gui.output_dir == ""
-            
+
             # Check that preview panel exists and has correct width
-            assert gui.preview_panel.width() == 150
+            assert gui.preview_panel.width() == 300
+            # Second preview for trajectories should be present with default text
+            assert hasattr(gui, 'traj_image_label')
+            assert gui.traj_image_label.text() == "No trajectory available"
             
             app.quit()
             

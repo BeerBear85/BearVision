@@ -21,8 +21,28 @@ import annotation_pipeline as ap
 
 
 class FrameSignals(QObject):
-    """Signals for thread-safe frame updates."""
+    """Signals used to synchronize image updates across threads.
+
+    Purpose
+    -------
+    Provide Qt ``Signal`` objects for both the per-frame preview and the
+    trajectory overlay so worker threads can safely communicate with the GUI.
+
+    Inputs
+    ------
+    None
+
+    Outputs
+    -------
+    None
+    """
+
+    # Emitted whenever the pipeline processes a new frame. The GUI connects
+    # this to a slot that renders the live preview.
     frame_ready = Signal(np.ndarray)
+    # Emitted after the pipeline generates a trajectory visualization. This
+    # updates a second preview so users can inspect the full path.
+    trajectory_ready = Signal(np.ndarray)
 
 
 def run_pipeline(
@@ -30,6 +50,7 @@ def run_pipeline(
     video_path: str,
     output_dir: str,
     frame_callback: Callable[[np.ndarray], None],
+    traj_callback: Callable[[np.ndarray], None] | None = None,
 ) -> None:
     """Execute the pipeline for one video and export a dataset.
 
@@ -50,6 +71,9 @@ def run_pipeline(
         Directory where the dataset will be written.
     frame_callback: Callable[[np.ndarray], None]
         Function receiving each processed frame for preview rendering.
+    traj_callback: Callable[[np.ndarray], None] | None, optional
+        Invoked once a trajectory image becomes available so the GUI can
+        display it. ``None`` disables trajectory preview updates.
 
     Outputs
     -------
@@ -66,11 +90,34 @@ def run_pipeline(
     # ``show_preview`` to ``False`` because the GUI now controls preview
     # rendering in its own OpenCV window rather than relying on the pipeline's
     # post-run display.
-    ap.run(cfg, show_preview=False, frame_callback=frame_callback, gui_mode=True)
+    ap.run(
+        cfg,
+        show_preview=False,
+        frame_callback=frame_callback,
+        gui_mode=True,
+        trajectory_callback=traj_callback,
+    )
 
 
 class AnnotationGUI(QMainWindow):
-    """PySide6 front-end for the annotation pipeline."""
+    """PySide6 front-end for the annotation pipeline.
+
+    Purpose
+    -------
+    Offer a minimal user interface for running the annotation pipeline while
+    presenting live frame previews and generated trajectory overlays.
+
+    Inputs
+    ------
+    None
+        Configuration is supplied through GUI interactions.
+
+    Outputs
+    -------
+    None
+        Results are displayed within the application window and written to
+        disk by the pipeline.
+    """
 
     def __init__(self):
         """Create widgets and bind actions."""
@@ -145,20 +192,41 @@ class AnnotationGUI(QMainWindow):
         preview_label.setAlignment(Qt.AlignCenter)
         preview_label.setWordWrap(True)
         preview_layout.addWidget(preview_label)
-        
-        # Create scrollable area for the image
+
+        # Create scrollable area for the live frame preview. A scroll area is
+        # used rather than a fixed-size label so large frames can be inspected
+        # without distorting their aspect ratio.
         self.preview_scroll = QScrollArea()
         self.preview_scroll.setWidgetResizable(True)
         self.preview_scroll.setAlignment(Qt.AlignCenter)
-        
-        # Image label that will display the frames
+
+        # Image label that will display the frames processed in real time.
         self.preview_image_label = QLabel("No frames processed yet")
         self.preview_image_label.setAlignment(Qt.AlignCenter)
         self.preview_image_label.setStyleSheet("color: gray; font-style: italic;")
         self.preview_image_label.setMinimumSize(280, 200)
-        
+
         self.preview_scroll.setWidget(self.preview_image_label)
         preview_layout.addWidget(self.preview_scroll)
+
+        # Trajectory preview section mirrors the live preview but updates only
+        # when the backend emits a new trajectory image after track completion.
+        traj_label = QLabel("Trajectory Preview")
+        traj_label.setAlignment(Qt.AlignCenter)
+        traj_label.setWordWrap(True)
+        preview_layout.addWidget(traj_label)
+
+        self.traj_scroll = QScrollArea()
+        self.traj_scroll.setWidgetResizable(True)
+        self.traj_scroll.setAlignment(Qt.AlignCenter)
+
+        self.traj_image_label = QLabel("No trajectory available")
+        self.traj_image_label.setAlignment(Qt.AlignCenter)
+        self.traj_image_label.setStyleSheet("color: gray; font-style: italic;")
+        self.traj_image_label.setMinimumSize(280, 200)
+
+        self.traj_scroll.setWidget(self.traj_image_label)
+        preview_layout.addWidget(self.traj_scroll)
         
         # Add preview panel to splitter
         main_splitter.addWidget(self.preview_panel)
@@ -170,9 +238,12 @@ class AnnotationGUI(QMainWindow):
         self.video_path = ""
         self.output_dir = ""
         
-        # Set up frame signals for thread-safe updates
+        # Set up signals for thread-safe updates. Two channels allow the GUI to
+        # refresh live frames and trajectory overlays independently without
+        # blocking the worker thread.
         self.frame_signals = FrameSignals()
         self.frame_signals.frame_ready.connect(self._update_preview)
+        self.frame_signals.trajectory_ready.connect(self._update_trajectory_preview)
         
         # Timer for status updates
         self.status_timer = QTimer()
@@ -226,7 +297,13 @@ class AnnotationGUI(QMainWindow):
     def _run_pipeline_thread(self, video: str, output: str) -> None:
         """Execute the pipeline and re-enable the Run button when done."""
         try:
-            run_pipeline(self.base_cfg, video, output, self.on_frame)
+            run_pipeline(
+                self.base_cfg,
+                video,
+                output,
+                self.on_frame,
+                self.on_trajectory,
+            )
         except Exception as exc:
             # Without this handler users receive no feedback when the pipeline
             # fails (e.g. due to missing video/weights).  Showing a message box
@@ -237,11 +314,66 @@ class AnnotationGUI(QMainWindow):
             self.run_btn.setEnabled(True)
 
     def on_frame(self, frame: np.ndarray) -> None:
-        """Schedule display of a processed frame on the main thread."""
+        """Schedule display of a processed frame on the main thread.
+
+        Purpose
+        -------
+        Forward frames from the background thread to the GUI for real-time
+        preview rendering.
+
+        Inputs
+        ------
+        frame: np.ndarray
+            BGR image of the processed frame.
+
+        Outputs
+        -------
+        None
+            The frame is emitted via Qt signals for display.
+        """
         self.frame_signals.frame_ready.emit(frame.copy())
 
+    def on_trajectory(self, image: np.ndarray) -> None:
+        """Schedule display of the latest trajectory image.
+
+        Purpose
+        -------
+        Receive a completed trajectory overlay from the worker thread and
+        forward it to the GUI for rendering.
+
+        Inputs
+        ------
+        image: np.ndarray
+            BGR image containing the trajectory drawing.
+
+        Outputs
+        -------
+        None
+            The image is emitted via Qt signals for display.
+        """
+        # Trajectory images arrive only when a track ends, so we use a
+        # dedicated signal to update the GUI without queuing behind high-rate
+        # frame previews.
+        self.frame_signals.trajectory_ready.emit(image.copy())
+
     def _update_preview(self, frame: np.ndarray) -> None:
-        """Render a scaled preview image in the Qt widget."""
+        """Render a scaled preview image in the Qt widget.
+
+        Purpose
+        -------
+        Display live pipeline frames within the GUI while preserving aspect
+        ratio and fitting the predefined preview width.
+
+        Inputs
+        ------
+        frame: np.ndarray
+            BGR frame to display.
+
+        Outputs
+        -------
+        None
+            The scaled image is set on ``preview_image_label``.
+        """
         # Calculate preview scaling based on the preview panel width
         # to ensure the preview fits nicely in the GUI
         h, w = frame.shape[:2]
@@ -266,6 +398,40 @@ class AnnotationGUI(QMainWindow):
         
         # Adjust the label size to fit the image
         self.preview_image_label.resize(pixmap.size())
+
+    def _update_trajectory_preview(self, image: np.ndarray) -> None:
+        """Display the most recent trajectory image in the GUI.
+
+        Purpose
+        -------
+        Present the complete motion path produced after a track concludes,
+        allowing users to verify the interpolation quality.
+
+        Inputs
+        ------
+        image: np.ndarray
+            BGR image with trajectory overlay.
+
+        Outputs
+        -------
+        None
+            The scaled image is shown on ``traj_image_label``.
+        """
+        # Reuse the same scaling logic as the live preview so both panels share
+        # consistent sizing and users can compare them easily.
+        h, w = image.shape[:2]
+        scale_factor = self.preview_width / w if w > self.preview_width else 1.0
+        scaled = cv2.resize(image, (int(w * scale_factor), int(h * scale_factor)))
+
+        rgb = cv2.cvtColor(scaled, cv2.COLOR_BGR2RGB)
+        h, w, ch = rgb.shape
+        bytes_per_line = ch * w
+        qt_image = QImage(rgb.data, w, h, bytes_per_line, QImage.Format_RGB888)
+
+        pixmap = QPixmap.fromImage(qt_image)
+        self.traj_image_label.setPixmap(pixmap)
+        self.traj_image_label.setScaledContents(False)
+        self.traj_image_label.resize(pixmap.size())
 
 
     def refresh_status(self) -> None:
