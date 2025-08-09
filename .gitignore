@@ -9,3 +9,4 @@ android_app/build/
 android_app/app/build/
 last_used_config.ini
 
+.claude/settings.local.json

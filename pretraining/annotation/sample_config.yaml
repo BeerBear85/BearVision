@@ -1,17 +1,17 @@
 videos:
   - path/to/video1.mp4
 detection_gap_timeout_s: 3.0
-preview_scaling: 0.2
+preview_scaling: 0.15
 sampling:
-  fps: 2.0
-  min_person_bbox_diagonal_ratio: 0.001
+  fps: 5.0
+  min_person_bbox_diagonal_ratio: 0.0001
 quality:
   blur: 1.0
   luma_min: 1
   luma_max: 20000
 yolo:
   weights: yolov8s.onnx
-  conf_thr: 0.25
+  conf_thr: 0.20
 trajectory:
   cutoff_hz: 0.1
 export:
