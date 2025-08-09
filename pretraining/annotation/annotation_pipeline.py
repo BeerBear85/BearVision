@@ -43,14 +43,17 @@ class PipelineStatus:
     last_function: str
         Name of the most recently invoked function in this module.
     current_frame: int
-        One-based index of the frame currently being processed.
+        Index of the video frame currently being processed (0-based).
     total_frames: int
-        Total number of frames scheduled for processing in the current run.
+        Total number of frames in the video(s) being processed.
+    processed_frame_count: int
+        Count of frames that have passed quality checks and been processed.
     """
 
     last_function: str = ""
     current_frame: int = 0
     total_frames: int = 0
+    processed_frame_count: int = 0
 
 
 status = PipelineStatus()
@@ -221,9 +224,6 @@ class PipelineConfig:
     detection_gap_timeout_s: float, default ``3.0``
         Number of seconds without detections after which the current
         trajectory is finalised and a new track is started.
-    preview_scaling: float, default ``0.2``
-        Factor by which frames are downscaled for live previews. Lower values
-        reduce CPU overhead at the cost of detail.
     """
 
     videos: List[str] = field(default_factory=list)
@@ -233,7 +233,6 @@ class PipelineConfig:
     export: ExportConfig = field(default_factory=lambda: ExportConfig(output_dir="dataset"))
     trajectory: TrajectoryConfig = field(default_factory=TrajectoryConfig)
     detection_gap_timeout_s: float = 3.0
-    preview_scaling: float = 0.2
 
 
 class VidIngest:
@@ -546,7 +545,6 @@ def _ensure_cfg(cfg: "PipelineConfig | str") -> "PipelineConfig":
         export=export,
         trajectory=trajectory,
         detection_gap_timeout_s=cfg_dict.get("detection_gap_timeout_s", 3.0),
-        preview_scaling=cfg_dict.get("preview_scaling", 0.2),
     )
 
 
@@ -593,6 +591,7 @@ def _export_segment(
     sample_rate: float,
     track_id: int,
     frame_callback: Callable[[np.ndarray], None] | None = None,
+    gui_mode: bool = False,
 ) -> tuple[List[tuple[int, int]], Dict[str, Any] | None]:
     """Interpolate and export one trajectory segment.
 
@@ -681,9 +680,10 @@ def _export_segment(
                 # Show every interpolated frame even if seen before so users can
                 # follow the smoothing process step by step.
                 disp = item["frame"].copy()  # Copy so overlays don't alter saved data.
-                for b in item.get("boxes", []):
-                    x1, y1, x2, y2 = map(int, b["bbox"])
-                    cv2.rectangle(disp, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                if gui_mode:
+                    for b in item.get("boxes", []):
+                        x1, y1, x2, y2 = map(int, b["bbox"])
+                        cv2.rectangle(disp, (x1, y1), (x2, y2), (0, 255, 0), 2)
                 frame_callback(disp)
     else:
         for item in segment_items:
@@ -693,9 +693,10 @@ def _export_segment(
                 final_item = item
                 if frame_callback:
                     disp = item["frame"].copy()  # Avoid mutating frame that gets written.
-                    for b in item.get("boxes", []):
-                        x1, y1, x2, y2 = map(int, b["bbox"])
-                        cv2.rectangle(disp, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                    if gui_mode:
+                        for b in item.get("boxes", []):
+                            x1, y1, x2, y2 = map(int, b["bbox"])
+                            cv2.rectangle(disp, (x1, y1), (x2, y2), (0, 255, 0), 2)
                     frame_callback(disp)
 
     return trajectory, final_item
@@ -881,6 +882,7 @@ def run(
     cfg: "PipelineConfig | str",
     show_preview: bool = False,
     frame_callback: Callable[[np.ndarray], None] | None = None,
+    gui_mode: bool = False,
 ) -> None:
     """Run the dataset generation pipeline with optional spline interpolation.
 
@@ -904,6 +906,10 @@ def run(
         Function invoked with each processed frame after saving. Enables
         callers such as GUIs to display live previews without modifying the
         core export logic. ``None`` disables callbacks.
+    gui_mode: bool, default ``False``
+        When ``True``, indicates the pipeline is running with GUI and the
+        frame callback should handle any preview scaling. When ``False``,
+        no preview callbacks are executed.
 
     Outputs
     -------
@@ -929,6 +935,7 @@ def run(
         cap.release()
     status.total_frames = total_frames
     status.current_frame = 0
+    status.processed_frame_count = 0
 
     items: List[Dict[str, Any]] = []
     # Collect frames and detections first so we can interpolate across the
@@ -936,14 +943,18 @@ def run(
     for item in ingest:
         frame = item["frame"]
         # Update current_frame to reflect the actual video frame index being processed
-        status.current_frame = item["frame_idx"] + 1  # frame_idx is 0-based, display as 1-based
+        status.current_frame = item["frame_idx"]
         
         if not qf.check(frame):
             # Still update preview for failed quality check frames
-            if frame_callback:
+            if frame_callback and gui_mode:
                 disp = item["frame"].copy()
                 frame_callback(disp)
             continue
+        
+        # Increment processed frame count for frames that pass quality checks
+        status.processed_frame_count += 1
+        
         # Filter detections before storing them. Applying this here ensures that
         # interpolation and subsequent processing operate only on meaningful
         # boxes, avoiding needless work on specks far away in the frame.
@@ -972,12 +983,14 @@ def run(
                     + "\n"
                 )
         items.append(item)
-        # Always call frame_callback for live preview updates, even for frames without detections
+        # Call frame_callback for live preview updates and testing, even for frames without detections
         if frame_callback:
             disp = item["frame"].copy()
-            for b in item.get("boxes", []):
-                x1, y1, x2, y2 = map(int, b["bbox"])
-                cv2.rectangle(disp, (x1, y1), (x2, y2), (0, 255, 0), 2)
+            # Only add bounding box visualization in GUI mode to avoid cv2 dependency in tests
+            if gui_mode:
+                for b in item.get("boxes", []):
+                    x1, y1, x2, y2 = map(int, b["bbox"])
+                    cv2.rectangle(disp, (x1, y1), (x2, y2), (0, 255, 0), 2)
             frame_callback(disp)
 
     # Compute centers, widths and heights for frames with detections.
@@ -1033,6 +1046,7 @@ def run(
             sample_rate,
             track_id,
             frame_callback,
+            gui_mode,
         )
         if traj:
             trajectory = traj
