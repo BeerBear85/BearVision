@@ -135,18 +135,19 @@ class AnnotationGUI(QMainWindow):
         # Add left panel to splitter
         main_splitter.addWidget(left_panel)
         
-        # Right panel - Image preview (300px wide, flexible height)
+        # Right panel - Image previews (300px wide, flexible height)
         self.preview_panel = QFrame()
         self.preview_panel.setFixedWidth(300)
         self.preview_panel.setStyleSheet("background-color: lightgray; border: 1px solid gray;")
         preview_layout = QVBoxLayout(self.preview_panel)
         
-        preview_label = QLabel("Image Preview")
-        preview_label.setAlignment(Qt.AlignCenter)
-        preview_label.setWordWrap(True)
-        preview_layout.addWidget(preview_label)
+        # Frame-by-frame preview section
+        frame_preview_label = QLabel("Frame Preview")
+        frame_preview_label.setAlignment(Qt.AlignCenter)
+        frame_preview_label.setWordWrap(True)
+        preview_layout.addWidget(frame_preview_label)
         
-        # Create scrollable area for the image
+        # Create scrollable area for the frame preview
         self.preview_scroll = QScrollArea()
         self.preview_scroll.setWidgetResizable(True)
         self.preview_scroll.setAlignment(Qt.AlignCenter)
@@ -160,6 +161,26 @@ class AnnotationGUI(QMainWindow):
         self.preview_scroll.setWidget(self.preview_image_label)
         preview_layout.addWidget(self.preview_scroll)
         
+        # Trajectory preview section
+        trajectory_preview_label = QLabel("Trajectory Preview")
+        trajectory_preview_label.setAlignment(Qt.AlignCenter)
+        trajectory_preview_label.setWordWrap(True)
+        preview_layout.addWidget(trajectory_preview_label)
+        
+        # Create scrollable area for the trajectory preview
+        self.trajectory_scroll = QScrollArea()
+        self.trajectory_scroll.setWidgetResizable(True)
+        self.trajectory_scroll.setAlignment(Qt.AlignCenter)
+        
+        # Image label that will display the trajectory
+        self.trajectory_image_label = QLabel("No trajectory generated yet")
+        self.trajectory_image_label.setAlignment(Qt.AlignCenter)
+        self.trajectory_image_label.setStyleSheet("color: gray; font-style: italic;")
+        self.trajectory_image_label.setMinimumSize(280, 150)
+        
+        self.trajectory_scroll.setWidget(self.trajectory_image_label)
+        preview_layout.addWidget(self.trajectory_scroll)
+        
         # Add preview panel to splitter
         main_splitter.addWidget(self.preview_panel)
         
@@ -169,14 +190,16 @@ class AnnotationGUI(QMainWindow):
         # Initialize variables
         self.video_path = ""
         self.output_dir = ""
+        self.last_trajectory_path = None
         
         # Set up frame signals for thread-safe updates
         self.frame_signals = FrameSignals()
         self.frame_signals.frame_ready.connect(self._update_preview)
         
-        # Timer for status updates
+        # Timer for status updates and trajectory monitoring
         self.status_timer = QTimer()
         self.status_timer.timeout.connect(self.refresh_status)
+        self.status_timer.timeout.connect(self._check_trajectory_updates)
         self.status_timer.start(200)  # Update every 200ms
 
     def select_video(self) -> None:
@@ -267,6 +290,64 @@ class AnnotationGUI(QMainWindow):
         # Adjust the label size to fit the image
         self.preview_image_label.resize(pixmap.size())
 
+    def _check_trajectory_updates(self) -> None:
+        """Check for new trajectory images and update the trajectory preview."""
+        if not self.output_dir:
+            return
+            
+        # Look for trajectory images in the output directory
+        trajectory_dir = Path(self.output_dir) / "trajectories"
+        if not trajectory_dir.exists():
+            return
+            
+        # Find the most recent trajectory image
+        trajectory_files = list(trajectory_dir.glob("trajectory_*.jpg"))
+        if not trajectory_files:
+            return
+            
+        # Sort by modification time, get the newest
+        latest_trajectory = max(trajectory_files, key=lambda p: p.stat().st_mtime)
+        
+        # Only update if this is a new trajectory image
+        if self.last_trajectory_path != str(latest_trajectory):
+            self.last_trajectory_path = str(latest_trajectory)
+            self._update_trajectory_preview(str(latest_trajectory))
+
+    def _update_trajectory_preview(self, trajectory_path: str) -> None:
+        """Update the trajectory preview with the latest trajectory image."""
+        try:
+            # Load the trajectory image
+            trajectory_img = cv2.imread(trajectory_path)
+            if trajectory_img is None:
+                return
+                
+            # Scale the image to fit the preview panel
+            h, w = trajectory_img.shape[:2]
+            scale_factor = self.preview_width / w if w > self.preview_width else 1.0
+            scaled = cv2.resize(
+                trajectory_img, 
+                (int(w * scale_factor), int(h * scale_factor))
+            )
+            
+            # Convert BGR to RGB for Qt display
+            rgb_frame = cv2.cvtColor(scaled, cv2.COLOR_BGR2RGB)
+            
+            # Convert to QImage
+            h, w, ch = rgb_frame.shape
+            bytes_per_line = ch * w
+            qt_image = QImage(rgb_frame.data, w, h, bytes_per_line, QImage.Format_RGB888)
+            
+            # Convert to QPixmap and display
+            pixmap = QPixmap.fromImage(qt_image)
+            self.trajectory_image_label.setPixmap(pixmap)
+            self.trajectory_image_label.setScaledContents(False)
+            
+            # Adjust the label size to fit the image
+            self.trajectory_image_label.resize(pixmap.size())
+            
+        except Exception as e:
+            # If there's an error loading the image, show an error message
+            self.trajectory_image_label.setText(f"Error loading trajectory: {str(e)}")
 
     def refresh_status(self) -> None:
         """Update status and frame-progress labels with pipeline progress."""

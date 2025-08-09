@@ -583,6 +583,67 @@ def _lowpass_filter(seq: List[float], cutoff_hz: float, sample_rate: float) -> L
     return filtfilt(b, a, seq).tolist()
 
 
+def _save_trajectory_image(
+    trajectory: List[tuple[int, int]],
+    final_item: Dict[str, Any],
+    output_dir: str,
+    track_id: int,
+) -> str | None:
+    """Save a trajectory visualization image.
+    
+    Purpose
+    -------
+    Generate and save a trajectory image when a segment is completed,
+    allowing the GUI to display trajectory previews.
+    
+    Inputs
+    ------
+    trajectory: List[tuple[int, int]]
+        List of (x, y) trajectory points.
+    final_item: Dict[str, Any] 
+        The last frame item containing the background image.
+    output_dir: str
+        Output directory where trajectories folder will be created.
+    track_id: int
+        Unique identifier for this trajectory.
+        
+    Outputs
+    -------
+    str | None
+        Path to the saved trajectory image, or None if saving failed.
+    """
+    if not trajectory or not final_item:
+        return None
+        
+    try:
+        # Create trajectories directory
+        trajectories_dir = Path(output_dir) / "trajectories"
+        trajectories_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Create trajectory visualization on the final frame
+        disp = final_item["frame"].copy()
+        pts = np.array(trajectory, dtype=int)
+        cv2.polylines(disp, [pts], False, (0, 0, 255), 2)
+        
+        # Add bounding box from the final frame
+        for b in final_item.get("boxes", []):
+            x1, y1, x2, y2 = map(int, b["bbox"])
+            cv2.rectangle(disp, (x1, y1), (x2, y2), (0, 255, 0), 2)
+        
+        # Generate unique filename with timestamp to ensure GUI detects new files
+        import time
+        timestamp = int(time.time() * 1000)  # millisecond precision
+        trajectory_path = trajectories_dir / f"trajectory_{track_id}_{timestamp}.jpg"
+        
+        # Save the trajectory image
+        cv2.imwrite(str(trajectory_path), disp)
+        return str(trajectory_path)
+        
+    except Exception as e:
+        logger.warning(f"Failed to save trajectory image: {e}")
+        return None
+
+
 def _export_segment(
     segment_items: List[Dict[str, Any]],
     det_points: List[tuple[int, float, float, float, float, int, str]],
@@ -698,6 +759,10 @@ def _export_segment(
                             x1, y1, x2, y2 = map(int, b["bbox"])
                             cv2.rectangle(disp, (x1, y1), (x2, y2), (0, 255, 0), 2)
                     frame_callback(disp)
+
+    # Save trajectory image when segment is completed and in GUI mode
+    if trajectory and final_item and gui_mode:
+        _save_trajectory_image(trajectory, final_item, cfg.export.output_dir, track_id)
 
     return trajectory, final_item
 class DatasetExporter:

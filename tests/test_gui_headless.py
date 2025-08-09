@@ -108,7 +108,7 @@ def test_annotation_gui_creation_headless():
             assert gui.output_dir == ""
             
             # Check that preview panel exists and has correct width
-            assert gui.preview_panel.width() == 150
+            assert gui.preview_panel.width() == 300
             
             app.quit()
             
