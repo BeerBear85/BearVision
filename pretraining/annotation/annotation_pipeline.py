@@ -462,14 +462,9 @@ def _save_trajectory_image(
         trajectories_dir.mkdir(parents=True, exist_ok=True)
         
         # Create trajectory visualization on the final frame
-        disp = final_item["frame"].copy()
-        pts = np.array(trajectory, dtype=int)
-        cv2.polylines(disp, [pts], False, (0, 0, 255), 2)
-        
-        # Add bounding box from the final frame
-        for b in final_item.get("boxes", []):
-            x1, y1, x2, y2 = map(int, b["bbox"])
-            cv2.rectangle(disp, (x1, y1), (x2, y2), (0, 255, 0), 2)
+        disp = final_item["frame"].copy() # Copy to avoid altering the original frame
+        pts = np.array(trajectory, dtype=int) # Convert to integer for drawing
+        cv2.polylines(disp, [pts], False, (0, 0, 255), 2) # Draw trajectory in red
         
         # Generate unique filename with timestamp to ensure GUI detects new files
         import time
