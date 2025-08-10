@@ -829,10 +829,14 @@ def run(
     # Determine total frame count using metadata so progress displays cover the
     # entire video rather than just sampled frames.
     total_frames = 0
+    original_video_fps = 30  # default fallback
     for vid in cfg.videos:
         cap = cv2.VideoCapture(vid)
         if cap.isOpened():
             total_frames += int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) or 0
+            # Get original video FPS from first video for gap_frames calculation
+            if vid == cfg.videos[0]:  # Use FPS from first video
+                original_video_fps = cap.get(cv2.CAP_PROP_FPS) or 30
         cap.release()
     status.total_frames = total_frames
     status.current_frame = 0
@@ -920,7 +924,9 @@ def run(
             )
 
     sample_rate = cfg.sampling.fps if cfg.sampling.fps else 30 / cfg.sampling.step
-    gap_frames = int(cfg.detection_gap_timeout_s * sample_rate)
+    # Use original video FPS for gap_frames calculation instead of sampling rate
+    # This ensures gap_frames represents actual time intervals in the source video
+    gap_frames = int(cfg.detection_gap_timeout_s * original_video_fps)
     item_map = {it["frame_idx"]: it for it in items}
 
     segments: List[List[tuple[int, float, float, float, float, int, str]]] = []
