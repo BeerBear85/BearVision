@@ -16,7 +16,7 @@
         "name": "Python Debugger: annotation_gui",
         "type": "debugpy",
         "request": "launch",
-        "program": "${workspaceFolder}/pretraining/annotation/annotation_gui.py",
+        "program": "${workspaceFolder}/pretraining/annotation/annotation_gui_pyqt.py",
         "console": "integratedTerminal",
         "justMyCode": false
     }
