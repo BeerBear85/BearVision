@@ -33,7 +33,13 @@ jobs:
     - name: Set up Python 3.12
       uses: actions/setup-python@v3
       with:
-        python-version: "3.12"
+        python-version: '3.12'
+    - name: Install Qt runtime deps (EGL/OpenGL/X11)
+      run: "sudo apt-get update\nsudo apt-get install -y \\\n  libegl1 \\\n  libgl1\
+        \ \\\n  libglib2.0-0 \\\n  libx11-xcb1 \\\n  libxkbcommon-x11-0 \\\n  libxcb-cursor0\
+        \ \\\n  libxcb-icccm4 \\\n  libxcb-keysyms1 \\\n  libxcb-render-util0 \\\n\
+        \  libxcb-image0 \\\n  libxcb-util1 \\\n  libxrender1 \\\n  libxext6 \\\n\
+        \  libxfixes3"
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
@@ -47,6 +53,10 @@ jobs:
     #    flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
     #    # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
     #    flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+    env:
+        QT_QPA_PLATFORM: offscreen
     - name: Test with pytest
       run: |
         pytest
+    env:
+        QT_QPA_PLATFORM: offscreen
