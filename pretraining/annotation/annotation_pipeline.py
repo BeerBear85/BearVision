@@ -15,7 +15,7 @@ from functools import wraps
 import logging
 
 # Import configuration classes
-from .annotation_config import (
+from annotation_config import (
     PipelineStatus,
     SamplingConfig, 
     QualityConfig,
