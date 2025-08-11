@@ -5,6 +5,9 @@ import sys
 import pytest
 from unittest.mock import Mock, patch
 
+# Set headless mode before importing Qt
+os.environ['QT_QPA_PLATFORM'] = 'offscreen'
+
 # Add paths for imports
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'code', 'Application'))
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'code', 'Modules'))
@@ -31,29 +34,56 @@ pytestmark = pytest.mark.skipif(
     reason=f"PySide6 dependencies not available: {PYSIDE6_IMPORT_ERROR if not PYSIDE6_AVAILABLE else 'Unknown error'}"
 )
 
+# Global QApplication instance management for tests
+_test_app = None
+
+def get_or_create_test_app():
+    """Get existing QApplication instance or create one for tests."""
+    global _test_app
+    if PYSIDE6_AVAILABLE:
+        if _test_app is None:
+            _test_app = QApplication([])
+        return _test_app
+    return None
+
+def cleanup_test_app():
+    """Clean up test QApplication instance."""
+    global _test_app
+    if _test_app is not None:
+        try:
+            _test_app.quit()
+        except:
+            pass
+        _test_app = None
+
+@pytest.fixture(scope="session", autouse=True)
+def setup_test_app():
+    """Set up QApplication for the test session."""
+    if PYSIDE6_AVAILABLE:
+        get_or_create_test_app()
+        yield
+        cleanup_test_app()
+    else:
+        yield
+
 
 def test_create_app_headless():
     """Test that QApplication can be created in headless mode."""
-    # Set up headless environment
-    os.environ['QT_QPA_PLATFORM'] = 'offscreen'
-    
     try:
         from GUI_PyQt import create_app
-        app = create_app()
+        # Use existing app instance instead of creating new one
+        app = get_or_create_test_app()
         assert app is not None
         assert isinstance(app, QApplication)
-        app.quit()
+        # Don't quit the app - it's shared
     except ImportError:
         pytest.skip("GUI_PyQt not available - likely missing dependencies")
 
 
 def test_bearvision_gui_creation_headless():
     """Test that BearVisionGUI can be instantiated in headless mode."""
-    # Set up headless environment
-    os.environ['QT_QPA_PLATFORM'] = 'offscreen'
-    
     try:
-        from GUI_PyQt import BearVisionGUI, create_app
+        from GUI_PyQt import BearVisionGUI
         
         # Mock the Application class and dependencies
         with patch('GUI_PyQt.ConfigurationHandler') as mock_config:
@@ -62,8 +92,8 @@ def test_bearvision_gui_creation_headless():
                 "MOTION_DETECTION": {"search_box_dimensions": "100,100,200,200"}
             }
             
-            # Create app and GUI
-            app = create_app()
+            # Use existing app instance
+            app = get_or_create_test_app()
             mock_app_ref = Mock()
             
             gui = BearVisionGUI(mock_app_ref)
@@ -76,7 +106,7 @@ def test_bearvision_gui_creation_headless():
             # Check that preview panel exists and has correct width
             assert gui.preview_panel.width() == 150
             
-            app.quit()
+            # Don't quit the app - it's shared
             
     except ImportError as e:
         pytest.skip(f"GUI dependencies not available: {e}")
@@ -84,11 +114,8 @@ def test_bearvision_gui_creation_headless():
 
 def test_annotation_gui_creation_headless():
     """Test that AnnotationGUI can be instantiated in headless mode."""
-    # Set up headless environment  
-    os.environ['QT_QPA_PLATFORM'] = 'offscreen'
-    
     try:
-        from annotation_gui_pyqt import AnnotationGUI, create_app
+        from annotation_gui_pyqt import AnnotationGUI
         import annotation_pipeline as ap
         
         # Mock the pipeline configuration
@@ -97,8 +124,8 @@ def test_annotation_gui_creation_headless():
             mock_config.preview_scaling = 0.5
             mock_cfg.return_value = mock_config
             
-            # Create app and GUI
-            app = create_app()
+            # Use existing app instance
+            app = get_or_create_test_app()
             
             gui = AnnotationGUI()
             
@@ -110,7 +137,7 @@ def test_annotation_gui_creation_headless():
             # Check that preview panel exists and has correct width
             assert gui.preview_panel.width() == 300
             
-            app.quit()
+            # Don't quit the app - it's shared
             
     except ImportError as e:
         pytest.skip(f"Annotation GUI dependencies not available: {e}")
@@ -118,16 +145,14 @@ def test_annotation_gui_creation_headless():
 
 def test_gui_widgets_functionality():
     """Test basic widget functionality in headless mode."""
-    # Set up headless environment
-    os.environ['QT_QPA_PLATFORM'] = 'offscreen'
-    
     try:
-        from GUI_PyQt import BearVisionGUI, create_app
+        from GUI_PyQt import BearVisionGUI
         
         with patch('GUI_PyQt.ConfigurationHandler') as mock_config:
             mock_config.get_configuration.return_value = None
             
-            app = create_app()
+            # Use existing app instance
+            app = get_or_create_test_app()
             mock_app_ref = Mock()
             
             gui = BearVisionGUI(mock_app_ref)
@@ -147,7 +172,7 @@ def test_gui_widgets_functionality():
             gui.run_button.setEnabled(True)
             assert gui.run_button.isEnabled()
             
-            app.quit()
+            # Don't quit the app - it's shared
             
     except ImportError as e:
         pytest.skip(f"GUI dependencies not available: {e}")

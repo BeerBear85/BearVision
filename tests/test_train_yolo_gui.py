@@ -60,8 +60,9 @@ class TestTrainYoloGUILogic:
         # Mock the Qt components to avoid GUI initialization
         mock_main_window.return_value = None
         with patch.object(TrainYoloGUI, '_setup_ui'):
-            with patch.object(TrainYoloGUI, 'training_signals', Mock()):
-                self.gui = TrainYoloGUI()
+            self.gui = TrainYoloGUI()
+            # training_signals is created in __init__, so we mock it after instantiation
+            self.gui.training_signals = Mock()
 
     def test_update_config_from_ui(self):
         """Test updating configuration from UI elements."""
