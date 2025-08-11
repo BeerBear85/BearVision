@@ -18,6 +18,9 @@ python code/Application/edge_main.py
 
 # Test runner for core functionality
 python test/run_test.py
+
+# YOLO training GUI for fine-tuning models
+python run_train_gui.py
 ```
 
 ### Testing
