@@ -13,3 +13,4 @@ google-auth-oauthlib
 open_gopro
 boxsdk
 PySide6
+pytest-qt
