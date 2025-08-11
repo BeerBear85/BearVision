@@ -368,7 +368,10 @@ class AnnotationGUI(QMainWindow):
 
 def create_app():
     """Create and return a QApplication instance for headless testing."""
-    return QApplication(sys.argv if sys.argv else [])
+    app = QApplication.instance()
+    if app is None:
+        app = QApplication(sys.argv if sys.argv else [])
+    return app
 
 
 def main():
