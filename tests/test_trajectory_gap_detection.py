@@ -224,19 +224,22 @@ def test_trajectory_generation_during_processing_function():
         trajectory=ap.TrajectoryConfig(cutoff_hz=0.0)
     )
     
-    with mock.patch.object(ap, 'save_trajectory_image', return_value='/fake/trajectory.jpg') as mock_save:
-        result = ap.generate_trajectory_during_processing(
-            segment_items, det_points, cfg, track_id=1, sample_rate=30.0
-        )
+    # Test without mocking since function generates timestamped filenames
+    result = ap.generate_trajectory_during_processing(
+        segment_items, det_points, cfg, track_id=1, sample_rate=30.0
+    )
     
-    assert result == '/fake/trajectory.jpg'
-    mock_save.assert_called_once()
+    # Check that the result is a trajectory path with the expected pattern
+    assert result is not None
+    assert result.startswith('/tmp/trajectories/trajectory_1_')
+    assert result.endswith('.jpg')
     
-    # Verify trajectory points were passed to save function
-    call_args = mock_save.call_args[0]
-    trajectory_points = call_args[0]
-    assert len(trajectory_points) > 0
-    assert all(isinstance(point, tuple) and len(point) == 2 for point in trajectory_points)
+    # Verify trajectory file was actually created
+    import os
+    assert os.path.exists(result)
+    
+    # Clean up the created file
+    os.remove(result)
 
 
 def test_no_trajectory_generation_without_detections():
@@ -267,10 +270,19 @@ def test_single_detection_trajectory_generation():
     det_points = [(10, 25, 15, 10, 10, 0, 'person')]
     cfg = ap.PipelineConfig(export=ap.ExportConfig(output_dir='/tmp'))
     
-    with mock.patch.object(ap, 'save_trajectory_image', return_value='/fake/trajectory.jpg') as mock_save:
-        result = ap.generate_trajectory_during_processing(
-            segment_items, det_points, cfg, track_id=1, sample_rate=30.0
-        )
+    # Test without mocking since function generates timestamped filenames
+    result = ap.generate_trajectory_during_processing(
+        segment_items, det_points, cfg, track_id=1, sample_rate=30.0
+    )
     
-    assert result == '/fake/trajectory.jpg'
-    mock_save.assert_called_once()
+    # Check that the result is a trajectory path with the expected pattern
+    assert result is not None
+    assert result.startswith('/tmp/trajectories/trajectory_1_')
+    assert result.endswith('.jpg')
+    
+    # Verify trajectory file was actually created
+    import os
+    assert os.path.exists(result)
+    
+    # Clean up the created file
+    os.remove(result)
