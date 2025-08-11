@@ -480,6 +480,94 @@ def _save_trajectory_image(
         return None
 
 
+def _generate_trajectory_during_processing(
+    segment_items: List[Dict[str, Any]],
+    det_points: List[tuple[int, float, float, float, float, int, str]],
+    cfg: PipelineConfig,
+    track_id: int,
+    sample_rate: float,
+) -> str | None:
+    """Generate and save trajectory image during processing when gap is detected.
+    
+    Purpose
+    -------
+    Create trajectory visualization immediately when detection gap exceeds threshold,
+    enabling real-time trajectory generation during video processing instead of only
+    at the end.
+    
+    Inputs
+    ------
+    segment_items: List[Dict[str, Any]]
+        Frames belonging to the current trajectory segment.
+    det_points: List[tuple[int, float, float, float, float, int, str]]
+        Detection tuples for the segment.
+    cfg: PipelineConfig
+        Full pipeline configuration.
+    track_id: int
+        Unique identifier for this trajectory.
+    sample_rate: float
+        Effective frames-per-second used for interpolation.
+        
+    Outputs
+    -------
+    str | None
+        Path to the saved trajectory image, or None if generation failed.
+    """
+    if not det_points or not segment_items:
+        return None
+        
+    try:
+        # Interpolate trajectory points using existing spline logic
+        trajectory: List[tuple[int, int]] = []
+        final_item = None
+        
+        if len(det_points) >= 2:
+            frames = [p[0] for p in det_points]
+            cxs = [p[1] for p in det_points]
+            cys = [p[2] for p in det_points]
+            sx = CubicSpline(frames, cxs)
+            sy = CubicSpline(frames, cys)
+            idx_map = {it["frame_idx"]: it for it in segment_items}
+            first = segment_items[0]["frame_idx"]
+            last = segment_items[-1]["frame_idx"]
+            
+            interp_points = []
+            for fi in range(first, last + 1):
+                item = idx_map.get(fi)
+                if item is None:
+                    continue
+                cx = float(sx(fi))
+                cy = float(sy(fi))
+                interp_points.append((cx, cy, item))
+            
+            # Apply low-pass filtering
+            xs = _lowpass_filter([p[0] for p in interp_points], cfg.trajectory.cutoff_hz, sample_rate)
+            ys = _lowpass_filter([p[1] for p in interp_points], cfg.trajectory.cutoff_hz, sample_rate)
+            
+            for (cx, cy, item), fx, fy in zip(interp_points, xs, ys):
+                trajectory.append((int(fx), int(fy)))
+                final_item = item
+        else:
+            # Single detection point - just use the detection directly
+            for item in segment_items:
+                if item.get("boxes"):
+                    b = item["boxes"][0]
+                    x1, y1, x2, y2 = b["bbox"]
+                    cx = int(x1 + (x2 - x1) / 2)
+                    cy = int(y1 + (y2 - y1) / 2)
+                    trajectory.append((cx, cy))
+                    final_item = item
+        
+        # Generate and save trajectory image
+        if trajectory and final_item:
+            return _save_trajectory_image(trajectory, final_item, cfg.export.output_dir, track_id)
+            
+    except Exception as e:
+        logger.warning(f"Failed to generate trajectory during processing: {e}")
+    
+    return None
+
+
 def _export_segment(
     segment_items: List[Dict[str, Any]],
     det_points: List[tuple[int, float, float, float, float, int, str]],
@@ -843,6 +931,15 @@ def run(
     status.processed_frame_count = 0
 
     items: List[Dict[str, Any]] = []
+    
+    # Track current trajectory segment for gap detection during processing
+    current_segment_items: List[Dict[str, Any]] = []
+    current_det_points: List[tuple[int, float, float, float, float, int, str]] = []
+    last_detection_frame: int | None = None
+    gap_frames = int(cfg.detection_gap_timeout_s * original_video_fps)
+    trajectory_id = 0
+    sample_rate = cfg.sampling.fps if cfg.sampling.fps else 30 / cfg.sampling.step
+    
     # Collect frames and detections first so we can interpolate across the
     # entire clip. This trades memory for simplicity and deterministic output.
     for item in ingest:
@@ -887,6 +984,54 @@ def run(
                     )
                     + "\n"
                 )
+                
+        # NEW: Gap detection logic during processing
+        current_frame_idx = item["frame_idx"]
+        has_detection = bool(boxes)
+        
+        # Check if we need to generate a trajectory due to gap threshold being exceeded
+        if (
+            has_detection 
+            and last_detection_frame is not None 
+            and current_frame_idx - last_detection_frame > gap_frames
+            and current_det_points  # Only if we have accumulated detections
+        ):
+            # Generate trajectory for current segment before starting new one
+            trajectory_id += 1
+            _generate_trajectory_during_processing(
+                current_segment_items,
+                current_det_points,
+                cfg,
+                trajectory_id,
+                sample_rate
+            )
+            
+            # Reset for new trajectory segment
+            current_segment_items = []
+            current_det_points = []
+        
+        # Add item to current segment
+        current_segment_items.append(item)
+        
+        # Track detection points for current segment
+        if has_detection:
+            b = boxes[0]  # assume single-person detection
+            x1, y1, x2, y2 = b["bbox"]
+            w = x2 - x1
+            h = y2 - y1
+            cx = x1 + w / 2
+            cy = y1 + h / 2
+            current_det_points.append((
+                current_frame_idx,
+                cx,
+                cy,
+                w,
+                h,
+                b.get("cls", 0),
+                b.get("label", "person"),
+            ))
+            last_detection_frame = current_frame_idx
+            
         items.append(item)
         # Call frame_callback for live preview updates and testing, even for frames without detections
         if frame_callback:
@@ -897,6 +1042,17 @@ def run(
                     x1, y1, x2, y2 = map(int, b["bbox"])
                     cv2.rectangle(disp, (x1, y1), (x2, y2), (0, 255, 0), 2)
             frame_callback(disp)
+
+    # NEW: Generate final trajectory for any remaining segment at end-of-video
+    if current_det_points:
+        trajectory_id += 1
+        _generate_trajectory_during_processing(
+            current_segment_items,
+            current_det_points,
+            cfg,
+            trajectory_id,
+            sample_rate
+        )
 
     # Compute centers, widths and heights for frames with detections.
     # Each entry stores the frame index and bounding box geometry for frames
