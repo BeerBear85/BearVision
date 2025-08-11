@@ -69,7 +69,7 @@ class TestTrainYoloGUI:
         assert gui.data_dir == str(temp_data_dir)
         assert gui.data_dir_label.text() == str(temp_data_dir)
 
-    def test_validation_no_data_directory(self, gui, qtbot):
+    def test_validation_no_data_directory(self, gui):
         """Test validation when no data directory is selected."""
         with patch('PySide6.QtWidgets.QMessageBox.critical') as mock_critical:
             gui.start_training()
@@ -79,7 +79,7 @@ class TestTrainYoloGUI:
         assert gui.start_btn.isEnabled()
         assert not gui.stop_btn.isEnabled()
 
-    def test_validation_no_images(self, gui, qtbot):
+    def test_validation_no_images(self, gui):
         """Test validation when directory has no images."""
         with tempfile.TemporaryDirectory() as temp_dir:
             # Directory with no files
@@ -91,7 +91,7 @@ class TestTrainYoloGUI:
                 
             assert gui.start_btn.isEnabled()
 
-    def test_validation_no_labels(self, gui, qtbot):
+    def test_validation_no_labels(self, gui):
         """Test validation when directory has images but no labels."""
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
