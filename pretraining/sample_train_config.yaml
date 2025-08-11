@@ -1,0 +1,20 @@
+# Sample configuration for YOLO training GUI
+# This file demonstrates the expected YAML format for training configurations
+
+# Data configuration
+data_dir: ""  # Path to directory containing images and YOLO .txt label files
+onnx_out: "yolov8_finetuned.onnx"  # Output path for the trained ONNX model
+
+# Training parameters
+model: "yolov8x.pt"  # Base model weights (yolov8n.pt, yolov8s.pt, yolov8m.pt, yolov8l.pt, yolov8x.pt)
+epochs: 50           # Number of training epochs
+batch: 16            # Training batch size
+imgsz: 640           # Image size for training
+device: ""           # Device to use ('', 'cpu', '0', '1', etc. - empty string means auto-detect)
+val_ratio: 0.2       # Validation split ratio (0.1 = 10%, 0.2 = 20%, etc.)
+
+# Usage Notes:
+# 1. Set data_dir to the path containing your training images and corresponding .txt label files
+# 2. Choose appropriate batch size based on your GPU memory (reduce if you get out-of-memory errors)
+# 3. Adjust epochs based on your dataset size and convergence needs
+# 4. Device can be left empty for auto-detection, set to 'cpu' for CPU-only, or GPU index like '0'
