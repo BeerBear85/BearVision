@@ -81,8 +81,12 @@ class AnnotationGUI(QMainWindow):
         # Load configuration for pipeline parameters
         cfg_path = Path(__file__).with_name("sample_config.yaml")
         self.base_cfg = ap._ensure_cfg(str(cfg_path))
-        # Calculate preview scaling based on preview panel size
-        self.preview_width = 280  # Maximum width for preview display
+        # Get GUI configuration values
+        gui_cfg = self.base_cfg.gui
+        self.preview_width = gui_cfg.preview_width
+        self.preview_panel_width = gui_cfg.preview_panel_width
+        self.preview_image_min_height = gui_cfg.preview_image_min_height
+        self.trajectory_image_min_height = gui_cfg.trajectory_image_min_height
         ap.status = ap.PipelineStatus()  # Reset status so GUI starts in "Idle".
         
         # Central widget and main layout
@@ -135,9 +139,9 @@ class AnnotationGUI(QMainWindow):
         # Add left panel to splitter
         main_splitter.addWidget(left_panel)
         
-        # Right panel - Image previews (300px wide, flexible height)
+        # Right panel - Image previews (configurable width, flexible height)
         self.preview_panel = QFrame()
-        self.preview_panel.setFixedWidth(300)
+        self.preview_panel.setFixedWidth(self.preview_panel_width)
         self.preview_panel.setStyleSheet("background-color: lightgray; border: 1px solid gray;")
         preview_layout = QVBoxLayout(self.preview_panel)
         
@@ -156,7 +160,7 @@ class AnnotationGUI(QMainWindow):
         self.preview_image_label = QLabel("No frames processed yet")
         self.preview_image_label.setAlignment(Qt.AlignCenter)
         self.preview_image_label.setStyleSheet("color: gray; font-style: italic;")
-        self.preview_image_label.setMinimumSize(280, 200)
+        self.preview_image_label.setMinimumSize(self.preview_width, self.preview_image_min_height)
         
         self.preview_scroll.setWidget(self.preview_image_label)
         preview_layout.addWidget(self.preview_scroll)
@@ -176,7 +180,7 @@ class AnnotationGUI(QMainWindow):
         self.trajectory_image_label = QLabel("No trajectory generated yet")
         self.trajectory_image_label.setAlignment(Qt.AlignCenter)
         self.trajectory_image_label.setStyleSheet("color: gray; font-style: italic;")
-        self.trajectory_image_label.setMinimumSize(280, 150)
+        self.trajectory_image_label.setMinimumSize(self.preview_width, self.trajectory_image_min_height)
         
         self.trajectory_scroll.setWidget(self.trajectory_image_label)
         preview_layout.addWidget(self.trajectory_scroll)
@@ -185,7 +189,7 @@ class AnnotationGUI(QMainWindow):
         main_splitter.addWidget(self.preview_panel)
         
         # Set splitter proportions
-        main_splitter.setSizes([600, 300])
+        main_splitter.setSizes([600, self.preview_panel_width])
         
         # Initialize variables
         self.video_path = ""

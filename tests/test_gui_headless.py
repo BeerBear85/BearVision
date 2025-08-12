@@ -95,6 +95,15 @@ def test_annotation_gui_creation_headless():
         with patch('annotation_gui_pyqt.ap._ensure_cfg') as mock_cfg:
             mock_config = Mock()
             mock_config.preview_scaling = 0.5
+            
+            # Mock the GUI configuration with proper integer values
+            mock_gui_config = Mock()
+            mock_gui_config.preview_width = 280
+            mock_gui_config.preview_panel_width = 300
+            mock_gui_config.preview_image_min_height = 200
+            mock_gui_config.trajectory_image_min_height = 150
+            mock_config.gui = mock_gui_config
+            
             mock_cfg.return_value = mock_config
             
             # Create app and GUI
