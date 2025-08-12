@@ -16,3 +16,8 @@ trajectory:
 export:
   output_dir: dataset
   format: cvat
+gui:
+  preview_width: 280
+  preview_panel_width: 300
+  preview_image_min_height: 200
+  trajectory_image_min_height: 150

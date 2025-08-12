@@ -125,6 +125,33 @@ class ExportConfig:
 
 
 @dataclass
+class GuiConfig:
+    """Settings for the annotation GUI interface.
+
+    Purpose
+    -------
+    Control the visual appearance and sizing of the annotation GUI preview
+    elements to allow users to customize the interface to their preferences.
+
+    Attributes
+    ----------
+    preview_width: int, default ``280``
+        Maximum width in pixels for preview image display.
+    preview_panel_width: int, default ``300``
+        Width in pixels of the preview panel container.
+    preview_image_min_height: int, default ``200``
+        Minimum height in pixels for the frame preview area.
+    trajectory_image_min_height: int, default ``150``
+        Minimum height in pixels for the trajectory preview area.
+    """
+
+    preview_width: int = 280
+    preview_panel_width: int = 300
+    preview_image_min_height: int = 200
+    trajectory_image_min_height: int = 150
+
+
+@dataclass
 class TrajectoryConfig:
     """Settings for smoothing the estimated motion path.
 
@@ -164,6 +191,8 @@ class PipelineConfig:
         Parameters for the pre-labeling model; ``None`` disables detection.
     export: ExportConfig
         Dataset export options.
+    gui: GuiConfig
+        GUI appearance and sizing settings.
     detection_gap_timeout_s: float, default ``3.0``
         Number of seconds without detections after which the current
         trajectory is finalised and a new track is started.
@@ -175,4 +204,5 @@ class PipelineConfig:
     yolo: YoloConfig | None = None
     export: ExportConfig = field(default_factory=lambda: ExportConfig(output_dir="dataset"))
     trajectory: TrajectoryConfig = field(default_factory=TrajectoryConfig)
+    gui: GuiConfig = field(default_factory=GuiConfig)
     detection_gap_timeout_s: float = 3.0
