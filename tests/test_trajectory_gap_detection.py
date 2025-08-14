@@ -231,11 +231,12 @@ def test_trajectory_generation_during_processing_function():
     
     # Check that the result is a trajectory path with the expected pattern
     assert result is not None
-    assert result.startswith('/tmp/trajectories/trajectory_1_')
+    import os
+    expected_prefix = os.path.join('/tmp', 'trajectories', 'trajectory_1_').replace('/', os.sep)
+    assert result.startswith(expected_prefix)
     assert result.endswith('.jpg')
     
     # Verify trajectory file was actually created
-    import os
     assert os.path.exists(result)
     
     # Clean up the created file
@@ -277,11 +278,12 @@ def test_single_detection_trajectory_generation():
     
     # Check that the result is a trajectory path with the expected pattern
     assert result is not None
-    assert result.startswith('/tmp/trajectories/trajectory_1_')
+    import os
+    expected_prefix = os.path.join('/tmp', 'trajectories', 'trajectory_1_').replace('/', os.sep)
+    assert result.startswith(expected_prefix)
     assert result.endswith('.jpg')
     
     # Verify trajectory file was actually created
-    import os
     assert os.path.exists(result)
     
     # Clean up the created file

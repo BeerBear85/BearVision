@@ -70,8 +70,9 @@ def test_bearvision_gui_creation_headless():
             
             # Basic checks
             assert gui.windowTitle() == "BearVision - WakeVision"
-            assert gui.video_folder_entry.text() == "/test/video"
-            assert gui.user_folder_entry.text() == "/test/user"
+            # GUI uses os.path.abspath() which converts paths to absolute format
+            assert gui.video_folder_entry.text() == os.path.abspath("/test/video")
+            assert gui.user_folder_entry.text() == os.path.abspath("/test/user")
             
             # Check that preview panel exists and has correct width
             assert gui.preview_panel.width() == 150
