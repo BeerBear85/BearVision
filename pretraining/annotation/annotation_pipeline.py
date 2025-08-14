@@ -644,10 +644,16 @@ def run(
 
     items: List[Dict[str, Any]] = []
     
-    # Track current trajectory segment for gap detection during processing
+    # Track current trajectory segment for real-time gap detection during processing
     current_segment_items: List[Dict[str, Any]] = []
     current_det_points: List[tuple[int, float, float, float, float, int, str]] = []
     last_detection_frame: int | None = None
+    
+    # New segment boundary tracking variables
+    last_gap_video_frame_number: int | None = None
+    first_bbox_after_gap_video_frame_number: int | None = None
+    frames_since_last_detection = 0
+    
     gap_frames = int(cfg.detection_gap_timeout_s * original_video_fps)
     trajectory_id = 0
     sample_rate = cfg.sampling.fps if cfg.sampling.fps else 30 / cfg.sampling.step
@@ -697,36 +703,35 @@ def run(
                     + "\n"
                 )
                 
-        # NEW: Gap detection logic during processing
+        # NEW: Real-time gap detection logic during processing
         current_frame_idx = item["frame_idx"]
         has_detection = bool(boxes)
         
-        # Check if we need to generate a trajectory due to gap threshold being exceeded
-        if (
-            has_detection 
-            and last_detection_frame is not None 
-            and current_frame_idx - last_detection_frame > gap_frames
-            and current_det_points  # Only if we have accumulated detections
-        ):
-            # Generate trajectory for current segment before starting new one
-            trajectory_id += 1
-            generate_trajectory_during_processing(
-                current_segment_items,
-                current_det_points,
-                cfg,
-                trajectory_id,
-                sample_rate
-            )
-            
-            # Reset for new trajectory segment
-            current_segment_items = []
-            current_det_points = []
-        
-        # Add item to current segment
-        current_segment_items.append(item)
-        
-        # Track detection points for current segment
         if has_detection:
+            # Check if we're starting a new segment after a gap
+            if frames_since_last_detection >= gap_frames and current_det_points:
+                # Gap just ended, we're starting new segment
+                # First generate trajectory for previous segment
+                trajectory_id += 1
+                generate_trajectory_during_processing(
+                    current_segment_items,
+                    current_det_points,
+                    cfg,
+                    trajectory_id,
+                    sample_rate
+                )
+                
+                # Reset for new trajectory segment
+                current_segment_items = []
+                current_det_points = []
+                first_bbox_after_gap_video_frame_number = None
+            
+            # Reset gap tracking and start/continue segment
+            frames_since_last_detection = 0
+            if first_bbox_after_gap_video_frame_number is None:
+                first_bbox_after_gap_video_frame_number = current_frame_idx
+            
+            # Add detection to current segment
             b = boxes[0]  # assume single-person detection
             x1, y1, x2, y2 = b["bbox"]
             w = x2 - x1
@@ -743,6 +748,31 @@ def run(
                 b.get("label", "person"),
             ))
             last_detection_frame = current_frame_idx
+            
+        else:
+            # No detection in this frame
+            frames_since_last_detection += 1
+            
+            # Check if gap threshold reached (gap just started)
+            if frames_since_last_detection == gap_frames and current_det_points:
+                # Gap just started - generate trajectory for segment that just ended
+                last_gap_video_frame_number = last_detection_frame
+                trajectory_id += 1
+                generate_trajectory_during_processing(
+                    current_segment_items,
+                    current_det_points,
+                    cfg,
+                    trajectory_id,
+                    sample_rate
+                )
+                
+                # Reset segment tracking
+                current_segment_items = []
+                current_det_points = []
+                first_bbox_after_gap_video_frame_number = None
+        
+        # Add item to current segment (always add for interpolation purposes)
+        current_segment_items.append(item)
             
         items.append(item)
         # Call frame_callback for live preview updates and testing, even for frames without detections
