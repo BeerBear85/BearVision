@@ -54,7 +54,7 @@ def lowpass_filter(seq: List[float], cutoff_hz: float, sample_rate: float) -> Li
 
 def save_trajectory_image(
     trajectory: List[Tuple[int, int]],
-    final_item: Dict[str, Any],
+    segment_items: List[Dict[str, Any]],
     output_dir: str,
     track_id: int,
 ) -> str | None:
@@ -63,14 +63,15 @@ def save_trajectory_image(
     Purpose
     -------
     Generate and save a trajectory image when a segment is completed,
-    allowing the GUI to display trajectory previews.
+    allowing the GUI to display trajectory previews. Uses the middle frame
+    of the trajectory segment with a red line overlay showing the rider's position.
     
     Inputs
     ------
     trajectory: List[Tuple[int, int]]
         List of (x, y) trajectory points.
-    final_item: Dict[str, Any] 
-        The last frame item containing the background image.
+    segment_items: List[Dict[str, Any]]
+        All frame items in the trajectory segment, used to select the middle frame.
     output_dir: str
         Output directory where trajectories folder will be created.
     track_id: int
@@ -81,7 +82,11 @@ def save_trajectory_image(
     str | None
         Path to the saved trajectory image, or None if saving failed.
     """
-    if not trajectory or not final_item:
+    if not trajectory or not segment_items:
+        return None
+    
+    # Ensure trajectory is a proper list of tuples
+    if not isinstance(trajectory, list):
         return None
         
     try:
@@ -89,10 +94,31 @@ def save_trajectory_image(
         trajectories_dir = Path(output_dir) / "trajectories"
         trajectories_dir.mkdir(parents=True, exist_ok=True)
         
-        # Create trajectory visualization on the final frame
-        disp = final_item["frame"].copy() # Copy to avoid altering the original frame
+        # Select the middle frame based on frame_idx, not list position
+        first_frame_idx = int(segment_items[0]["frame_idx"])
+        last_frame_idx = int(segment_items[-1]["frame_idx"])
+        middle_frame_idx = (first_frame_idx + last_frame_idx) // 2
+        
+        # Find the segment item that best matches the middle frame_idx
+        middle_item = min(segment_items, key=lambda item: abs(int(item["frame_idx"]) - middle_frame_idx))
+        
+        # Create trajectory visualization on the middle frame
+        disp = middle_item["frame"].copy() # Copy to avoid altering the original frame
         pts = np.array(trajectory, dtype=int) # Convert to integer for drawing
         cv2.polylines(disp, [pts], False, (0, 0, 255), 2) # Draw trajectory in red
+        
+        # Draw a red line on the middle frame showing the rider's position
+        # Find the trajectory point that corresponds to the selected middle frame
+        middle_list_idx = segment_items.index(middle_item)
+        if middle_list_idx < len(trajectory):
+            middle_point = trajectory[middle_list_idx]
+            # Draw a cross-hair or line to mark the rider's position at this frame
+            x, y = middle_point
+            line_length = 20  # Length of the cross-hair lines
+            # Draw horizontal line
+            cv2.line(disp, (x - line_length, y), (x + line_length, y), (0, 0, 255), 3)
+            # Draw vertical line
+            cv2.line(disp, (x, y - line_length), (x, y + line_length), (0, 0, 255), 3)
         
         # Generate unique filename with timestamp to ensure GUI detects new files
         timestamp = int(time.time() * 1000)  # millisecond precision
@@ -186,8 +212,8 @@ def generate_trajectory_during_processing(
                     final_item = item
         
         # Generate and save trajectory image
-        if trajectory and final_item:
-            return save_trajectory_image(trajectory, final_item, cfg.export.output_dir, track_id)
+        if trajectory and segment_items:
+            return save_trajectory_image(trajectory, segment_items, cfg.export.output_dir, track_id)
             
     except Exception as e:
         logger.warning(f"Failed to generate trajectory during processing: {e}")
@@ -312,7 +338,7 @@ def export_segment(
                     frame_callback(disp)
 
     # Save trajectory image when segment is completed and in GUI mode
-    if trajectory and final_item and gui_mode:
-        save_trajectory_image(trajectory, final_item, cfg.export.output_dir, track_id)
+    if trajectory and segment_items and gui_mode:
+        save_trajectory_image(trajectory, segment_items, cfg.export.output_dir, track_id)
 
     return trajectory, final_item
