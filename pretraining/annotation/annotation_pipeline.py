@@ -751,7 +751,7 @@ def run(
             
         else:
             # No detection in this frame
-            frames_since_last_detection += 1
+            frames_since_last_detection += sample_rate
             
             # Check if gap threshold reached (gap just started)
             if frames_since_last_detection == gap_frames and current_det_points:

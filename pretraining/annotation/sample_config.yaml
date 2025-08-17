@@ -10,14 +10,14 @@ quality:
   luma_max: 20000
 yolo:
   weights: yolov8s.onnx
-  conf_thr: 0.20
+  conf_thr: 0.15
 trajectory:
-  cutoff_hz: 0.1
+  cutoff_hz: 0
 export:
   output_dir: dataset
   format: cvat
 gui:
-  preview_width: 280
-  preview_panel_width: 300
+  preview_width: 350
+  preview_panel_width: 400
   preview_image_min_height: 200
-  trajectory_image_min_height: 150
+  trajectory_image_min_height: 200
