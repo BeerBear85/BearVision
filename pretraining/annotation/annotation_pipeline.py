@@ -653,6 +653,7 @@ def run(
     last_gap_video_frame_number: int | None = None
     first_bbox_after_gap_video_frame_number: int | None = None
     frames_since_last_detection = 0
+    is_first_detection = True
     
     gap_frames = int(cfg.detection_gap_timeout_s * original_video_fps)
     trajectory_id = 0
@@ -708,23 +709,24 @@ def run(
         has_detection = bool(boxes)
         
         if has_detection:
-            # Check if we're starting a new segment after a gap
-            if frames_since_last_detection >= gap_frames and current_det_points:
-                # Gap just ended, we're starting new segment
-                # First generate trajectory for previous segment
-                trajectory_id += 1
-                generate_trajectory_during_processing(
-                    current_segment_items,
-                    current_det_points,
-                    cfg,
-                    trajectory_id,
-                    sample_rate
-                )
+            # Check if we're starting a new segment after a gap OR this is the first detection
+            if (frames_since_last_detection >= gap_frames and current_det_points) or is_first_detection:
+                # If this is not the first detection, generate trajectory for previous segment
+                if not is_first_detection:
+                    trajectory_id += 1
+                    generate_trajectory_during_processing(
+                        current_segment_items,
+                        current_det_points,
+                        cfg,
+                        trajectory_id,
+                        sample_rate
+                    )
                 
                 # Reset for new trajectory segment
                 current_segment_items = []
                 current_det_points = []
                 first_bbox_after_gap_video_frame_number = None
+                is_first_detection = False
             
             # Reset gap tracking and start/continue segment
             frames_since_last_detection = 0

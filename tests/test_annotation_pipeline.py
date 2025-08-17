@@ -400,3 +400,40 @@ def test_split_trajectories_on_detection_gap(tmp_path):
         key=lambda r: r['frame_idx'],
     )
     assert last_track1['labels'][0]['conf'] == 0.0
+
+
+def test_first_detection_starts_trajectory_segment(tmp_path):
+    """First detection in video should always start a new trajectory segment."""
+    video = create_dummy_video(tmp_path / 'v.mp4', num_frames=10, fps=5)
+    cfg = ap.PipelineConfig(
+        videos=[str(video)],
+        sampling=ap.SamplingConfig(fps=5),
+        quality=ap.QualityConfig(blur=0.0, luma_min=0, luma_max=255),
+        yolo=ap.YoloConfig(weights='dummy.onnx', conf_thr=0.1),
+        export=ap.ExportConfig(output_dir=str(tmp_path / 'dataset')),
+        detection_gap_timeout_s=3.0,
+    )
+
+    def side_effect(frame):
+        idx = side_effect.call_idx
+        side_effect.call_idx += 1
+        # First detection at frame 5 (after some frames without detections)
+        if idx == 5:
+            return [{'bbox': [10, 10, 20, 20], 'cls': 0, 'label': 'person', 'conf': 1.0}]
+        return []
+
+    side_effect.call_idx = 0
+
+    with mock.patch.object(ap, 'PreLabelYOLO') as MockYolo:
+        MockYolo.return_value.detect.side_effect = side_effect
+        ap.run(cfg)
+
+    debug_path = tmp_path / 'dataset' / 'debug.jsonl'
+    records = [json.loads(l) for l in debug_path.read_text().splitlines()]
+    
+    # Should have at least one record with a track_id (trajectory started)
+    assert any('labels' in r and r['labels'] and 'track_id' in r['labels'][0] for r in records)
+    
+    # The first detection should have track_id 1 (first segment)
+    first_detection_record = next(r for r in records if r['frame_idx'] == 5)
+    assert first_detection_record['labels'][0]['track_id'] == 1
