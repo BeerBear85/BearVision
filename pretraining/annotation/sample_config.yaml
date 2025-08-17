@@ -22,4 +22,4 @@ gui:
   preview_image_min_height: 200
   trajectory_image_min_height: 200
   default_video_path: tests/data/TestMovie5_two_persons.mp4
-  default_output_dir: annotation_output
+  default_output_dir: tests/data/Test_2_riders
