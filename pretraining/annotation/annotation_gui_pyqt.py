@@ -191,10 +191,23 @@ class AnnotationGUI(QMainWindow):
         # Set splitter proportions
         main_splitter.setSizes([600, self.preview_panel_width])
         
-        # Initialize variables
-        self.video_path = ""
-        self.output_dir = ""
+        # Initialize variables with config defaults (convert to absolute paths)
+        project_root = Path(__file__).resolve().parents[2]  # Go up to BearVision_2 root
+        if gui_cfg.default_video_path:
+            self.video_path = str(project_root / gui_cfg.default_video_path)
+        else:
+            self.video_path = ""
+        if gui_cfg.default_output_dir:
+            self.output_dir = str(project_root / gui_cfg.default_output_dir)
+        else:
+            self.output_dir = ""
         self.last_trajectory_path = None
+        
+        # Update labels with default values if they exist
+        if self.video_path:
+            self.video_path_label.setText(self.video_path)
+        if self.output_dir:
+            self.output_dir_label.setText(self.output_dir)
         
         # Set up frame signals for thread-safe updates
         self.frame_signals = FrameSignals()

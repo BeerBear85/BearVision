@@ -384,6 +384,10 @@ def _ensure_cfg(cfg: "PipelineConfig | str") -> "PipelineConfig":
     trajectory = cfg_dict.get("trajectory", {})
     if isinstance(trajectory, dict):
         trajectory = TrajectoryConfig(**trajectory)
+    gui = cfg_dict.get("gui", {})
+    if isinstance(gui, dict):
+        from annotation_config import GuiConfig
+        gui = GuiConfig(**gui)
     return PipelineConfig(
         videos=cfg_dict.get("videos", []),
         sampling=sampling,
@@ -391,6 +395,7 @@ def _ensure_cfg(cfg: "PipelineConfig | str") -> "PipelineConfig":
         yolo=yolo,
         export=export,
         trajectory=trajectory,
+        gui=gui,
         detection_gap_timeout_s=cfg_dict.get("detection_gap_timeout_s", 3.0),
     )
 

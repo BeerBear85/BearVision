@@ -143,12 +143,18 @@ class GuiConfig:
         Minimum height in pixels for the frame preview area.
     trajectory_image_min_height: int, default ``150``
         Minimum height in pixels for the trajectory preview area.
+    default_video_path: str, default ``""``
+        Default path to video file for GUI initialization.
+    default_output_dir: str, default ``""``
+        Default output directory for GUI initialization.
     """
 
     preview_width: int = 280
     preview_panel_width: int = 300
     preview_image_min_height: int = 200
     trajectory_image_min_height: int = 150
+    default_video_path: str = ""
+    default_output_dir: str = ""
 
 
 @dataclass

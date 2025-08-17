@@ -1,6 +1,6 @@
 videos:
   - path/to/video1.mp4
-detection_gap_timeout_s: 3.0
+detection_gap_timeout_s: 2.0
 sampling:
   fps: 5.0
   min_person_bbox_diagonal_ratio: 0.001
@@ -10,9 +10,9 @@ quality:
   luma_max: 20000
 yolo:
   weights: yolov8s.onnx
-  conf_thr: 0.15
+  conf_thr: 0.20
 trajectory:
-  cutoff_hz: 0
+  cutoff_hz: 1
 export:
   output_dir: dataset
   format: cvat
@@ -21,3 +21,5 @@ gui:
   preview_panel_width: 400
   preview_image_min_height: 200
   trajectory_image_min_height: 200
+  default_video_path: tests/data/TestMovie5_two_persons.mp4
+  default_output_dir: annotation_output
