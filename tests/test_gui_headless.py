@@ -103,6 +103,8 @@ def test_annotation_gui_creation_headless():
             mock_gui_config.preview_panel_width = 300
             mock_gui_config.preview_image_min_height = 200
             mock_gui_config.trajectory_image_min_height = 150
+            mock_gui_config.default_video_path = ""
+            mock_gui_config.default_output_dir = ""
             mock_config.gui = mock_gui_config
             
             mock_cfg.return_value = mock_config

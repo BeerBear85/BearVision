@@ -42,7 +42,7 @@ def lowpass_filter(seq: List[float], cutoff_hz: float, sample_rate: float) -> Li
 
     if cutoff_hz <= 0:
         # Users can disable filtering by setting the cutoff to zero.
-        return seq
+        return list(seq)
     order = 1  # First order keeps attenuation mild and preserves realism.
     nyq = 0.5 * sample_rate
     normal_cutoff = cutoff_hz / nyq
@@ -82,12 +82,12 @@ def save_trajectory_image(
     str | None
         Path to the saved trajectory image, or None if saving failed.
     """
-    if not trajectory or not segment_items:
+    if len(trajectory) == 0 or not segment_items:
         return None
     
     # Ensure trajectory is a proper list of tuples
     if not isinstance(trajectory, list):
-        return None
+        trajectory = list(trajectory)
         
     try:
         # Create trajectories directory
