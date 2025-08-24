@@ -191,7 +191,7 @@ def test_end_of_video_trajectory_generation(tmp_path):
     assert trajectory_calls[0]['det_points_count'] > 0
 
 
-def test_trajectory_generation_during_processing_function():
+def test_trajectory_generation_during_processing_function(tmp_path):
     """Test the _generate_trajectory_during_processing function directly."""
     # Create mock segment items and detection points
     segment_items = []
@@ -220,7 +220,7 @@ def test_trajectory_generation_during_processing_function():
     
     # Create test configuration
     cfg = ap.PipelineConfig(
-        export=ap.ExportConfig(output_dir='/tmp'),
+        export=ap.ExportConfig(output_dir=str(tmp_path)),
         trajectory=ap.TrajectoryConfig(cutoff_hz=0.0)
     )
     
@@ -232,7 +232,7 @@ def test_trajectory_generation_during_processing_function():
     # Check that the result is a trajectory path with the expected pattern
     assert result is not None
     import os
-    expected_prefix = os.path.join('/tmp', 'trajectories', 'trajectory_1_').replace('/', os.sep)
+    expected_prefix = os.path.join(str(tmp_path), 'trajectories', 'trajectory_1_').replace('/', os.sep)
     assert result.startswith(expected_prefix)
     assert result.endswith('.jpg')
     
@@ -243,11 +243,11 @@ def test_trajectory_generation_during_processing_function():
     os.remove(result)
 
 
-def test_no_trajectory_generation_without_detections():
+def test_no_trajectory_generation_without_detections(tmp_path):
     """Test that no trajectory is generated when there are no detection points."""
     segment_items = [{'frame': np.zeros((64, 64, 3), dtype=np.uint8), 'frame_idx': 0}]
     det_points = []  # No detections
-    cfg = ap.PipelineConfig(export=ap.ExportConfig(output_dir='/tmp'))
+    cfg = ap.PipelineConfig(export=ap.ExportConfig(output_dir=str(tmp_path)))
     
     result = ap.generate_trajectory_during_processing(
         segment_items, det_points, cfg, track_id=1, sample_rate=30.0
@@ -256,7 +256,7 @@ def test_no_trajectory_generation_without_detections():
     assert result is None
 
 
-def test_single_detection_trajectory_generation():
+def test_single_detection_trajectory_generation(tmp_path):
     """Test trajectory generation with only one detection point."""
     frame = np.zeros((64, 64, 3), dtype=np.uint8)
     frame[10:20, 20:30] = 255
@@ -269,7 +269,7 @@ def test_single_detection_trajectory_generation():
     }]
     
     det_points = [(10, 25, 15, 10, 10, 0, 'person')]
-    cfg = ap.PipelineConfig(export=ap.ExportConfig(output_dir='/tmp'))
+    cfg = ap.PipelineConfig(export=ap.ExportConfig(output_dir=str(tmp_path)))
     
     # Test without mocking since function generates timestamped filenames
     result = ap.generate_trajectory_during_processing(
@@ -279,7 +279,7 @@ def test_single_detection_trajectory_generation():
     # Check that the result is a trajectory path with the expected pattern
     assert result is not None
     import os
-    expected_prefix = os.path.join('/tmp', 'trajectories', 'trajectory_1_').replace('/', os.sep)
+    expected_prefix = os.path.join(str(tmp_path), 'trajectories', 'trajectory_1_').replace('/', os.sep)
     assert result.startswith(expected_prefix)
     assert result.endswith('.jpg')
     

@@ -43,13 +43,24 @@ def lowpass_filter(seq: List[float], cutoff_hz: float, sample_rate: float) -> Li
     if cutoff_hz <= 0:
         # Users can disable filtering by setting the cutoff to zero.
         return list(seq)
+    
+    # Convert input to ensure it's a proper sequence
+    seq = list(seq)
+    if len(seq) < 2:
+        return seq
+    
     order = 1  # First order keeps attenuation mild and preserves realism.
     nyq = 0.5 * sample_rate
     normal_cutoff = cutoff_hz / nyq
     b, a = butter(order, normal_cutoff, btype="low", analog=False)
     # ``filtfilt`` runs the filter forward and backward, eliminating phase
     # delay so that annotations remain time-aligned.
-    return filtfilt(b, a, seq).tolist()
+    filtered = filtfilt(b, a, seq)
+    # Ensure we always return a proper Python list
+    if hasattr(filtered, 'tolist'):
+        return filtered.tolist()
+    else:
+        return list(filtered)
 
 
 def save_trajectory_image(
@@ -104,14 +115,16 @@ def save_trajectory_image(
         
         # Create trajectory visualization on the middle frame
         disp = middle_item["frame"].copy() # Copy to avoid altering the original frame
-        pts = np.array(trajectory, dtype=int) # Convert to integer for drawing
+        # Ensure trajectory is a proper list of tuples before converting to numpy
+        trajectory_list = [(int(x), int(y)) for x, y in trajectory]
+        pts = np.array(trajectory_list, dtype=int) # Convert to integer for drawing
         cv2.polylines(disp, [pts], False, (0, 0, 255), 2) # Draw trajectory in red
         
         # Draw a red line on the middle frame showing the rider's position
         # Find the trajectory point that corresponds to the selected middle frame
         middle_list_idx = segment_items.index(middle_item)
-        if middle_list_idx < len(trajectory):
-            middle_point = trajectory[middle_list_idx]
+        if middle_list_idx < len(trajectory_list):
+            middle_point = trajectory_list[middle_list_idx]
             # Draw a cross-hair or line to mark the rider's position at this frame
             x, y = middle_point
             line_length = 20  # Length of the cross-hair lines
