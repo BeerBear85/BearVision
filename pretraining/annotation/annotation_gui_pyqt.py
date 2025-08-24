@@ -136,6 +136,9 @@ class AnnotationGUI(QMainWindow):
         self.frame_progress_label = QLabel("Processed: 0/0 frames")
         left_layout.addWidget(self.frame_progress_label)
         
+        self.segment_counter_label = QLabel("Segments detected: 0")
+        left_layout.addWidget(self.segment_counter_label)
+        
         # Add left panel to splitter
         main_splitter.addWidget(left_panel)
         
@@ -381,6 +384,9 @@ class AnnotationGUI(QMainWindow):
             )
         else:
             self.frame_progress_label.setText("Processed: 0/0 frames")
+        
+        # Update segment counter
+        self.segment_counter_label.setText(f"Segments detected: {st.segment_count}")
 
 
 def create_app():

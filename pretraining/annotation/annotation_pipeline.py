@@ -731,6 +731,8 @@ def run(
                 current_segment_items = []
                 current_det_points = []
                 first_bbox_after_gap_video_frame_number = None
+                # Count the new segment that's about to start (including first segment and after gaps)
+                status.segment_count += 1
                 is_first_detection = False
             
             # Reset gap tracking and start/continue segment
