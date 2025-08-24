@@ -93,7 +93,7 @@ def save_trajectory_image(
     str | None
         Path to the saved trajectory image, or None if saving failed.
     """
-    if len(trajectory) == 0 or not segment_items:
+    if not trajectory or len(trajectory) == 0 or not segment_items:
         return None
     
     # Ensure trajectory is a proper list of tuples
@@ -226,7 +226,9 @@ def generate_trajectory_during_processing(
         
         # Generate and save trajectory image
         if trajectory and segment_items:
-            return save_trajectory_image(trajectory, segment_items, cfg.export.output_dir, track_id)
+            # Ensure trajectory is a proper list before passing to save function
+            trajectory_list = [(int(x), int(y)) for x, y in trajectory]
+            return save_trajectory_image(trajectory_list, segment_items, cfg.export.output_dir, track_id)
             
     except Exception as e:
         logger.warning(f"Failed to generate trajectory during processing: {e}")
