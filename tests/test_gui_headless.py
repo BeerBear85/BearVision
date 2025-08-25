@@ -126,6 +126,102 @@ def test_annotation_gui_creation_headless():
         pytest.skip(f"Annotation GUI dependencies not available: {e}")
 
 
+def test_annotation_gui_riders_counter_display():
+    """Test that AnnotationGUI displays rider counter correctly."""
+    # Set up headless environment
+    os.environ['QT_QPA_PLATFORM'] = 'offscreen'
+    
+    try:
+        from annotation_gui_pyqt import AnnotationGUI, create_app
+        import annotation_pipeline as ap
+        
+        # Mock the pipeline configuration
+        with patch('annotation_gui_pyqt.ap._ensure_cfg') as mock_cfg:
+            mock_config = Mock()
+            mock_gui_config = Mock()
+            mock_gui_config.preview_width = 280
+            mock_gui_config.preview_panel_width = 300
+            mock_gui_config.preview_image_min_height = 200
+            mock_gui_config.trajectory_image_min_height = 150
+            mock_gui_config.default_video_path = ""
+            mock_gui_config.default_output_dir = ""
+            mock_config.gui = mock_gui_config
+            mock_cfg.return_value = mock_config
+            
+            app = create_app()
+            gui = AnnotationGUI()
+            
+            # Test initial state - should show 0 riders detected
+            assert gui.riders_count_label.text() == "Riders detected: 0"
+            
+            # Simulate pipeline updating status
+            ap.status = ap.PipelineStatus()
+            ap.status.riders_detected = 3
+            
+            # Trigger status refresh
+            gui.refresh_status()
+            
+            # Check that GUI displays updated counter
+            assert gui.riders_count_label.text() == "Riders detected: 3"
+            
+            # Test reset scenario
+            ap.status = ap.PipelineStatus()  # Reset to 0
+            gui.refresh_status()
+            assert gui.riders_count_label.text() == "Riders detected: 0"
+            
+            app.quit()
+            
+    except ImportError as e:
+        pytest.skip(f"Annotation GUI dependencies not available: {e}")
+
+
+def test_annotation_gui_status_updates_include_rider_counter():
+    """Test that status timer updates include rider counter."""
+    # Set up headless environment
+    os.environ['QT_QPA_PLATFORM'] = 'offscreen'
+    
+    try:
+        from annotation_gui_pyqt import AnnotationGUI, create_app
+        import annotation_pipeline as ap
+        
+        # Mock the pipeline configuration
+        with patch('annotation_gui_pyqt.ap._ensure_cfg') as mock_cfg:
+            mock_config = Mock()
+            mock_gui_config = Mock()
+            mock_gui_config.preview_width = 280
+            mock_gui_config.preview_panel_width = 300
+            mock_gui_config.preview_image_min_height = 200
+            mock_gui_config.trajectory_image_min_height = 150
+            mock_gui_config.default_video_path = ""
+            mock_gui_config.default_output_dir = ""
+            mock_config.gui = mock_gui_config
+            mock_cfg.return_value = mock_config
+            
+            app = create_app()
+            gui = AnnotationGUI()
+            
+            # Set pipeline status
+            ap.status = ap.PipelineStatus()
+            ap.status.riders_detected = 7
+            ap.status.last_function = "test_function"
+            ap.status.total_frames = 100
+            ap.status.current_frame = 50
+            
+            # The status timer should call refresh_status
+            # Manually call it to simulate timer behavior
+            gui.refresh_status()
+            
+            # Check that all status fields are updated including rider counter
+            assert gui.riders_count_label.text() == "Riders detected: 7"
+            assert gui.status_label.text() == "test_function"
+            assert "50/100" in gui.frame_progress_label.text()
+            
+            app.quit()
+            
+    except ImportError as e:
+        pytest.skip(f"Annotation GUI dependencies not available: {e}")
+
+
 def test_gui_widgets_functionality():
     """Test basic widget functionality in headless mode."""
     # Set up headless environment

@@ -136,6 +136,9 @@ class AnnotationGUI(QMainWindow):
         self.frame_progress_label = QLabel("Processed: 0/0 frames")
         left_layout.addWidget(self.frame_progress_label)
         
+        self.riders_count_label = QLabel("Riders detected: 0")
+        left_layout.addWidget(self.riders_count_label)
+        
         # Add left panel to splitter
         main_splitter.addWidget(left_panel)
         
@@ -381,6 +384,9 @@ class AnnotationGUI(QMainWindow):
             )
         else:
             self.frame_progress_label.setText("Processed: 0/0 frames")
+            
+        # Update rider counter display
+        self.riders_count_label.setText(f"Riders detected: {st.riders_detected}")
 
 
 def create_app():

@@ -437,3 +437,148 @@ def test_first_detection_starts_trajectory_segment(tmp_path):
     # The first detection should have track_id 1 (first segment)
     first_detection_record = next(r for r in records if r['frame_idx'] == 5)
     assert first_detection_record['labels'][0]['track_id'] == 1
+
+
+def test_riders_detected_counter_starts_at_zero():
+    """Test that rider counter initializes to zero in PipelineStatus."""
+    status = ap.PipelineStatus()
+    assert status.riders_detected == 0
+
+
+def test_riders_detected_counter_increments_on_segment_detection(tmp_path):
+    """Test that the rider counter increments when rider segments are detected."""
+    video = create_dummy_video(tmp_path / 'v.mp4', num_frames=10, fps=5)
+    cfg = ap.PipelineConfig(
+        videos=[str(video)],
+        sampling=ap.SamplingConfig(fps=5),
+        quality=ap.QualityConfig(blur=0.0, luma_min=0, luma_max=255),
+        yolo=ap.YoloConfig(weights='dummy.onnx', conf_thr=0.1),
+        export=ap.ExportConfig(output_dir=str(tmp_path / 'dataset')),
+        detection_gap_timeout_s=3.0,
+    )
+
+    def side_effect(frame):
+        idx = side_effect.call_idx
+        side_effect.call_idx += 1
+        # Single detection that will form one segment
+        if idx == 1:
+            return [{'bbox': [10, 10, 20, 20], 'cls': 0, 'label': 'person', 'conf': 1.0}]
+        return []
+
+    side_effect.call_idx = 0
+
+    # Reset status for clean test
+    ap.status = ap.PipelineStatus()
+    
+    with mock.patch.object(ap, 'PreLabelYOLO') as MockYolo:
+        MockYolo.return_value.detect.side_effect = side_effect
+        ap.run(cfg)
+
+    # Should have detected 1 rider segment
+    assert ap.status.riders_detected == 1
+
+
+def test_riders_detected_counter_increments_multiple_segments(tmp_path):
+    """Test that the rider counter increments for multiple separate rider segments."""
+    video = create_dummy_video(tmp_path / 'v.mp4', num_frames=40, fps=5)
+    cfg = ap.PipelineConfig(
+        videos=[str(video)],
+        sampling=ap.SamplingConfig(fps=5),
+        quality=ap.QualityConfig(blur=0.0, luma_min=0, luma_max=255),
+        yolo=ap.YoloConfig(weights='dummy.onnx', conf_thr=0.1),
+        export=ap.ExportConfig(output_dir=str(tmp_path / 'dataset')),
+        detection_gap_timeout_s=3.0,
+    )
+
+    def side_effect(frame):
+        idx = side_effect.call_idx
+        side_effect.call_idx += 1
+        # Two separate segments with gap between them
+        if idx in (1, 2):  # First segment
+            return [{'bbox': [10, 10, 20, 20], 'cls': 0, 'label': 'person', 'conf': 1.0}]
+        if idx in (25, 26):  # Second segment after gap
+            return [{'bbox': [30, 30, 40, 40], 'cls': 0, 'label': 'person', 'conf': 1.0}]
+        return []
+
+    side_effect.call_idx = 0
+
+    # Reset status for clean test
+    ap.status = ap.PipelineStatus()
+    
+    with mock.patch.object(ap, 'PreLabelYOLO') as MockYolo:
+        MockYolo.return_value.detect.side_effect = side_effect
+        ap.run(cfg)
+
+    # Should have detected 2 rider segments
+    assert ap.status.riders_detected == 2
+
+
+def test_riders_detected_counter_logs_message(tmp_path, caplog):
+    """Test that rider detection logs the counter message."""
+    import logging
+    caplog.set_level(logging.INFO)
+    
+    video = create_dummy_video(tmp_path / 'v.mp4', num_frames=10, fps=5)
+    cfg = ap.PipelineConfig(
+        videos=[str(video)],
+        sampling=ap.SamplingConfig(fps=5),
+        quality=ap.QualityConfig(blur=0.0, luma_min=0, luma_max=255),
+        yolo=ap.YoloConfig(weights='dummy.onnx', conf_thr=0.1),
+        export=ap.ExportConfig(output_dir=str(tmp_path / 'dataset')),
+        detection_gap_timeout_s=3.0,
+    )
+
+    def side_effect(frame):
+        idx = side_effect.call_idx
+        side_effect.call_idx += 1
+        if idx == 1:
+            return [{'bbox': [10, 10, 20, 20], 'cls': 0, 'label': 'person', 'conf': 1.0}]
+        return []
+
+    side_effect.call_idx = 0
+
+    # Reset status for clean test
+    ap.status = ap.PipelineStatus()
+    
+    with mock.patch.object(ap, 'PreLabelYOLO') as MockYolo:
+        MockYolo.return_value.detect.side_effect = side_effect
+        ap.run(cfg)
+
+    # Check that the log message was emitted
+    assert "Riders detected: 1" in caplog.text
+
+
+def test_riders_detected_counter_resets_on_new_session(tmp_path):
+    """Test that the rider counter resets when status is reset."""
+    # First, set up a status with some riders detected
+    ap.status = ap.PipelineStatus()
+    ap.status.riders_detected = 5
+    
+    # Reset status (simulating what happens when GUI starts a new session)
+    ap.status = ap.PipelineStatus()
+    
+    # Should be back to 0
+    assert ap.status.riders_detected == 0
+
+
+def test_riders_detected_counter_no_detections(tmp_path):
+    """Test that rider counter remains 0 when no riders are detected."""
+    video = create_dummy_video(tmp_path / 'v.mp4', num_frames=10, fps=5)
+    cfg = ap.PipelineConfig(
+        videos=[str(video)],
+        sampling=ap.SamplingConfig(fps=5),
+        quality=ap.QualityConfig(blur=0.0, luma_min=0, luma_max=255),
+        yolo=ap.YoloConfig(weights='dummy.onnx', conf_thr=0.1),
+        export=ap.ExportConfig(output_dir=str(tmp_path / 'dataset')),
+        detection_gap_timeout_s=3.0,
+    )
+
+    # Reset status for clean test
+    ap.status = ap.PipelineStatus()
+    
+    with mock.patch.object(ap, 'PreLabelYOLO') as MockYolo:
+        MockYolo.return_value.detect.return_value = []  # No detections
+        ap.run(cfg)
+
+    # Should remain 0 since no riders were detected
+    assert ap.status.riders_detected == 0

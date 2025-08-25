@@ -23,12 +23,15 @@ class PipelineStatus:
         Total number of frames in the video(s) being processed.
     processed_frame_count: int
         Count of frames that have passed quality checks and been processed.
+    riders_detected: int
+        Number of rider segments detected in the current session.
     """
 
     last_function: str = ""
     current_frame: int = 0
     total_frames: int = 0
     processed_frame_count: int = 0
+    riders_detected: int = 0
 
 
 @dataclass

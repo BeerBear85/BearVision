@@ -719,6 +719,8 @@ def run(
                 # If this is not the first detection, generate trajectory for previous segment
                 if not is_first_detection:
                     trajectory_id += 1
+                    status.riders_detected += 1
+                    logger.info(f"Riders detected: {status.riders_detected}")
                     generate_trajectory_during_processing(
                         current_segment_items,
                         current_det_points,
@@ -765,6 +767,8 @@ def run(
                 # Gap just started - generate trajectory for segment that just ended
                 last_gap_video_frame_number = last_detection_frame
                 trajectory_id += 1
+                status.riders_detected += 1
+                logger.info(f"Riders detected: {status.riders_detected}")
                 generate_trajectory_during_processing(
                     current_segment_items,
                     current_det_points,
@@ -795,6 +799,8 @@ def run(
     # NEW: Generate final trajectory for any remaining segment at end-of-video
     if current_det_points:
         trajectory_id += 1
+        status.riders_detected += 1
+        logger.info(f"Riders detected: {status.riders_detected}")
         generate_trajectory_during_processing(
             current_segment_items,
             current_det_points,
