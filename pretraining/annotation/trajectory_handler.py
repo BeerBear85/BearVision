@@ -40,9 +40,15 @@ def lowpass_filter(seq: List[float], cutoff_hz: float, sample_rate: float) -> Li
         Filtered sequence retaining the original length.
     """
 
-    if cutoff_hz <= 0:
+    if cutoff_hz <= 0 or len(seq) == 0:
         # Users can disable filtering by setting the cutoff to zero.
+        # Also return original sequence if it's empty to avoid filtfilt errors.
         return seq
+    
+    # filtfilt requires minimum length for padding, return unfiltered if too short
+    if len(seq) < 13:  # filtfilt typically needs at least 3*padlen where padlen is 4 for order 1
+        return seq
+        
     order = 1  # First order keeps attenuation mild and preserves realism.
     nyq = 0.5 * sample_rate
     normal_cutoff = cutoff_hz / nyq
@@ -82,7 +88,8 @@ def save_trajectory_image(
     str | None
         Path to the saved trajectory image, or None if saving failed.
     """
-    if not trajectory or not segment_items:
+    # Check if trajectory is empty - handle both lists and arrays
+    if (not trajectory if isinstance(trajectory, list) else len(trajectory) == 0) or not segment_items:
         return None
     
     # Ensure trajectory is a proper list of tuples
@@ -104,13 +111,25 @@ def save_trajectory_image(
         
         # Create trajectory visualization on the middle frame
         disp = middle_item["frame"].copy() # Copy to avoid altering the original frame
+        
+        # Ensure trajectory is a list of tuples and not arrays
+        if isinstance(trajectory, np.ndarray):
+            trajectory = trajectory.tolist()
+        trajectory = [(int(x), int(y)) for x, y in trajectory]
+        
         pts = np.array(trajectory, dtype=int) # Convert to integer for drawing
         cv2.polylines(disp, [pts], False, (0, 0, 255), 2) # Draw trajectory in red
         
         # Draw a red line on the middle frame showing the rider's position
         # Find the trajectory point that corresponds to the selected middle frame
-        middle_list_idx = segment_items.index(middle_item)
-        if middle_list_idx < len(trajectory):
+        # Use frame_idx to find the index since numpy arrays make direct comparison fail
+        middle_list_idx = None
+        for i, item in enumerate(segment_items):
+            if item["frame_idx"] == middle_item["frame_idx"]:
+                middle_list_idx = i
+                break
+        
+        if middle_list_idx is not None and middle_list_idx < len(trajectory):
             middle_point = trajectory[middle_list_idx]
             # Draw a cross-hair or line to mark the rider's position at this frame
             x, y = middle_point
