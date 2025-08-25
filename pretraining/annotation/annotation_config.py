@@ -161,6 +161,27 @@ class GuiConfig:
 
 
 @dataclass
+class LoggingConfig:
+    """Configuration for pipeline logging.
+
+    Purpose
+    -------
+    Control logging verbosity and formatting throughout the annotation pipeline
+    to support development debugging and production monitoring.
+
+    Attributes
+    ----------
+    level: str, default ``"INFO"``
+        Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL).
+    format: str, default format string with file and function name
+        Log message format string.
+    """
+
+    level: str = "INFO"
+    format: str = "%(asctime)s - %(name)s - %(levelname)s - %(filename)s:%(funcName)s:%(lineno)d - %(message)s"
+
+
+@dataclass
 class TrajectoryConfig:
     """Settings for smoothing the estimated motion path.
 
@@ -200,8 +221,12 @@ class PipelineConfig:
         Parameters for the pre-labeling model; ``None`` disables detection.
     export: ExportConfig
         Dataset export options.
+    trajectory: TrajectoryConfig
+        Trajectory smoothing settings.
     gui: GuiConfig
         GUI appearance and sizing settings.
+    logging: LoggingConfig
+        Logging configuration for pipeline monitoring.
     detection_gap_timeout_s: float, default ``3.0``
         Number of seconds without detections after which the current
         trajectory is finalised and a new track is started.
@@ -214,4 +239,5 @@ class PipelineConfig:
     export: ExportConfig = field(default_factory=lambda: ExportConfig(output_dir="dataset"))
     trajectory: TrajectoryConfig = field(default_factory=TrajectoryConfig)
     gui: GuiConfig = field(default_factory=GuiConfig)
+    logging: LoggingConfig = field(default_factory=LoggingConfig)
     detection_gap_timeout_s: float = 3.0

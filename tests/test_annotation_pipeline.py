@@ -516,7 +516,9 @@ def test_riders_detected_counter_increments_multiple_segments(tmp_path):
 def test_riders_detected_counter_logs_message(tmp_path, caplog):
     """Test that rider detection logs the counter message."""
     import logging
-    caplog.set_level(logging.INFO)
+    
+    # Set up caplog to capture from the annotation_pipeline logger specifically
+    caplog.set_level(logging.INFO, logger='annotation_pipeline')
     
     video = create_dummy_video(tmp_path / 'v.mp4', num_frames=10, fps=5)
     cfg = ap.PipelineConfig(
@@ -525,6 +527,8 @@ def test_riders_detected_counter_logs_message(tmp_path, caplog):
         quality=ap.QualityConfig(blur=0.0, luma_min=0, luma_max=255),
         yolo=ap.YoloConfig(weights='dummy.onnx', conf_thr=0.1),
         export=ap.ExportConfig(output_dir=str(tmp_path / 'dataset')),
+        # Include logging configuration to use test-friendly settings
+        logging=ap.LoggingConfig(level='INFO'),
         detection_gap_timeout_s=3.0,
     )
 
@@ -545,7 +549,7 @@ def test_riders_detected_counter_logs_message(tmp_path, caplog):
         ap.run(cfg)
 
     # Check that the log message was emitted
-    assert "Riders detected: 1" in caplog.text
+    assert "Total riders detected after gap: 1" in caplog.text
 
 
 def test_riders_detected_counter_resets_on_new_session(tmp_path):

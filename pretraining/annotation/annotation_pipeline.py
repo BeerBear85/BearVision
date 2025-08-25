@@ -20,6 +20,7 @@ from annotation_config import (
     YoloConfig,
     ExportConfig,
     TrajectoryConfig,
+    LoggingConfig,
     PipelineConfig,
 )
 
@@ -42,6 +43,47 @@ except Exception:  # pragma: no cover - DnnHandler might not be available
 
 
 logger = logging.getLogger(__name__)
+
+
+def setup_logging(config: LoggingConfig):
+    """Configure logging with specified level and format.
+    
+    Purpose
+    -------
+    Initialize the logging system with the format that includes file and function
+    names as required by the issue. This centralizes logging configuration to
+    ensure consistent formatting across the pipeline.
+    
+    Inputs
+    ------
+    config: LoggingConfig
+        Logging configuration specifying level and format.
+        
+    Outputs
+    -------
+    None
+        Configures the root logger with the specified settings.
+    """
+    # Check if we're in a test environment by looking for pytest
+    import sys
+    in_test = 'pytest' in sys.modules
+    
+    if not in_test:
+        # Configure root logger to ensure all modules use the same formatting
+        logging.basicConfig(
+            level=getattr(logging, config.level.upper()),
+            format=config.format,
+            force=True  # Override any existing configuration
+        )
+    else:
+        # In test mode, just set the level on our specific logger to avoid interfering with pytest's caplog
+        logger.setLevel(getattr(logging, config.level.upper()))
+        # Also set the root logger level if no handlers are configured
+        root_logger = logging.getLogger()
+        if not root_logger.handlers:
+            root_logger.setLevel(getattr(logging, config.level.upper()))
+    
+    logger.info("Logging configured with level: %s", config.level)
 
 
 status = PipelineStatus()
@@ -135,10 +177,12 @@ class VidIngest:
             unsupported codec.
         """
         for video_path in self.videos:
+            logger.debug("Opening video file: %s", video_path)
             cap = cv2.VideoCapture(video_path)
             if not cap.isOpened():
                 # Failing silently makes the pipeline appear successful with no output;
                 # raising surfaces path or codec issues early for easier debugging.
+                logger.error("Failed to open video file: %s", video_path)
                 raise FileNotFoundError(f"Cannot open video: {video_path}")
             # Derive a stride based on desired FPS; fall back to a fixed step for
             # robustness when metadata is missing.
@@ -148,6 +192,8 @@ class VidIngest:
                 if self.config.fps
                 else self.config.step
             )
+            logger.debug("Video sampling: original_fps=%.1f, target_fps=%.1f, step=%d", 
+                        orig_fps, self.config.fps or (orig_fps / self.config.step), step)
             frame_idx = 0
             while True:
                 ret, frame = cap.read()
@@ -240,17 +286,22 @@ class PreLabelYOLO:
         if weights.endswith(".onnx") and DnnHandler is not None:
             model_name = Path(weights).stem
             self.backend = "dnn"
+            logger.info("Loading ONNX model via DnnHandler: %s", model_name)
             self.model = DnnHandler(model_name)
             self.model.init()
             # single-class wakeboarder detection
             self.names = {0: "wakeboarder"}
+            logger.debug("DNN backend initialized with single class: wakeboarder")
         else:
             self.backend = "ultralytics"
+            logger.info("Loading Ultralytics YOLO model: %s", weights)
             self.model = YOLO(weights)
             try:
                 self.names = self.model.names
+                logger.debug("YOLO model loaded with %d classes: %s", len(self.names), list(self.names.values()))
             except AttributeError:
                 self.names = {}
+                logger.warning("Could not retrieve class names from YOLO model")
 
     @track
     def detect(self, frame) -> List[Dict[str, Any]]:
@@ -388,6 +439,9 @@ def _ensure_cfg(cfg: "PipelineConfig | str") -> "PipelineConfig":
     if isinstance(gui, dict):
         from annotation_config import GuiConfig
         gui = GuiConfig(**gui)
+    logging_cfg = cfg_dict.get("logging", {})
+    if isinstance(logging_cfg, dict):
+        logging_cfg = LoggingConfig(**logging_cfg)
     return PipelineConfig(
         videos=cfg_dict.get("videos", []),
         sampling=sampling,
@@ -396,6 +450,7 @@ def _ensure_cfg(cfg: "PipelineConfig | str") -> "PipelineConfig":
         export=export,
         trajectory=trajectory,
         gui=gui,
+        logging=logging_cfg,
         detection_gap_timeout_s=cfg_dict.get("detection_gap_timeout_s", 3.0),
     )
 
@@ -461,6 +516,7 @@ class DatasetExporter:
         video_name = Path(item["video"]).stem
         img_name = f"{video_name}_{idx:06d}.jpg"
         lbl_name = f"{video_name}_{idx:06d}.txt"
+        logger.debug("Exporting frame %d as %s with %d labels", idx, img_name, len(boxes))
         cv2.imwrite(str(self.img_dir / img_name), frame)
         with open(self.lbl_dir / lbl_name, "w", encoding="utf-8") as f:
             for b in boxes:
@@ -623,14 +679,27 @@ def run(
         The function writes image and label files to disk and returns ``None``.
     """
     cfg = _ensure_cfg(cfg)
+    
+    # Configure logging based on config settings
+    setup_logging(cfg.logging)
+    
+    logger.info("Starting annotation pipeline with %d video(s)", len(cfg.videos))
+    logger.debug("Pipeline configuration: sampling_fps=%.1f, quality_blur=%.1f, gap_timeout=%.1fs", 
+                cfg.sampling.fps or 0, cfg.quality.blur, cfg.detection_gap_timeout_s)
 
     ingest = VidIngest(cfg.videos, cfg.sampling)
+    logger.debug("Initialized video ingestion with %d videos", len(cfg.videos))
     qf = QualityFilter(cfg.quality)
+    logger.debug("Initialized quality filter: blur_threshold=%.1f, luma_range=[%d,%d]", 
+                cfg.quality.blur, cfg.quality.luma_min, cfg.quality.luma_max)
     yolo = PreLabelYOLO(cfg.yolo)
+    logger.info("Initialized YOLO model: %s (confidence_threshold=%.3f)", cfg.yolo.weights, cfg.yolo.conf_thr)
     if cfg.export.format.lower() == "cvat":
         exporter = CvatExporter(cfg.export)
+        logger.info("Using CVAT exporter, output directory: %s", cfg.export.output_dir)
     else:
         exporter = DatasetExporter(cfg.export)
+        logger.info("Using YOLO dataset exporter, output directory: %s", cfg.export.output_dir)
     # Determine total frame count using metadata so progress displays cover the
     # entire video rather than just sampled frames.
     total_frames = 0
@@ -638,14 +707,21 @@ def run(
     for vid in cfg.videos:
         cap = cv2.VideoCapture(vid)
         if cap.isOpened():
-            total_frames += int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) or 0
+            frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) or 0
+            fps = cap.get(cv2.CAP_PROP_FPS) or 30
+            total_frames += frame_count
+            logger.debug("Video %s: %d frames at %.1f fps", vid, frame_count, fps)
             # Get original video FPS from first video for gap_frames calculation
             if vid == cfg.videos[0]:  # Use FPS from first video
-                original_video_fps = cap.get(cv2.CAP_PROP_FPS) or 30
+                original_video_fps = fps
+        else:
+            logger.warning("Failed to open video: %s", vid)
         cap.release()
     status.total_frames = total_frames
     status.current_frame = 0
     status.processed_frame_count = 0
+    logger.info("Processing %d total frames from %d video(s) at %.1f original fps", 
+               total_frames, len(cfg.videos), original_video_fps)
 
     items: List[Dict[str, Any]] = []
     
@@ -666,6 +742,7 @@ def run(
     
     # Collect frames and detections first so we can interpolate across the
     # entire clip. This trades memory for simplicity and deterministic output.
+    logger.info("Starting frame processing loop")
     for item in ingest:
         frame = item["frame"]
         # Update current_frame to reflect the actual video frame index being processed
@@ -673,6 +750,7 @@ def run(
         
         if not qf.check(frame):
             # Still update preview for failed quality check frames
+            logger.debug("Frame %d failed quality check - skipping", item["frame_idx"])
             if frame_callback and gui_mode:
                 disp = item["frame"].copy()
                 frame_callback(disp)
@@ -685,11 +763,13 @@ def run(
         # interpolation and subsequent processing operate only on meaningful
         # boxes, avoiding needless work on specks far away in the frame.
         boxes = yolo.detect(frame)
+        logger.debug("YOLO detection at frame %d: found %d raw detections", item["frame_idx"], len(boxes))
         boxes, discarded = filter_small_person_boxes(
             boxes,
             frame.shape,
             cfg.sampling.min_person_bbox_diagonal_ratio,
         )
+        logger.debug("After filtering at frame %d: kept %d detections, discarded %d", item["frame_idx"], len(boxes), len(discarded))
         item["boxes"] = boxes
         if discarded:
             item["discarded_boxes"] = discarded
@@ -714,13 +794,14 @@ def run(
         has_detection = bool(boxes)
         
         if has_detection:
+            logger.info("Rider detection at frame %d: %d person(s) detected", current_frame_idx, len(boxes))
             # Check if we're starting a new segment after a gap OR this is the first detection
             if (frames_since_last_detection >= gap_frames and current_det_points) or is_first_detection:
                 # If this is not the first detection, generate trajectory for previous segment
                 if not is_first_detection:
                     trajectory_id += 1
                     status.riders_detected += 1
-                    logger.info(f"Riders detected: {status.riders_detected}")
+                    logger.info("Starting new rider trajectory (ID: %d) after gap at frame %d. Total riders detected: %d", trajectory_id, current_frame_idx, status.riders_detected)
                     generate_trajectory_during_processing(
                         current_segment_items,
                         current_det_points,
@@ -728,6 +809,8 @@ def run(
                         trajectory_id,
                         sample_rate
                     )
+                else:
+                    logger.info("First rider detection at frame %d - starting initial trajectory", current_frame_idx)
                 
                 # Reset for new trajectory segment
                 current_segment_items = []
@@ -747,6 +830,8 @@ def run(
             h = y2 - y1
             cx = x1 + w / 2
             cy = y1 + h / 2
+            logger.debug("Adding detection to trajectory at frame %d: bbox=[%.1f,%.1f,%.1f,%.1f], center=[%.1f,%.1f], conf=%.3f", 
+                        current_frame_idx, x1, y1, x2, y2, cx, cy, b.get("conf", 0.0))
             current_det_points.append((
                 current_frame_idx,
                 cx,
@@ -761,14 +846,18 @@ def run(
         else:
             # No detection in this frame
             frames_since_last_detection += sample_rate
+            logger.debug("No detection at frame %d, gap duration: %.1f frames (threshold: %d)", 
+                        current_frame_idx, frames_since_last_detection, gap_frames)
             
             # Check if gap threshold reached (gap just started)
             if frames_since_last_detection == gap_frames and current_det_points:
                 # Gap just started - generate trajectory for segment that just ended
+                logger.info("Gap threshold reached at frame %d (%.1fs gap detected). Ending current trajectory (ID: %d)", 
+                           current_frame_idx, cfg.detection_gap_timeout_s, trajectory_id + 1)
                 last_gap_video_frame_number = last_detection_frame
                 trajectory_id += 1
                 status.riders_detected += 1
-                logger.info(f"Riders detected: {status.riders_detected}")
+                logger.info("Total riders detected after gap: %d", status.riders_detected)
                 generate_trajectory_during_processing(
                     current_segment_items,
                     current_det_points,
@@ -798,9 +887,10 @@ def run(
 
     # NEW: Generate final trajectory for any remaining segment at end-of-video
     if current_det_points:
+        logger.info("End of video reached with active trajectory. Finalizing trajectory (ID: %d)", trajectory_id + 1)
         trajectory_id += 1
         status.riders_detected += 1
-        logger.info(f"Riders detected: {status.riders_detected}")
+        logger.info("Final riders detected count: %d", status.riders_detected)
         generate_trajectory_during_processing(
             current_segment_items,
             current_det_points,
@@ -871,7 +961,10 @@ def run(
         if final_item is not None:
             preview_item = final_item
 
+    logger.info("Pipeline processing complete. Processed %d frames, detected %d rider trajectories", 
+               status.processed_frame_count, status.riders_detected)
     exporter.close()
+    logger.debug("Exporter closed successfully")
     if show_preview and preview_item is not None:
         if trajectory:
             disp = preview_item["frame"].copy()
@@ -908,27 +1001,40 @@ def preview(cfg: "PipelineConfig | str") -> None:
         Opens a window displaying frames until the user quits.
     """
     cfg = _ensure_cfg(cfg)
+    
+    # Configure logging based on config settings
+    setup_logging(cfg.logging)
+    
+    logger.info("Starting preview mode with %d video(s)", len(cfg.videos))
+    
     ingest = VidIngest(cfg.videos, cfg.sampling)
     qf = QualityFilter(cfg.quality)
     yolo = PreLabelYOLO(cfg.yolo)
+    processed_frames = 0
     for item in ingest:
         frame = item["frame"]
         if not qf.check(frame):
+            logger.debug("Frame %d failed quality check in preview", item["frame_idx"])
             continue
+        processed_frames += 1
         # Preview mirrors the main pipeline's filtering to ensure users see
         # the same detections that would be exported.
         boxes = yolo.detect(frame)
-        boxes, _ = filter_small_person_boxes(
+        boxes, discarded = filter_small_person_boxes(
             boxes,
             frame.shape,
             cfg.sampling.min_person_bbox_diagonal_ratio,
         )
+        if boxes:
+            logger.debug("Preview frame %d: %d detections (discarded %d)", item["frame_idx"], len(boxes), len(discarded))
         for b in boxes:
             x1, y1, x2, y2 = map(int, b["bbox"])
             cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
         cv2.imshow("preview", frame)
         if cv2.waitKey(1) & 0xFF == ord("q"):
+            logger.info("Preview terminated by user (q key pressed)")
             break
+    logger.info("Preview completed: processed %d frames", processed_frames)
     cv2.destroyAllWindows()
 
 
