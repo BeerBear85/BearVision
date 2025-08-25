@@ -136,6 +136,11 @@ class AnnotationGUI(QMainWindow):
         self.frame_progress_label = QLabel("Processed: 0/0 frames")
         left_layout.addWidget(self.frame_progress_label)
         
+        # Rider counter label
+        self.rider_counter_label = QLabel("Riders detected: 0")
+        self.rider_counter_label.setStyleSheet("font-weight: bold; color: #2E7D32;")
+        left_layout.addWidget(self.rider_counter_label)
+        
         # Add left panel to splitter
         main_splitter.addWidget(left_panel)
         
@@ -250,6 +255,10 @@ class AnnotationGUI(QMainWindow):
                 "Please select video and output directory"
             )
             return
+            
+        # Reset status for new session
+        ap.status.riders_detected = 0
+        self.rider_counter_label.setText("Riders detected: 0")
             
         # Disable the button immediately so accidental double-clicks do not
         # spawn multiple pipeline instances competing for resources.
@@ -381,6 +390,9 @@ class AnnotationGUI(QMainWindow):
             )
         else:
             self.frame_progress_label.setText("Processed: 0/0 frames")
+        
+        # Update rider counter display
+        self.rider_counter_label.setText(f"Riders detected: {st.riders_detected}")
 
 
 def create_app():

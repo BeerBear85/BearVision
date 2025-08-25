@@ -646,6 +646,8 @@ def run(
     status.total_frames = total_frames
     status.current_frame = 0
     status.processed_frame_count = 0
+    status.riders_detected = 0  # Reset rider counter for new session
+    logger.info("Riders detected: 0")  # Log initial state
 
     items: List[Dict[str, Any]] = []
     
@@ -719,6 +721,8 @@ def run(
                 # If this is not the first detection, generate trajectory for previous segment
                 if not is_first_detection:
                     trajectory_id += 1
+                    status.riders_detected += 1
+                    logger.info(f"Riders detected: {status.riders_detected}")
                     generate_trajectory_during_processing(
                         current_segment_items,
                         current_det_points,
@@ -765,6 +769,8 @@ def run(
                 # Gap just started - generate trajectory for segment that just ended
                 last_gap_video_frame_number = last_detection_frame
                 trajectory_id += 1
+                status.riders_detected += 1
+                logger.info(f"Riders detected: {status.riders_detected}")
                 generate_trajectory_during_processing(
                     current_segment_items,
                     current_det_points,
@@ -795,6 +801,8 @@ def run(
     # NEW: Generate final trajectory for any remaining segment at end-of-video
     if current_det_points:
         trajectory_id += 1
+        status.riders_detected += 1
+        logger.info(f"Riders detected: {status.riders_detected}")
         generate_trajectory_during_processing(
             current_segment_items,
             current_det_points,
@@ -848,6 +856,11 @@ def run(
     track_id = 0
     for seg in segments:
         track_id += 1
+        # Only log and count if this segment wasn't already counted in real-time processing
+        # This section handles segments found in the post-processing phase
+        if not current_det_points:  # Only count if real-time detection didn't handle it
+            status.riders_detected = track_id
+            logger.info(f"Riders detected: {status.riders_detected}")
         end_frame = seg[-1][0] + gap_frames
         seg_items = [item_map[fi] for fi in range(seg[0][0], end_frame + 1) if fi in item_map]
         traj, final_item = export_segment(

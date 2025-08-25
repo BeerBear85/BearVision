@@ -402,6 +402,63 @@ def test_split_trajectories_on_detection_gap(tmp_path):
     assert last_track1['labels'][0]['conf'] == 0.0
 
 
+def test_rider_counter_resets_and_increments(tmp_path):
+    """Rider counter should reset to 0 at start and increment for each detected segment."""
+    video = create_dummy_video(tmp_path / 'v.mp4', num_frames=20)
+    cfg = ap.PipelineConfig(
+        videos=[str(video)],
+        sampling=ap.SamplingConfig(fps=5),
+        quality=ap.QualityConfig(blur=0.0, luma_min=0, luma_max=255),
+        yolo=ap.YoloConfig(weights='dummy.onnx', conf_thr=0.1),
+        export=ap.ExportConfig(output_dir=str(tmp_path / 'dataset')),
+        detection_gap_timeout_s=0.5,  # 0.5 second gap
+    )
+    
+    # Mock YOLO to detect riders in specific frames to create segments separated by gaps
+    with mock.patch.object(ap, 'PreLabelYOLO') as MockYolo:
+        mock_yolo_instance = MockYolo.return_value
+        
+        def mock_detect(frame):
+            # Return detections for frames 0-2, then gap, then frames 8-10, then gap, then frames 16-18
+            frame_idx = ap.status.current_frame
+            if frame_idx in [0, 1, 2, 8, 9, 10, 16, 17, 18]:
+                return [{'bbox': [10, 10, 30, 40], 'cls': 0, 'label': 'person', 'conf': 0.8}]
+            return []
+        
+        mock_yolo_instance.detect.side_effect = mock_detect
+        
+        # Reset status before test
+        ap.status = ap.PipelineStatus()
+        
+        ap.run(cfg)
+        
+        # Should have detected 3 rider segments
+        assert ap.status.riders_detected == 3
+
+
+def test_rider_counter_starts_at_zero_for_new_session(tmp_path):
+    """Rider counter should start at 0 for each new session."""
+    video = create_dummy_video(tmp_path / 'v.mp4', num_frames=5)
+    cfg = ap.PipelineConfig(
+        videos=[str(video)],
+        sampling=ap.SamplingConfig(fps=5),
+        quality=ap.QualityConfig(blur=0.0, luma_min=0, luma_max=255),
+        yolo=ap.YoloConfig(weights='dummy.onnx', conf_thr=0.1),
+        export=ap.ExportConfig(output_dir=str(tmp_path / 'dataset')),
+    )
+    
+    with mock.patch.object(ap, 'PreLabelYOLO') as MockYolo:
+        MockYolo.return_value.detect.return_value = []
+        
+        # Set initial non-zero value to test reset
+        ap.status.riders_detected = 5
+        
+        ap.run(cfg)
+        
+        # Should have reset to 0 at start and stayed 0 (no detections)
+        assert ap.status.riders_detected == 0
+
+
 def test_first_detection_starts_trajectory_segment(tmp_path):
     """First detection in video should always start a new trajectory segment."""
     video = create_dummy_video(tmp_path / 'v.mp4', num_frames=10, fps=5)

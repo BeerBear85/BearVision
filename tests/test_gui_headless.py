@@ -163,6 +163,56 @@ def test_gui_widgets_functionality():
         pytest.skip(f"GUI dependencies not available: {e}")
 
 
+def test_annotation_gui_rider_counter():
+    """Test rider counter functionality in annotation GUI."""
+    # Set up headless environment
+    os.environ['QT_QPA_PLATFORM'] = 'offscreen'
+    
+    try:
+        from annotation_gui_pyqt import AnnotationGUI, create_app
+        import annotation_pipeline as ap
+        
+        app = create_app()
+        
+        with patch('annotation_gui_pyqt.ap._ensure_cfg') as mock_ensure_cfg:
+            # Mock the configuration
+            mock_cfg = Mock()
+            mock_cfg.gui.preview_width = 280
+            mock_cfg.gui.preview_panel_width = 300
+            mock_cfg.gui.preview_image_min_height = 200
+            mock_cfg.gui.trajectory_image_min_height = 150
+            mock_cfg.gui.default_video_path = ""
+            mock_cfg.gui.default_output_dir = ""
+            mock_ensure_cfg.return_value = mock_cfg
+            
+            gui = AnnotationGUI()
+            
+            # Test initial rider counter state
+            assert gui.rider_counter_label.text() == "Riders detected: 0"
+            
+            # Test counter updates through status updates
+            ap.status.riders_detected = 3
+            gui.refresh_status()
+            assert gui.rider_counter_label.text() == "Riders detected: 3"
+            
+            # Test counter reset on start
+            ap.status.riders_detected = 5
+            gui.video_path = "/test/video.mp4"
+            gui.output_dir = "/test/output"
+            
+            # Mock the threading to avoid actual pipeline run
+            with patch('threading.Thread') as mock_thread:
+                gui.start()
+                # Check that counter was reset
+                assert gui.rider_counter_label.text() == "Riders detected: 0"
+                assert ap.status.riders_detected == 0
+            
+            app.quit()
+            
+    except ImportError as e:
+        pytest.skip(f"Annotation GUI dependencies not available: {e}")
+
+
 if __name__ == "__main__":
     # Run tests manually for verification
     print("Testing headless GUI creation...")
