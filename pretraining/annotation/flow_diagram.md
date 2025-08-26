@@ -262,15 +262,6 @@ Individual Config Objects used by:
 • detection_gap_timeout_s ──► Gap detection logic (converted to gap_frames)
 ```
 
-## Preview Mode Flow (Simplified)
-
-```
-[Input Videos] ──► [Frame Ingestion] ──► [Quality Check] ──► [YOLO Detection] ──► [Box Filtering] ──► [Real-time Display]
-                                                                                                              │
-                                                                                                              ▼
-                                                                                                      [OpenCV Window]
-                                                                                                      [User presses 'q' to quit]
-```
 
 ## Status Tracking Flow
 
@@ -313,7 +304,7 @@ Standard Mode:                              GUI Mode:
 • Export files only                         • Export files  
 • No trajectory images                      • Generate trajectory images
 • No frame callbacks                        • Real-time frame callbacks
-• Minimal preview                           • Live preview with bounding boxes
+• No live visualization                     • Live preview with bounding boxes
                                            • Trajectory visualization
                                            • Status monitoring
 ```

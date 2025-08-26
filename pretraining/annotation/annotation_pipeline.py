@@ -429,7 +429,7 @@ def filter_small_person_boxes(
     return kept, discarded
 
 
-# Additional helper to normalize configuration input for run/preview
+# Additional helper to normalize configuration input for run
 @track
 def _ensure_cfg(cfg: "PipelineConfig | str") -> "PipelineConfig":
     """Return a :class:`PipelineConfig` from a path or object."""
@@ -1016,62 +1016,6 @@ def run(
 
     return None
 
-@track
-def preview(cfg: "PipelineConfig | str") -> None:
-    """Preview detections without exporting files.
-
-    Purpose
-    -------
-    Provide a quick visual check of the pipeline configuration by rendering
-    bounding boxes directly to the screen.
-
-    Inputs
-    ------
-    cfg: PipelineConfig | str
-        Configuration object or path to one on disk.
-
-    Outputs
-    -------
-    None
-        Opens a window displaying frames until the user quits.
-    """
-    cfg = _ensure_cfg(cfg)
-    
-    # Configure logging based on config settings
-    setup_logging(cfg.logging)
-    
-    logger.info("Starting preview mode with %d video(s)", len(cfg.videos))
-    
-    ingest = VidIngest(cfg.videos, cfg.sampling)
-    qf = QualityFilter(cfg.quality)
-    yolo = PreLabelYOLO(cfg.yolo)
-    processed_frames = 0
-    for item in ingest:
-        frame = item["frame"]
-        if not qf.check(frame):
-            logger.debug("Frame %d failed quality check in preview", item["frame_idx"])
-            continue
-        processed_frames += 1
-        # Preview mirrors the main pipeline's filtering to ensure users see
-        # the same detections that would be exported.
-        boxes = yolo.detect(frame)
-        boxes, discarded = filter_small_person_boxes(
-            boxes,
-            frame.shape,
-            cfg.sampling.min_person_bbox_diagonal_ratio,
-        )
-        if boxes:
-            logger.debug("Preview frame %d: %d detections (discarded %d)", item["frame_idx"], len(boxes), len(discarded))
-        for b in boxes:
-            x1, y1, x2, y2 = map(int, b["bbox"])
-            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
-        cv2.imshow("preview", frame)
-        if cv2.waitKey(1) & 0xFF == ord("q"):
-            logger.info("Preview terminated by user (q key pressed)")
-            break
-    logger.info("Preview completed: processed %d frames", processed_frames)
-    cv2.destroyAllWindows()
-
 
 def main(argv: list[str] | None = None) -> None:
     """Command-line entry point.
@@ -1100,17 +1044,10 @@ def main(argv: list[str] | None = None) -> None:
     )
     run_parser.add_argument("config_path")
 
-    preview_parser = subparsers.add_parser(
-        "preview", help="Preview the pipeline output"
-    )
-    preview_parser.add_argument("config_path")
-
     args = parser.parse_args(argv)
 
     if args.command == "run":
         run(args.config_path)
-    elif args.command == "preview":
-        preview(args.config_path)
 
 
 if __name__ == "__main__":

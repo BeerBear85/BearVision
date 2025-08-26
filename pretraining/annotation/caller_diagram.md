@@ -5,9 +5,7 @@ This diagram shows the calling relationships between classes and functions in th
 ## Main Entry Points
 
 ```
-main() ────┐
-           ├── run()
-           └── preview()
+main() ──── run()
 ```
 
 ## Core Pipeline Flow (run() function)
@@ -34,20 +32,6 @@ run()
 └── exporter.close()
 ```
 
-## Preview Flow
-
-```
-preview()
-├── _ensure_cfg() ────── load_config()
-├── VidIngest()
-├── QualityFilter()
-├── PreLabelYOLO()
-└── [Frame Processing Loop]
-    ├── VidIngest.__iter__()
-    ├── QualityFilter.check()
-    ├── PreLabelYOLO.detect()
-    └── filter_small_person_boxes()
-```
 
 ## Class Dependencies
 
