@@ -746,6 +746,10 @@ def run(
     current_det_points: List[tuple[int, float, float, float, float, int, str]] = []
     last_detection_frame: int | None = None
     
+    # Save all detection points and segments discovered during runtime for reuse
+    all_det_points: List[tuple[int, float, float, float, float, int, str]] = []
+    all_segments: List[Dict[str, Any]] = []  # Store complete segment info including end_frame
+    
     # New segment boundary tracking variables
     last_gap_video_frame_number: int | None = None
     first_bbox_after_gap_video_frame_number: int | None = None
@@ -818,13 +822,25 @@ def run(
                     trajectory_id += 1
                     status.riders_detected += 1
                     logger.info("Starting new rider trajectory (ID: %d) after gap at frame %d. Total riders detected: %d", trajectory_id, current_frame_idx, status.riders_detected)
-                    generate_trajectory_during_processing(
-                        current_segment_items,
-                        current_det_points,
-                        cfg,
-                        trajectory_id,
-                        sample_rate
-                    )
+                    # Save the current segment for reuse in export phase
+                    if current_det_points:
+                        all_det_points.extend(current_det_points)
+                        end_frame = current_det_points[-1][0] + gap_frames
+                        # Generate trajectory and save all data for reuse
+                        image_path, trajectory_points, final_item = generate_trajectory_during_processing(
+                            current_segment_items,
+                            current_det_points,
+                            cfg,
+                            trajectory_id,
+                            sample_rate
+                        )
+                        all_segments.append({
+                            'det_points': current_det_points.copy(),
+                            'end_frame': end_frame,
+                            'trajectory': trajectory_points,
+                            'final_item': final_item,
+                            'items': current_segment_items.copy()
+                        })
                 else:
                     logger.info("First rider detection at frame %d - starting initial trajectory", current_frame_idx)
                 
@@ -884,13 +900,25 @@ def run(
                 logger.debug("Trimming segment from %d frames to %d frames (removing gap frames after frame %d)", 
                            len(current_segment_items), len(trimmed_segment_items), last_detection_frame)
                 
-                generate_trajectory_during_processing(
-                    trimmed_segment_items,
-                    current_det_points,
-                    cfg,
-                    trajectory_id,
-                    sample_rate
-                )
+                # Save the current segment for reuse in export phase
+                if current_det_points:
+                    all_det_points.extend(current_det_points)
+                    end_frame = current_det_points[-1][0] + gap_frames
+                    # Generate trajectory and save all data for reuse
+                    image_path, trajectory_points, final_item = generate_trajectory_during_processing(
+                        trimmed_segment_items,
+                        current_det_points,
+                        cfg,
+                        trajectory_id,
+                        sample_rate
+                    )
+                    all_segments.append({
+                        'det_points': current_det_points.copy(),
+                        'end_frame': end_frame,
+                        'trajectory': trajectory_points,
+                        'final_item': final_item,
+                        'items': trimmed_segment_items.copy()
+                    })
                 
                 # Reset segment tracking
                 current_segment_items = []
@@ -926,61 +954,49 @@ def run(
         logger.debug("Trimming final segment from %d frames to %d frames (removing frames after frame %d)", 
                    len(current_segment_items), len(final_trimmed_segment_items), last_detection_frame)
         
-        generate_trajectory_during_processing(
+        # Save the final segment for reuse in export phase
+        all_det_points.extend(current_det_points)
+        end_frame = current_det_points[-1][0] + gap_frames
+        # Generate trajectory and save all data for reuse
+        image_path, trajectory_points, final_item = generate_trajectory_during_processing(
             final_trimmed_segment_items,
             current_det_points,
             cfg,
             trajectory_id,
             sample_rate
         )
+        all_segments.append({
+            'det_points': current_det_points.copy(),
+            'end_frame': end_frame,
+            'trajectory': trajectory_points,
+            'final_item': final_item,
+            'items': final_trimmed_segment_items.copy()
+        })
 
-    # Compute centers, widths and heights for frames with detections.
-    # Each entry stores the frame index and bounding box geometry for frames
-    # where a person was detected. We also keep class/label to reuse for
-    # interpolated boxes.
-    det_points: List[tuple[int, float, float, float, float, int, str]] = []
-    for item in items:
-        if item["boxes"]:
-            b = item["boxes"][0]  # assume single-person detection
-            x1, y1, x2, y2 = b["bbox"]
-            w = x2 - x1
-            h = y2 - y1
-            cx = x1 + w / 2
-            cy = y1 + h / 2
-            det_points.append(
-                (
-                    item["frame_idx"],
-                    cx,
-                    cy,
-                    w,
-                    h,
-                    b.get("cls", 0),
-                    b.get("label", "person"),
-                )
-            )
-
-    sample_rate = cfg.sampling.fps if cfg.sampling.fps else 30 / cfg.sampling.step
-    # Use original video FPS for gap_frames calculation instead of sampling rate
-    # This ensures gap_frames represents actual time intervals in the source video
-    gap_frames = int(cfg.detection_gap_timeout_s * original_video_fps)
+    # Export interpolated frames: Reuse detection points and segments from runtime processing
+    # No need to recalculate - we saved this data during runtime processing
+    det_points = all_det_points
+    segments = all_segments
     item_map = {it["frame_idx"]: it for it in items}
 
-    segments: List[List[tuple[int, float, float, float, float, int, str]]] = []
-    if det_points:
-        start = 0
-        for i in range(1, len(det_points)):
-            if det_points[i][0] - det_points[i - 1][0] > gap_frames:
-                segments.append(det_points[start:i])
-                start = i
-        segments.append(det_points[start:])
-
+    # Export segments using completely pre-computed data - no recalculation needed
     trajectory: List[tuple[int, int]] = []
     preview_item: Dict[str, Any] | None = None
     track_id = 0
-    for seg in segments:
+    for seg_data in segments:
         track_id += 1
-        end_frame = seg[-1][0] + gap_frames
-        seg_items = [item_map[fi] for fi in range(seg[0][0], end_frame + 1) if fi in item_map]
+        # Use all pre-computed data from runtime processing
+        seg_trajectory = seg_data.get('trajectory', [])
+        seg_final_item = seg_data.get('final_item')
+        
+        # TODO: Further optimization possible - export_segment() still recalculates:
+        # - Cubic spline interpolation for bounding box dimensions (w, h)  
+        # - Bounding box positions for frames without detections
+        # We could save interpolated bounding boxes during runtime to eliminate this
+        seg = seg_data['det_points']
+        end_frame = seg_data['end_frame']
+        seg_items = seg_data.get('items', [])  # Use pre-saved items instead of recreating
+        
         traj, final_item = export_segment(
             seg_items,
             seg,
@@ -990,6 +1006,7 @@ def run(
             track_id,
             frame_callback,
             gui_mode,
+            seg_trajectory,  # Pass pre-computed trajectory to avoid recalculation
         )
         if traj:
             trajectory = traj

@@ -158,7 +158,7 @@ def generate_trajectory_during_processing(
     cfg: PipelineConfig,
     track_id: int,
     sample_rate: float,
-) -> str | None:
+) -> Tuple[str | None, List[Tuple[int, int]], Dict[str, Any] | None]:
     """Generate and save trajectory image during processing when gap is detected.
     
     Purpose
@@ -182,11 +182,14 @@ def generate_trajectory_during_processing(
         
     Outputs
     -------
-    str | None
-        Path to the saved trajectory image, or None if generation failed.
+    Tuple[str | None, List[Tuple[int, int]], Dict[str, Any] | None]
+        Tuple containing:
+        - Path to the saved trajectory image, or None if generation failed
+        - Computed trajectory points for reuse during export
+        - Final item for preview, or None
     """
     if not det_points or not segment_items:
-        return None
+        return None, [], None
         
     try:
         # Interpolate trajectory points using existing spline logic
@@ -232,12 +235,15 @@ def generate_trajectory_during_processing(
         
         # Generate and save trajectory image
         if trajectory and segment_items:
-            return save_trajectory_image(trajectory, segment_items, cfg.export.output_dir, track_id)
+            image_path = save_trajectory_image(trajectory, segment_items, cfg.export.output_dir, track_id)
+            return image_path, trajectory, final_item
+        else:
+            return None, trajectory, final_item
             
     except Exception as e:
         logger.warning(f"Failed to generate trajectory during processing: {e}")
     
-    return None
+    return None, [], None
 
 
 def export_segment(
@@ -249,6 +255,7 @@ def export_segment(
     track_id: int,
     frame_callback: Callable[[np.ndarray], None] | None = None,
     gui_mode: bool = False,
+    pre_computed_trajectory: List[Tuple[int, int]] | None = None,
 ) -> Tuple[List[Tuple[int, int]], Dict[str, Any] | None]:
     """Interpolate and export one trajectory segment.
 
@@ -313,10 +320,17 @@ def export_segment(
                 conf = 0.0
             interp.append((fi, cx, cy, w, h, conf, item))
 
-        xs = lowpass_filter([p[1] for p in interp], cfg.trajectory.cutoff_hz, sample_rate)
-        ys = lowpass_filter([p[2] for p in interp], cfg.trajectory.cutoff_hz, sample_rate)
+        # Use pre-computed trajectory if available, otherwise calculate it
+        if pre_computed_trajectory and len(pre_computed_trajectory) == len(interp):
+            # Reuse pre-computed filtered trajectory points
+            filtered_coords = pre_computed_trajectory
+        else:
+            # Calculate trajectory if not pre-computed or length mismatch
+            xs = lowpass_filter([p[1] for p in interp], cfg.trajectory.cutoff_hz, sample_rate)
+            ys = lowpass_filter([p[2] for p in interp], cfg.trajectory.cutoff_hz, sample_rate)
+            filtered_coords = list(zip(xs, ys))
 
-        for (_fi, _cx, _cy, w, h, conf, item), cx, cy in zip(interp, xs, ys):
+        for (_fi, _cx, _cy, w, h, conf, item), (cx, cy) in zip(interp, filtered_coords):
             x1 = cx - w / 2
             y1 = cy - h / 2
             x2 = cx + w / 2
