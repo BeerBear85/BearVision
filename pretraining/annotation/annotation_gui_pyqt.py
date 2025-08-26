@@ -217,6 +217,7 @@ class AnnotationGUI(QMainWindow):
             self.video_path_label.setText(self.video_path)
         if self.output_dir:
             self.output_dir_label.setText(self.output_dir)
+            self.delete_output_btn.setEnabled(True)  # Enable clear button for default directory
         
         # Set up frame signals for thread-safe updates
         self.frame_signals = FrameSignals()
