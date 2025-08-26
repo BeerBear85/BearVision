@@ -69,12 +69,28 @@ def setup_logging(config: LoggingConfig):
     in_test = 'pytest' in sys.modules
     
     if not in_test:
-        # Configure root logger to ensure all modules use the same formatting
-        logging.basicConfig(
-            level=getattr(logging, config.level.upper()),
-            format=config.format,
-            force=True  # Override any existing configuration
-        )
+        # Get root logger and clear any existing handlers
+        root_logger = logging.getLogger()
+        for handler in root_logger.handlers[:]:
+            root_logger.removeHandler(handler)
+        
+        # Set the logging level
+        root_logger.setLevel(getattr(logging, config.level.upper()))
+        
+        # Create formatter
+        formatter = logging.Formatter(config.format)
+        
+        # Add console handler
+        console_handler = logging.StreamHandler()
+        console_handler.setLevel(getattr(logging, config.level.upper()))
+        console_handler.setFormatter(formatter)
+        root_logger.addHandler(console_handler)
+        
+        # Add file handler for debug.log in working directory
+        file_handler = logging.FileHandler('debug.log')
+        file_handler.setLevel(getattr(logging, config.level.upper()))
+        file_handler.setFormatter(formatter)
+        root_logger.addHandler(file_handler)
     else:
         # In test mode, just set the level on our specific logger to avoid interfering with pytest's caplog
         logger.setLevel(getattr(logging, config.level.upper()))
