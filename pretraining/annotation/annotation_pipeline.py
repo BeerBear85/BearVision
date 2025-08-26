@@ -866,7 +866,7 @@ def run(
                         current_frame_idx, frames_since_last_detection, gap_frames)
             
             # Check if gap threshold reached (gap just started)
-            if frames_since_last_detection == gap_frames and current_det_points:
+            if frames_since_last_detection >= gap_frames and current_det_points:
                 # Gap just started - generate trajectory for segment that just ended
                 logger.info("Gap threshold reached at frame %d (%.1fs gap detected). Ending current trajectory (ID: %d)", 
                            current_frame_idx, cfg.detection_gap_timeout_s, trajectory_id + 1)
