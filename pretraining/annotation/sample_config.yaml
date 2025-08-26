@@ -14,8 +14,9 @@ yolo:
 trajectory:
   cutoff_hz: 1
 logging:
-  level: INFO
+  level: DEBUG
   format: "%(asctime)s - %(name)s - %(levelname)s - %(filename)s:%(funcName)s:%(lineno)d - %(message)s"
+  debug_filename: "debug.log"
 export:
   output_dir: dataset
   format: cvat

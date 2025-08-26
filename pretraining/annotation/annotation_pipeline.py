@@ -86,8 +86,8 @@ def setup_logging(config: LoggingConfig):
         console_handler.setFormatter(formatter)
         root_logger.addHandler(console_handler)
         
-        # Add file handler for debug.log in working directory
-        file_handler = logging.FileHandler('debug.log')
+        # Add file handler for debug log in working directory
+        file_handler = logging.FileHandler(config.debug_filename)
         file_handler.setLevel(getattr(logging, config.level.upper()))
         file_handler.setFormatter(formatter)
         root_logger.addHandler(file_handler)

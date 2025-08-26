@@ -175,10 +175,13 @@ class LoggingConfig:
         Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL).
     format: str, default format string with file and function name
         Log message format string.
+    debug_filename: str, default ``"debug.log"``
+        Filename for debug log file in working directory.
     """
 
     level: str = "INFO"
     format: str = "%(asctime)s - %(name)s - %(levelname)s - %(filename)s:%(funcName)s:%(lineno)d - %(message)s"
+    debug_filename: str = "debug.log"
 
 
 @dataclass

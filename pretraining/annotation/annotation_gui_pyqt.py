@@ -129,6 +129,12 @@ class AnnotationGUI(QMainWindow):
         self.run_btn.clicked.connect(self.start)
         left_layout.addWidget(self.run_btn)
         
+        # Delete output button
+        self.delete_output_btn = QPushButton("Clear Output Directory")
+        self.delete_output_btn.clicked.connect(self.clear_output_directory)
+        self.delete_output_btn.setEnabled(False)  # Initially disabled
+        left_layout.addWidget(self.delete_output_btn)
+        
         # Status labels
         self.status_label = QLabel("Idle")
         left_layout.addWidget(self.status_label)
@@ -243,6 +249,61 @@ class AnnotationGUI(QMainWindow):
         if directory:
             self.output_dir = directory
             self.output_dir_label.setText(directory)
+            self.delete_output_btn.setEnabled(True)  # Enable delete button
+
+    def clear_output_directory(self) -> None:
+        """Clear the contents of the selected output directory and debug log."""
+        if not hasattr(self, 'output_dir') or not self.output_dir:
+            QMessageBox.warning(
+                self,
+                "No Output Directory",
+                "Please select an output directory first."
+            )
+            return
+        
+        # Confirm deletion
+        reply = QMessageBox.question(
+            self,
+            "Confirm Deletion",
+            f"Are you sure you want to delete all contents of:\n{self.output_dir}\n\n"
+            f"This will also delete the debug log file ({self.base_cfg.logging.debug_filename}).\n\n"
+            "This action cannot be undone.",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+        
+        if reply == QMessageBox.Yes:
+            try:
+                import shutil
+                from pathlib import Path
+                
+                output_path = Path(self.output_dir)
+                
+                # Delete contents of output directory
+                if output_path.exists():
+                    for item in output_path.iterdir():
+                        if item.is_dir():
+                            shutil.rmtree(item)
+                        else:
+                            item.unlink()
+                
+                # Delete debug log file from working directory
+                debug_log_path = Path(self.base_cfg.logging.debug_filename)
+                if debug_log_path.exists():
+                    debug_log_path.unlink()
+                
+                QMessageBox.information(
+                    self,
+                    "Deletion Complete",
+                    f"Successfully cleared output directory and debug log file."
+                )
+                
+            except Exception as e:
+                QMessageBox.critical(
+                    self,
+                    "Deletion Failed",
+                    f"Failed to clear output directory:\n{str(e)}"
+                )
 
     def start(self) -> None:
         """Launch the pipeline in a background thread."""

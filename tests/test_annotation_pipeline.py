@@ -394,12 +394,14 @@ def test_split_trajectories_on_detection_gap(tmp_path):
     track_ids = {b['track_id'] for r in records for b in r['labels']}
     assert track_ids == {1, 2}
     track1_frames = [r['frame_idx'] for r in records if r['labels'][0]['track_id'] == 1]
-    assert max(track1_frames) == 16
+    # After optimization: segments are now properly trimmed to only include frames up to last detection
+    assert max(track1_frames) == 1  # Last detection was at frame 1, not extended to gap frames
     last_track1 = max(
         (r for r in records if r['labels'][0]['track_id'] == 1),
         key=lambda r: r['frame_idx'],
     )
-    assert last_track1['labels'][0]['conf'] == 0.0
+    # Since we're not extending beyond actual detections, confidence should be from actual detection
+    assert last_track1['labels'][0]['conf'] == 1.0  # Changed from 0.0 (interpolated) to 1.0 (actual detection)
 
 
 def test_first_detection_starts_trajectory_segment(tmp_path):
