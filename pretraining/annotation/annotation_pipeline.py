@@ -874,8 +874,18 @@ def run(
                 trajectory_id += 1
                 status.riders_detected += 1
                 logger.info("Total riders detected after gap: %d", status.riders_detected)
+                
+                # Trim segment to only include frames up to the last detection
+                # Remove gap frames that were added after the last detection
+                trimmed_segment_items = [
+                    item for item in current_segment_items 
+                    if item["frame_idx"] <= last_detection_frame
+                ]
+                logger.debug("Trimming segment from %d frames to %d frames (removing gap frames after frame %d)", 
+                           len(current_segment_items), len(trimmed_segment_items), last_detection_frame)
+                
                 generate_trajectory_during_processing(
-                    current_segment_items,
+                    trimmed_segment_items,
                     current_det_points,
                     cfg,
                     trajectory_id,
@@ -907,8 +917,17 @@ def run(
         trajectory_id += 1
         status.riders_detected += 1
         logger.info("Final riders detected count: %d", status.riders_detected)
+        
+        # Trim final segment to only include frames up to the last detection
+        final_trimmed_segment_items = [
+            item for item in current_segment_items 
+            if item["frame_idx"] <= last_detection_frame
+        ]
+        logger.debug("Trimming final segment from %d frames to %d frames (removing frames after frame %d)", 
+                   len(current_segment_items), len(final_trimmed_segment_items), last_detection_frame)
+        
         generate_trajectory_during_processing(
-            current_segment_items,
+            final_trimmed_segment_items,
             current_det_points,
             cfg,
             trajectory_id,
