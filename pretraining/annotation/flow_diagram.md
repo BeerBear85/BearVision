@@ -1,14 +1,15 @@
 # Annotation Pipeline Flow Diagram
 
-This diagram shows the data flow and processing stages in the annotation pipeline.
+This diagram shows the data flow and processing stages in the annotation pipeline with real-time gap detection and enhanced logging.
 
 ## High-Level Pipeline Flow
 
 ```
-[Input Videos] ──► [Configuration] ──► [Pipeline Processing] ──► [Output Dataset]
-                                              │
-                                              ▼
-                                      [Optional Preview/GUI Mode]
+[Input Videos] ──► [Configuration] ──► [Logging Setup] ──► [Pipeline Processing] ──► [Output Dataset]
+     │                                       │                        │
+     ▼                                       ▼                        ▼
+[Status Tracking]                    [File + Console]         [Optional Preview/GUI Mode]
+                                      Logging
 ```
 
 ## Detailed Processing Flow
@@ -27,12 +28,22 @@ This diagram shows the data flow and processing stages in the annotation pipelin
           │
           ▼
 ┌─────────────────┐
+│  setup_logging()│ ──► Configure logging system:
+│                 │     • File handler (debug.log)
+│                 │     • Console handler
+│                 │     • Formatted output with file/function names
+│                 │     • Skip in test mode (pytest detected)
+└─────────┬───────┘
+          │
+          ▼
+┌─────────────────┐
 │  Initialize     │
 │  Components:    │
 │  • VidIngest    │
 │  • QualityFilter│
 │  • PreLabelYOLO │
 │  • DatasetExporter OR CvatExporter │
+│  • PipelineStatus tracking │
 └─────────┬───────┘
           │
           ▼
@@ -70,25 +81,33 @@ This diagram shows the data flow and processing stages in the annotation pipelin
           │
           ▼
 ┌─────────────────┐
-│  Real-time      │ ──► For each frame with detections:
-│  Gap Detection  │     • Track frames_since_last_detection
+│  Real-time      │ ──► For each frame during processing:
+│  Gap Detection  │     • Track frames_since_last_detection counter
 │  & Processing   │     • Calculate gap_frames = timeout_s * original_video_fps
-│                 │     • When gap >= gap_frames and current_det_points exist:
-│                 │       ├─ Increment trajectory_id
-│                 │       ├─ Call generate_trajectory_during_processing()
-│                 │       ├─ Reset current_segment_items and current_det_points
-│                 │       └─ Continue with new segment
-│                 │     • Accumulate detections in current_det_points
-│                 │     • Add frames to current_segment_items
+│                 │     • When frame has detection:
+│                 │       ├─ Reset frames_since_last_detection = 0
+│                 │       ├─ Add detection to current_det_points
+│                 │       ├─ Add frame to current_segment_items
+│                 │       └─ Update status.riders_detected if new segment
+│                 │     • When frame has no detection:
+│                 │       ├─ Increment frames_since_last_detection by sample_rate
+│                 │       ├─ Check if gap_frames threshold reached
+│                 │       ├─ If gap detected: generate trajectory for current segment
+│                 │       ├─ Trim segment to last detection frame (remove gap frames)
+│                 │       └─ Reset segment tracking variables
+│                 │     • All frames callback to GUI for live preview
 └─────────┬───────┘
           │
           ▼
 ┌─────────────────┐
 │  End-of-Video   │ ──► After All Frames Processed:
-│  Processing     │     • Process any remaining current_det_points as final segment
-│                 │     • Group all collected items by trajectory gaps
-│                 │     • Split into segments using gap_frames threshold
-│                 │     • Call export_segment() for each remaining segment
+│  Processing     │     • Generate final trajectory for remaining current_det_points
+│                 │     • Trim final segment to last detection frame
+│                 │     • Call generate_trajectory_during_processing() for final segment
+│                 │     • Update final status.riders_detected count
+│                 │     • Post-process all collected items for legacy trajectory export
+│                 │     • Split historical items into segments using gap_frames threshold
+│                 │     • Call export_segment() for any remaining legacy segments
 └─────────┬───────┘
           │
           ▼
@@ -117,11 +136,12 @@ This diagram shows the data flow and processing stages in the annotation pipelin
           ▼
 ┌─────────────────┐
 │  Export         │ ──► Save to disk:
-│                 │     • Images (.jpg)
+│                 │     • Images (.jpg) with detailed logging
 │                 │     • Labels (YOLO .txt OR CVAT .xml)  
 │                 │     • Debug log (.jsonl) - DatasetExporter only
-│                 │     • Trajectory images (GUI mode) - real-time & end
+│                 │     • Trajectory images with timestamps - real-time & end
 │                 │     • Track IDs in bounding box annotations
+│                 │     • Comprehensive logging of export operations
 └─────────┬───────┘
           │
           ▼
@@ -167,7 +187,11 @@ Real-time Gap Detection: {
     trajectory_id: int,
     frames_since_last_detection: int,
     gap_frames: int,  # calculated from detection_gap_timeout_s * original_video_fps
-    original_video_fps: float
+    original_video_fps: float,
+    is_first_detection: bool,
+    last_gap_video_frame_number: int | None,
+    first_bbox_after_gap_video_frame_number: int | None,
+    sample_rate: float  # for gap increment calculation
 }
         │
         ▼
@@ -222,6 +246,7 @@ PipelineConfig {
     export: ExportConfig,
     trajectory: TrajectoryConfig,
     gui: GuiConfig,
+    logging: LoggingConfig,  # NEW: Logging configuration
     detection_gap_timeout_s: float  # default 3.0 seconds
 }
         │
@@ -233,6 +258,7 @@ Individual Config Objects used by:
 • ExportConfig ──► DatasetExporter/CvatExporter (output_dir, format)
 • TrajectoryConfig ──► lowpass_filter() (cutoff_hz)
 • GuiConfig ──► GUI applications (preview_width, preview_panel_width, etc.)
+• LoggingConfig ──► setup_logging() (level, format, file/console handlers)
 • detection_gap_timeout_s ──► Gap detection logic (converted to gap_frames)
 ```
 
@@ -253,7 +279,8 @@ Individual Config Objects used by:
     last_function: str,           # Name of most recently called @track function
     current_frame: int,           # Actual video frame index being processed  
     total_frames: int,            # Total frames in all input videos (from metadata)
-    processed_frame_count: int    # Count of frames passing quality checks and processed
+    processed_frame_count: int,   # Count of frames passing quality checks and processed
+    riders_detected: int          # NEW: Count of rider trajectory segments detected
 }
         │
         ▼
@@ -293,20 +320,38 @@ Standard Mode:                              GUI Mode:
 
 ## Key Architectural Changes
 
-1. **Real-time Gap Detection**: Gap detection occurs frame-by-frame during processing using `frames_since_last_detection` counter compared against `gap_frames` threshold calculated from `detection_gap_timeout_s * original_video_fps`.
+1. **Enhanced Logging System**: 
+   - Configurable logging with `LoggingConfig` (level, format)
+   - Dual output: file (debug.log) and console handlers
+   - Formatted logs with file/function names for debugging
+   - Test mode detection to avoid interference with pytest
 
-2. **Dual Trajectory Generation**: 
-   - `generate_trajectory_during_processing()` - Creates trajectory images when gaps are detected during processing
-   - `export_segment()` - Processes remaining segments at end-of-video with full interpolation and export
+2. **Real-time Gap Detection with Trimming**: 
+   - Gap detection occurs frame-by-frame using `frames_since_last_detection` counter
+   - Segment trimming removes gap frames after last detection
+   - Immediate trajectory generation when gaps are detected
+   - Enhanced boundary tracking with gap frame numbers
 
-3. **Enhanced Status Tracking**: PipelineStatus tracks both `current_frame` (actual video frame index) and `processed_frame_count` (frames passing quality checks), enabling accurate progress monitoring.
+3. **Enhanced Status Tracking**: 
+   - `PipelineStatus` tracks `riders_detected` count
+   - Real-time updates during gap detection
+   - Both `current_frame` (actual video frame index) and `processed_frame_count`
+   - Progress monitoring for GUI applications
 
-4. **Sequential Track ID Assignment**: Each trajectory segment receives an incrementing `trajectory_id` starting from 1, enabling multi-object tracking and unique trajectory identification.
+4. **Dual Trajectory Generation**: 
+   - `generate_trajectory_during_processing()` - Real-time trajectory images during processing
+   - `export_segment()` - Legacy segments at end-of-video with full interpolation
+   - Timestamped trajectory images for GUI visualization
 
-5. **Modular Exporters**: DatasetExporter (YOLO format with debug.jsonl logs) vs CvatExporter (XML format, no debug logs), selected based on `export.format` configuration.
+5. **Comprehensive Frame Logging**: 
+   - Detailed logging at each processing stage (ingestion, quality check, detection, filtering)
+   - Debug information for detection counts and filtering results
+   - Frame-by-frame status updates with confidence scores and bounding box coordinates
 
-6. **Frame-by-Frame Processing**: The pipeline processes frames immediately during ingestion rather than collecting all frames first, enabling real-time gap detection and trajectory generation.
+6. **Sequential Track ID Assignment**: Each trajectory segment receives incrementing `trajectory_id`, enabling multi-object tracking and unique identification.
 
-7. **Original Video FPS Usage**: Gap detection uses original video FPS rather than sampling rate to ensure time-based thresholds work correctly regardless of sampling configuration.
+7. **Modular Exporters**: DatasetExporter (YOLO format with debug.jsonl) vs CvatExporter (XML format), selected based on configuration.
 
-8. **GUI Integration**: Optional frame callbacks and trajectory image generation with timestamped filenames support real-time visualization in GUI applications.
+8. **Original Video FPS Usage**: Gap detection uses original video FPS rather than sampling rate for accurate time-based thresholds.
+
+9. **GUI Integration**: Frame callbacks for live preview, trajectory visualization, and real-time status updates.
