@@ -128,7 +128,10 @@ def test_gap_detection_triggers_trajectory_generation(tmp_path):
             'det_points_count': len(det_points),
             'segment_items_count': len(segment_items)
         })
-        return f'/fake/trajectory_{track_id}.jpg'
+        # Return tuple as expected by the function signature
+        trajectory_points = [(100 + i, 100 + i) for i in range(len(det_points))]  # Mock trajectory
+        final_item = segment_items[-1] if segment_items else None
+        return f'/fake/trajectory_{track_id}.jpg', trajectory_points, final_item
     
     # Mock YOLO to return detections in expected frames
     detection_frames = list(range(0, 31)) + list(range(90, 121))  # Two segments
@@ -174,7 +177,10 @@ def test_end_of_video_trajectory_generation(tmp_path):
             'det_points_count': len(det_points),
             'final_call': True
         })
-        return f'/fake/trajectory_{track_id}.jpg'
+        # Return tuple as expected by the function signature
+        trajectory_points = [(100 + i, 100 + i) for i in range(len(det_points))]  # Mock trajectory
+        final_item = segment_items[-1] if segment_items else None
+        return f'/fake/trajectory_{track_id}.jpg', trajectory_points, final_item
     
     # Mock YOLO to return detections throughout the video
     detection_frames = list(range(0, 61))
@@ -233,14 +239,16 @@ def test_trajectory_generation_during_processing_function():
     assert result is not None
     import os
     expected_prefix = os.path.join('/tmp', 'trajectories', 'trajectory_1_').replace('/', os.sep)
-    assert result.startswith(expected_prefix)
-    assert result.endswith('.jpg')
+    # Function now returns tuple, extract first element (image path)
+    image_path, trajectory_points, final_item = result
+    assert image_path.startswith(expected_prefix)
+    assert image_path.endswith('.jpg')
     
     # Verify trajectory file was actually created
-    assert os.path.exists(result)
+    assert os.path.exists(image_path)
     
     # Clean up the created file
-    os.remove(result)
+    os.remove(image_path)
 
 
 def test_no_trajectory_generation_without_detections():
@@ -253,7 +261,8 @@ def test_no_trajectory_generation_without_detections():
         segment_items, det_points, cfg, track_id=1, sample_rate=30.0
     )
     
-    assert result is None
+    # Function returns tuple (None, [], None) when no detections
+    assert result == (None, [], None)
 
 
 def test_single_detection_trajectory_generation():
@@ -280,11 +289,13 @@ def test_single_detection_trajectory_generation():
     assert result is not None
     import os
     expected_prefix = os.path.join('/tmp', 'trajectories', 'trajectory_1_').replace('/', os.sep)
-    assert result.startswith(expected_prefix)
-    assert result.endswith('.jpg')
+    # Function now returns tuple, extract first element (image path)
+    image_path, trajectory_points, final_item = result
+    assert image_path.startswith(expected_prefix)
+    assert image_path.endswith('.jpg')
     
     # Verify trajectory file was actually created
-    assert os.path.exists(result)
+    assert os.path.exists(image_path)
     
     # Clean up the created file
-    os.remove(result)
+    os.remove(image_path)

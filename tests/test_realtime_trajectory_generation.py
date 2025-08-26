@@ -38,7 +38,10 @@ def test_realtime_trajectory_generation_with_gaps():
                 'detection_frames': [p[0] for p in det_points]
             }
             trajectory_calls.append(call_info)
-            return f"{tmpdir}/trajectory_{track_id}.jpg"
+            # Return tuple as expected by the function signature
+            trajectory_points = [(100 + i, 100 + i) for i in range(len(det_points))]  # Mock trajectory
+            final_item = segment_items[-1] if segment_items else None
+            return f"{tmpdir}/trajectory_{track_id}.jpg", trajectory_points, final_item
         
         # Mock the trajectory generation function
         ap.generate_trajectory_during_processing = mock_generate_trajectory
@@ -133,7 +136,10 @@ def test_multiple_gaps_generate_multiple_trajectories():
                 'detection_count': len(det_points),
                 'detection_frames': [p[0] for p in det_points]
             })
-            return f"{tmpdir}/trajectory_{track_id}.jpg"
+            # Return tuple as expected by the function signature
+            trajectory_points = [(100 + i, 100 + i) for i in range(len(det_points))]  # Mock trajectory
+            final_item = segment_items[-1] if segment_items else None
+            return f"{tmpdir}/trajectory_{track_id}.jpg", trajectory_points, final_item
         
         ap.generate_trajectory_during_processing = mock_generate_trajectory
         
@@ -220,7 +226,10 @@ def test_no_trajectory_generation_without_gaps():
                 'track_id': track_id,
                 'detection_count': len(det_points)
             })
-            return f"{tmpdir}/trajectory_{track_id}.jpg"
+            # Return tuple as expected by the function signature
+            trajectory_points = [(100 + i, 100 + i) for i in range(len(det_points))]  # Mock trajectory
+            final_item = segment_items[-1] if segment_items else None
+            return f"{tmpdir}/trajectory_{track_id}.jpg", trajectory_points, final_item
         
         ap.generate_trajectory_during_processing = mock_generate_trajectory
         
