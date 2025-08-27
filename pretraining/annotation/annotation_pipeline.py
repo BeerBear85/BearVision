@@ -1,41 +1,45 @@
 """Annotation dataset pipeline for video ingestion and labeling."""
-import json
-from pathlib import Path
-from typing import Iterator, List, Dict, Any, Callable
 
-import cv2
-import yaml
-import numpy as np
-from ultralytics import YOLO
+import json
 import argparse
 import sys
-from functools import wraps
+from pathlib import Path
+from typing import List, Dict, Any, Callable
+import cv2
+import numpy as np
 import logging
+from ultralytics import YOLO
 
 # Import configuration classes
 from annotation_config import (
-    PipelineStatus,
-    SamplingConfig, 
+    PipelineConfig,
+    LoggingConfig,
+    SamplingConfig,
     QualityConfig,
     YoloConfig,
     ExportConfig,
     TrajectoryConfig,
-    LoggingConfig,
-    PipelineConfig,
+    PipelineStatus as PipelineStatusClass,
 )
 
 # Import trajectory handling functions
 from trajectory_handler import (
-    lowpass_filter,
-    save_trajectory_image,
     generate_trajectory_during_processing,
     export_segment,
 )
 
 # Import gap detection
-from gap_detector import GapDetector, GapEvent
+from gap_detector import GapDetector
 
-# Import DnnHandler for optional ONNX inference
+# Import new modular components
+from status import status, track
+from config_loader import _ensure_cfg, load_config
+from processors import VidIngest, QualityFilter, PreLabelYOLO
+from exporters import DatasetExporter, CvatExporter
+from filters import filter_small_person_boxes
+from logging_setup import setup_logging
+
+# Import DnnHandler for testing compatibility
 MODULE_DIR = Path(__file__).resolve().parents[2] / "code" / "modules"
 if str(MODULE_DIR) not in sys.path:
     sys.path.append(str(MODULE_DIR))
@@ -44,618 +48,9 @@ try:
 except Exception:  # pragma: no cover - DnnHandler might not be available
     DnnHandler = None
 
-
 logger = logging.getLogger(__name__)
 
 
-def setup_logging(config: LoggingConfig):
-    """Configure logging with specified level and format.
-    
-    Purpose
-    -------
-    Initialize the logging system with the format that includes file and function
-    names as required by the issue. This centralizes logging configuration to
-    ensure consistent formatting across the pipeline.
-    
-    Inputs
-    ------
-    config: LoggingConfig
-        Logging configuration specifying level and format.
-        
-    Outputs
-    -------
-    None
-        Configures the root logger with the specified settings.
-    """
-    # Check if we're in a test environment by looking for pytest
-    import sys
-    in_test = 'pytest' in sys.modules
-    
-    if not in_test:
-        # Get root logger and clear any existing handlers
-        root_logger = logging.getLogger()
-        for handler in root_logger.handlers[:]:
-            root_logger.removeHandler(handler)
-        
-        # Set the logging level
-        root_logger.setLevel(getattr(logging, config.level.upper()))
-        
-        # Create formatter
-        formatter = logging.Formatter(config.format)
-        
-        # Add console handler
-        console_handler = logging.StreamHandler()
-        console_handler.setLevel(getattr(logging, config.level.upper()))
-        console_handler.setFormatter(formatter)
-        root_logger.addHandler(console_handler)
-        
-        # Add file handler for debug log in working directory
-        file_handler = logging.FileHandler(config.debug_filename)
-        file_handler.setLevel(getattr(logging, config.level.upper()))
-        file_handler.setFormatter(formatter)
-        root_logger.addHandler(file_handler)
-    else:
-        # In test mode, just set the level on our specific logger to avoid interfering with pytest's caplog
-        logger.setLevel(getattr(logging, config.level.upper()))
-        # Also set the root logger level if no handlers are configured
-        root_logger = logging.getLogger()
-        if not root_logger.handlers:
-            root_logger.setLevel(getattr(logging, config.level.upper()))
-    
-    logger.info("Logging configured with level: %s", config.level)
-
-
-status = PipelineStatus()
-
-
-def track(func):
-    """Decorator updating :data:`status` with the last function called.
-
-    Purpose
-    -------
-    Provide lightweight instrumentation by recording each decorated call. This
-    avoids invasive logging and keeps overhead minimal for performance.
-
-    Inputs
-    ------
-    func: Callable
-        Function to wrap.
-
-    Outputs
-    -------
-    Callable
-        Wrapped function that updates :data:`status` before executing.
-    """
-
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        status.last_function = func.__name__
-        return func(*args, **kwargs)
-
-    return wrapper
-
-
-@track
-def load_config(path: str) -> Dict[str, Any]:
-    """Load YAML configuration file."""
-    with open(path, "r", encoding="utf-8") as f:
-        return yaml.safe_load(f)
-
-
-
-class VidIngest:
-    """Video ingestion with adaptive frame sampling."""
-
-    def __init__(self, videos: List[str], config: SamplingConfig):
-        """Store video list and sampling configuration.
-
-        Purpose
-        -------
-        The constructor merely records parameters so that iteration can later
-        open files lazily, avoiding upfront validation work.
-
-        Inputs
-        ------
-        videos: list[str]
-            Paths to video files to be processed.
-        config: SamplingConfig
-            Controls frame skipping behaviour.
-
-        Outputs
-        -------
-        None
-            State is stored on the instance for later use.
-        """
-        self.videos = videos
-        self.config = config
-
-    @track
-    def __iter__(self) -> Iterator[Dict[str, Any]]:
-        """Yield sampled frames from each video.
-
-        Purpose
-        -------
-        Abstract away the sampling logic so callers can simply iterate over
-        frames without worrying about frame rates or file handling.
-
-        Inputs
-        ------
-        None
-            The method uses instance attributes configured at construction.
-
-        Outputs
-        -------
-        Iterator[dict]
-            Each dictionary contains the video path, frame index and image
-            array for sampled frames.
-
-        Raises
-        ------
-        FileNotFoundError
-            If a video cannot be opened, likely due to an invalid path or
-            unsupported codec.
-        """
-        for video_path in self.videos:
-            logger.debug("Opening video file: %s", video_path)
-            cap = cv2.VideoCapture(video_path)
-            if not cap.isOpened():
-                # Failing silently makes the pipeline appear successful with no output;
-                # raising surfaces path or codec issues early for easier debugging.
-                logger.error("Failed to open video file: %s", video_path)
-                raise FileNotFoundError(f"Cannot open video: {video_path}")
-            # Derive a stride based on desired FPS; fall back to a fixed step for
-            # robustness when metadata is missing.
-            orig_fps = cap.get(cv2.CAP_PROP_FPS) or 30
-            step = (
-                int(max(1, orig_fps / self.config.fps))
-                if self.config.fps
-                else self.config.step
-            )
-            logger.debug("Video sampling: original_fps=%.1f, target_fps=%.1f, step=%d", 
-                        orig_fps, self.config.fps or (orig_fps / self.config.step), step)
-            frame_idx = 0
-            while True:
-                ret, frame = cap.read()
-                if not ret:
-                    break
-                if frame_idx % step == 0:
-                    yield {
-                        "video": video_path,
-                        "frame_idx": frame_idx,
-                        "frame": frame,
-                    }
-                frame_idx += 1
-            cap.release()
-
-
-class QualityFilter:
-    """Filter frames based on blur and luma thresholds."""
-
-    def __init__(self, config: QualityConfig):
-        """Record thresholds used during :meth:`check`.
-
-        Purpose
-        -------
-        Storing the thresholds separately keeps the `check` method lightweight
-        and avoids repeatedly accessing the config object.
-
-        Inputs
-        ------
-        config: QualityConfig
-            Contains blur and luma limits.
-
-        Outputs
-        -------
-        None
-            Instance attributes are set for later use.
-        """
-        self.blur_thr = config.blur
-        self.luma_min = config.luma_min
-        self.luma_max = config.luma_max
-
-    @track
-    def check(self, frame) -> bool:
-        """Return ``True`` if a frame passes quality thresholds.
-
-        Purpose
-        -------
-        Quickly discard frames that are too blurry or too dark/bright, which
-        reduces downstream processing and storage.
-
-        Inputs
-        ------
-        frame: ndarray
-            Image in BGR order as produced by OpenCV.
-
-        Outputs
-        -------
-        bool
-            ``True`` when the frame should be kept, ``False`` otherwise.
-        """
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        blur_val = cv2.Laplacian(gray, cv2.CV_64F).var()
-        luma = gray.mean()
-        return blur_val >= self.blur_thr and self.luma_min <= luma <= self.luma_max
-
-
-class PreLabelYOLO:
-    """Run YOLO inference to produce bounding boxes."""
-
-    def __init__(self, config: YoloConfig):
-        """Load the chosen YOLO model backend.
-
-        Purpose
-        -------
-        Dynamically select between an ONNX-based DNN handler and the
-        Ultralytics implementation, enabling flexibility without duplicating
-        inference code elsewhere.
-
-        Inputs
-        ------
-        config: YoloConfig
-            Source of the weights path and confidence threshold.
-
-        Outputs
-        -------
-        None
-            The model and metadata are stored on ``self`` for later detection.
-        """
-        self.conf_thr = config.conf_thr
-        weights = config.weights
-        if weights.endswith(".onnx") and DnnHandler is not None:
-            model_name = Path(weights).stem
-            self.backend = "dnn"
-            logger.info("Loading ONNX model via DnnHandler: %s", model_name)
-            self.model = DnnHandler(model_name)
-            self.model.init()
-            # single-class wakeboarder detection
-            self.names = {0: "wakeboarder"}
-            logger.debug("DNN backend initialized with single class: wakeboarder")
-        else:
-            self.backend = "ultralytics"
-            logger.info("Loading Ultralytics YOLO model: %s", weights)
-            self.model = YOLO(weights)
-            try:
-                self.names = self.model.names
-                logger.debug("YOLO model loaded with %d classes: %s", len(self.names), list(self.names.values()))
-            except AttributeError:
-                self.names = {}
-                logger.warning("Could not retrieve class names from YOLO model")
-
-    @track
-    def detect(self, frame) -> List[Dict[str, Any]]:
-        """Run inference on ``frame`` and return person detections.
-
-        Purpose
-        -------
-        Provide a uniform output structure regardless of backend, simplifying
-        downstream processing.
-
-        Inputs
-        ------
-        frame: ndarray
-            BGR image to analyze.
-
-        Outputs
-        -------
-        list[dict]
-            Bounding boxes with class, label and confidence fields.
-        """
-        boxes: List[Dict[str, Any]] = []
-        if self.backend == "dnn":
-            raw_boxes, confs = self.model.find_person(frame)
-            for bb, conf in zip(raw_boxes, confs):
-                x, y, w, h = bb
-                boxes.append(
-                    {
-                        "bbox": [x, y, x + w, y + h],
-                        "cls": 0,
-                        "label": self.names.get(0, "0"),
-                        "conf": float(conf),
-                    }
-                )
-        else:
-            results = self.model(frame)[0]
-            for b in results.boxes:
-                # `b.conf` and `b.cls` are numpy arrays with a single element in YOLO
-                conf = float(b.conf[0].item())
-                if conf < self.conf_thr:
-                    continue
-                cls_id = int(b.cls[0].item())
-                label = self.names.get(cls_id, str(cls_id))
-                # Only keep detections of persons to avoid exporting every frame
-                if label.lower() != "person" and cls_id != 0:
-                    continue
-                x1, y1, x2, y2 = b.xyxy[0].tolist()
-                boxes.append(
-                    {
-                        "bbox": [x1, y1, x2, y2],
-                        "cls": cls_id,
-                        "label": label,
-                        "conf": conf,
-                    }
-                )
-        return boxes
-
-
-def filter_small_person_boxes(
-    boxes: List[Dict[str, Any]],
-    image_shape: tuple[int, int],
-    min_ratio: float,
-) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
-    """Split detections into kept and discarded based on diagonal ratio.
-
-    Purpose
-    -------
-    Remove exceedingly small person detections that are unlikely to be
-    meaningful while leaving other classes untouched.
-
-    Inputs
-    ------
-    boxes: list[dict]
-        Detections produced by the model. Only entries labelled ``person`` are
-        considered for filtering.
-    image_shape: tuple[int, int]
-        Image height and width used to compute the full-image diagonal.
-    min_ratio: float
-        Minimum allowed ratio between the box diagonal and the image diagonal.
-
-    Outputs
-    -------
-    tuple[list[dict], list[dict]]
-        First list contains boxes that pass the filter, second list holds
-        discarded boxes along with their computed ratio for logging.
-    """
-
-    kept: List[Dict[str, Any]] = []
-    discarded: List[Dict[str, Any]] = []
-    img_h, img_w = image_shape[:2]
-    img_diag = float(np.hypot(img_w, img_h))
-    for b in boxes:
-        label = b.get("label", "").lower()
-        if label != "person" and b.get("cls") != 0:
-            # Only filter persons; other classes are kept verbatim.
-            kept.append(b)
-            continue
-        x1, y1, x2, y2 = b["bbox"]
-        bb_diag = float(np.hypot(x2 - x1, y2 - y1))
-        ratio = bb_diag / img_diag
-        if ratio < min_ratio:
-            logger.debug(
-                "Discarding person detection with diagonal ratio %.6f (threshold %.6f)",
-                ratio,
-                min_ratio,
-            )
-            discarded.append({"bbox": b["bbox"], "ratio": ratio})
-        else:
-            kept.append(b)
-    return kept, discarded
-
-
-# Additional helper to normalize configuration input for run
-@track
-def _ensure_cfg(cfg: "PipelineConfig | str") -> "PipelineConfig":
-    """Return a :class:`PipelineConfig` from a path or object."""
-    if isinstance(cfg, PipelineConfig):
-        return cfg
-    cfg_dict = load_config(cfg)
-    sampling = cfg_dict.get("sampling", {})
-    if isinstance(sampling, dict):
-        sampling = SamplingConfig(**sampling)
-    quality = cfg_dict.get("quality", {})
-    if isinstance(quality, dict):
-        quality = QualityConfig(**quality)
-    yolo = cfg_dict.get("yolo")
-    if isinstance(yolo, dict):
-        yolo = YoloConfig(**yolo)
-    export = cfg_dict.get("export", {})
-    if isinstance(export, dict):
-        export = ExportConfig(**export)
-    trajectory = cfg_dict.get("trajectory", {})
-    if isinstance(trajectory, dict):
-        trajectory = TrajectoryConfig(**trajectory)
-    gui = cfg_dict.get("gui", {})
-    if isinstance(gui, dict):
-        from annotation_config import GuiConfig
-        gui = GuiConfig(**gui)
-    logging_cfg = cfg_dict.get("logging", {})
-    if isinstance(logging_cfg, dict):
-        logging_cfg = LoggingConfig(**logging_cfg)
-    return PipelineConfig(
-        videos=cfg_dict.get("videos", []),
-        sampling=sampling,
-        quality=quality,
-        yolo=yolo,
-        export=export,
-        trajectory=trajectory,
-        gui=gui,
-        logging=logging_cfg,
-        detection_gap_timeout_s=cfg_dict.get("detection_gap_timeout_s", 3.0),
-    )
-
-
-
-
-
-
-
-
-class DatasetExporter:
-    """Save frames, labels and debug information."""
-
-    def __init__(self, config: ExportConfig):
-        """Prepare output directories and debug log.
-
-        Purpose
-        -------
-        Ensure required folders exist before any frames are processed, avoiding
-        repetitive checks inside the hot save loop.
-
-        Inputs
-        ------
-        config: ExportConfig
-            Carries the output directory path.
-
-        Outputs
-        -------
-        None
-            Directories are created and a debug file handle is opened.
-        """
-        self.root = Path(config.output_dir)
-        self.img_dir = self.root / "images"
-        self.lbl_dir = self.root / "labels"
-        self.img_dir.mkdir(parents=True, exist_ok=True)
-        self.lbl_dir.mkdir(parents=True, exist_ok=True)
-        self.debug_path = self.root / "debug.jsonl"
-        self.debug_file = self.debug_path.open("w", encoding="utf-8")
-
-    @track
-    def save(self, item: Dict[str, Any], boxes: List[Dict[str, Any]]):
-        """Write one frame and its annotations to disk.
-
-        Purpose
-        -------
-        Persist data in a YOLO-friendly layout while also logging rich
-        information for potential debugging or later analysis.
-
-        Inputs
-        ------
-        item: dict
-            Metadata and pixel data for the frame.
-        boxes: list[dict]
-            Bounding boxes associated with the frame.
-
-        Outputs
-        -------
-        None
-            Files are written to the export directory and debug log.
-        """
-        frame = item["frame"]
-        idx = item["frame_idx"]
-        video_name = Path(item["video"]).stem
-        img_name = f"{video_name}_{idx:06d}.jpg"
-        lbl_name = f"{video_name}_{idx:06d}.txt"
-        logger.debug("Exporting frame %d as %s with %d labels", idx, img_name, len(boxes))
-        cv2.imwrite(str(self.img_dir / img_name), frame)
-        with open(self.lbl_dir / lbl_name, "w", encoding="utf-8") as f:
-            for b in boxes:
-                x1, y1, x2, y2 = b["bbox"]
-                w = x2 - x1
-                h = y2 - y1
-                cx = x1 + w / 2
-                cy = y1 + h / 2
-                f.write(f"{b['cls']} {cx} {cy} {w} {h}\n")
-        debug = {
-            "image": img_name,
-            "labels": boxes,
-            "video": item["video"],
-            "frame_idx": idx,
-        }
-        if item.get("discarded_boxes"):
-            # Including discarded detections in the log aids post-run auditing
-            # without cluttering the exported dataset.
-            debug["discarded_boxes"] = item["discarded_boxes"]
-        # JSON Lines format allows streaming large debug logs without
-        # constructing a massive in-memory structure.
-        self.debug_file.write(json.dumps(debug) + "\n")
-
-    def close(self):
-        """Flush and close the debug log."""
-        self.debug_file.close()
-        
-
-class CvatExporter:
-    """Save frames and annotations in CVAT XML format."""
-
-    def __init__(self, config: ExportConfig):
-        """Create an image directory and buffer annotations.
-
-        Purpose
-        -------
-        CVAT expects a single XML with all boxes, so we accumulate annotations
-        in memory and defer writing until :meth:`close`.
-
-        Inputs
-        ------
-        config: ExportConfig
-            Specifies the output directory.
-
-        Outputs
-        -------
-        None
-            Directories are created and an in-memory list is initialised.
-        """
-        self.root = Path(config.output_dir)
-        self.img_dir = self.root / "images"
-        self.img_dir.mkdir(parents=True, exist_ok=True)
-        self.annotations: List[Dict[str, Any]] = []
-
-    @track
-    def save(self, item: Dict[str, Any], boxes: List[Dict[str, Any]]):
-        """Append annotation metadata for one frame.
-
-        Purpose
-        -------
-        Images are written immediately to avoid large memory use, while box
-        metadata is stored for later XML serialization.
-
-        Inputs
-        ------
-        item: dict
-            Frame metadata including pixel data and identifiers.
-        boxes: list[dict]
-            Bounding boxes detected in the frame.
-
-        Outputs
-        -------
-        None
-            Updates the internal ``annotations`` list and saves an image.
-        """
-        frame = item["frame"]
-        idx = item["frame_idx"]
-        video_name = Path(item["video"]).stem
-        img_name = f"{video_name}_{idx:06d}.jpg"
-        cv2.imwrite(str(self.img_dir / img_name), frame)
-        h, w = frame.shape[:2]
-        self.annotations.append({
-            "name": img_name,
-            "width": w,
-            "height": h,
-            "boxes": boxes,
-        })
-
-    def close(self):
-        """Write accumulated annotations to ``annotations.xml``."""
-        import xml.etree.ElementTree as ET
-
-        root_el = ET.Element("annotations")
-        for i, img in enumerate(self.annotations):
-            img_el = ET.SubElement(
-                root_el,
-                "image",
-                id=str(i),
-                name=img["name"],
-                width=str(img["width"]),
-                height=str(img["height"]),
-            )
-            for b in img["boxes"]:
-                x1, y1, x2, y2 = b["bbox"]
-                box_el = ET.SubElement(
-                    img_el,
-                    "box",
-                    label=str(b.get("label", b.get("cls", "0"))),
-                    xtl=str(x1),
-                    ytl=str(y1),
-                    xbr=str(x2),
-                    ybr=str(y2),
-                    occluded="0",
-                )
-                ET.SubElement(box_el, "attribute", name="confidence").text = str(
-                    b.get("conf", 0)
-                )
-
-        tree = ET.ElementTree(root_el)
-        tree.write(self.root / "annotations.xml", encoding="utf-8", xml_declaration=True)
 
 
 @track
@@ -1125,6 +520,35 @@ def main(argv: list[str] | None = None) -> None:
 
     if args.command == "run":
         run(args.config_path)
+
+
+# Backward compatibility re-exports
+# Re-export the original status instance and classes/functions
+PipelineStatus = PipelineStatusClass
+from processors import VidIngest, QualityFilter, PreLabelYOLO
+from exporters import DatasetExporter, CvatExporter
+from filters import filter_small_person_boxes
+from config_loader import load_config
+
+# Re-export configuration classes for backward compatibility
+SamplingConfig = SamplingConfig
+QualityConfig = QualityConfig
+YoloConfig = YoloConfig  
+ExportConfig = ExportConfig
+TrajectoryConfig = TrajectoryConfig
+PipelineConfig = PipelineConfig
+LoggingConfig = LoggingConfig
+
+# Make key functions available at module level
+__all__ = [
+    'run', 'setup_logging', 'PipelineStatus', 'status', 'track',
+    'VidIngest', 'QualityFilter', 'PreLabelYOLO', 
+    'DatasetExporter', 'CvatExporter',
+    'filter_small_person_boxes', 'load_config',
+    'SamplingConfig', 'QualityConfig', 'YoloConfig',
+    'ExportConfig', 'TrajectoryConfig', 'PipelineConfig',
+    'LoggingConfig', 'YOLO', 'DnnHandler'
+]
 
 
 if __name__ == "__main__":

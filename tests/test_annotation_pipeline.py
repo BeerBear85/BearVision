@@ -93,7 +93,7 @@ def test_prelabel_yolo_detection():
             return [DummyResults(self.boxes)]
 
     d_boxes = [DummyBox([0, 0, 10, 10], 0.8, 0), DummyBox([0, 0, 5, 5], 0.9, 1)]
-    with mock.patch.object(ap, 'YOLO', return_value=DummyModel(d_boxes)):
+    with mock.patch('processors.YOLO', return_value=DummyModel(d_boxes)):
         yolo = ap.PreLabelYOLO(ap.YoloConfig(weights='x.pt', conf_thr=0.5))
         out = yolo.detect(np.zeros((10, 10, 3), dtype=np.uint8))
     assert out == [
@@ -107,7 +107,7 @@ def test_prelabel_yolo_detection():
 
 
 def test_prelabel_with_dnn_handler():
-    with mock.patch.object(ap, 'DnnHandler') as dh_mock:
+    with mock.patch('processors.DnnHandler') as dh_mock:
         instance = dh_mock.return_value
         instance.init.return_value = None
         instance.find_person.return_value = ([[1, 2, 3, 4]], [0.9])
@@ -191,7 +191,7 @@ def test_run_skips_frames_without_detections(tmp_path):
     }
     cfg_path = tmp_path / 'cfg.yaml'
     cfg_path.touch()
-    with mock.patch.object(ap, 'load_config', return_value=cfg):
+    with mock.patch('config_loader.load_config', return_value=cfg):
         with mock.patch.object(ap, 'PreLabelYOLO') as MockYolo:
             MockYolo.return_value.detect.return_value = []
             ap.run(str(cfg_path))
