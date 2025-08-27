@@ -588,3 +588,49 @@ def test_riders_detected_counter_no_detections(tmp_path):
 
     # Should remain 0 since no riders were detected
     assert ap.status.riders_detected == 0
+
+
+def test_first_segment_starts_from_first_detection_not_video_beginning(tmp_path):
+    """Test that the first segment starts from the first detection frame, not video beginning."""
+    video = create_dummy_video(tmp_path / 'v.mp4', num_frames=20, fps=10)
+    cfg = ap.PipelineConfig(
+        videos=[str(video)],
+        sampling=ap.SamplingConfig(fps=10),
+        quality=ap.QualityConfig(blur=0.0, luma_min=0, luma_max=255),
+        yolo=ap.YoloConfig(weights='dummy.onnx', conf_thr=0.1),
+        export=ap.ExportConfig(output_dir=str(tmp_path / 'dataset')),
+        detection_gap_timeout_s=5.0,
+    )
+
+    def side_effect(frame):
+        idx = side_effect.call_idx
+        side_effect.call_idx += 1
+        # First detection starts at frame 10 (after frames 0-9 without detections)
+        # Continue for a few frames, then stop
+        if 10 <= idx <= 15:
+            return [{'bbox': [10, 10, 20, 20], 'cls': 0, 'label': 'person', 'conf': 1.0}]
+        return []
+
+    side_effect.call_idx = 0
+
+    with mock.patch.object(ap, 'PreLabelYOLO') as MockYolo:
+        MockYolo.return_value.detect.side_effect = side_effect
+        ap.run(cfg)
+
+    debug_path = tmp_path / 'dataset' / 'debug.jsonl'
+    records = [json.loads(l) for l in debug_path.read_text().splitlines()]
+    
+    # Get all records with track_id 1 (first segment)
+    track1_records = [r for r in records if 'labels' in r and r['labels'] and r['labels'][0].get('track_id') == 1]
+    track1_frames = [r['frame_idx'] for r in track1_records]
+    
+    # The first segment should start at frame 10 (first detection), not frame 0
+    min_frame_in_segment = min(track1_frames)
+    assert min_frame_in_segment == 10, f"Expected first segment to start at frame 10, but started at frame {min_frame_in_segment}"
+    
+    # Verify that no frames before the first detection are included in the segment
+    frames_before_detection = [f for f in track1_frames if f < 10]
+    assert len(frames_before_detection) == 0, f"Found {len(frames_before_detection)} frames before first detection in segment: {frames_before_detection}"
+    
+    # Should have detected exactly 1 rider segment
+    assert ap.status.riders_detected == 1

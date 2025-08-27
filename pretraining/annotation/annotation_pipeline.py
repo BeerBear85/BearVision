@@ -239,6 +239,12 @@ def _process_videos(cfg: PipelineConfig, processors: dict, frame_callback, gui_m
             current_det_points = []
             gap_detector.reset_for_new_segment()
             
+        elif gap_event.segment_started and gap_event.is_first_detection:
+            # Handle first detection - reset segment to start from first detection frame
+            logger.info("First detection at frame %d - resetting segment to start from first detection", current_frame_idx)
+            current_segment_items = []
+            current_det_points = []
+            
         elif gap_event.segment_ended:
             # End current segment due to gap
             last_detection_frame = gap_detector.get_last_detection_frame()
