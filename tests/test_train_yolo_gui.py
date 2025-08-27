@@ -2,6 +2,7 @@
 
 import sys
 import tempfile
+import yaml
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
@@ -191,6 +192,153 @@ class TestTrainYoloGUI:
         updated_text = gui.output_text.toPlainText()
         assert "Test training output line" in updated_text
         assert len(updated_text) > len(initial_text)
+
+    def test_get_current_config(self, gui):
+        """Test getting current configuration from GUI."""
+        # Set some values
+        gui.data_dir = "/test/path"
+        gui.model_combo.setCurrentText("yolov8n.pt")
+        gui.epochs_spin.setValue(100)
+        gui.batch_spin.setValue(8)
+        gui.onnx_edit.setText("test_model.onnx")
+        
+        config = gui._get_current_config()
+        
+        assert config["data_dir"] == "/test/path"
+        assert config["model"] == "yolov8n.pt"
+        assert config["epochs"] == 100
+        assert config["batch"] == 8
+        assert config["onnx_out"] == "test_model.onnx"
+
+    def test_apply_config(self, gui):
+        """Test applying configuration to GUI elements."""
+        config = {
+            "data_dir": "/new/test/path",
+            "model": "yolov8s.pt",
+            "epochs": 200,
+            "batch": 32,
+            "imgsz": 512,
+            "device": "cpu",
+            "val_ratio": 0.3,
+            "onnx_out": "custom.onnx"
+        }
+        
+        gui._apply_config(config)
+        
+        assert gui.data_dir == "/new/test/path"
+        assert gui.model_combo.currentText() == "yolov8s.pt"
+        assert gui.epochs_spin.value() == 200
+        assert gui.batch_spin.value() == 32
+        assert gui.imgsz_spin.value() == 512
+        assert gui.device_combo.currentText() == "cpu"
+        assert gui.val_ratio_spin.value() == 0.3
+        assert gui.onnx_edit.text() == "custom.onnx"
+
+    def test_load_config_if_exists_file_present(self, gui):
+        """Test loading config when file exists."""
+        config_data = {
+            "model": "yolov8m.pt",
+            "epochs": 75,
+            "batch": 24
+        }
+        
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+            yaml.safe_dump(config_data, f)
+            config_file = Path(f.name)
+        
+        try:
+            gui.config_file = config_file
+            gui._load_config_if_exists()
+            
+            assert gui.model_combo.currentText() == "yolov8m.pt"
+            assert gui.epochs_spin.value() == 75
+            assert gui.batch_spin.value() == 24
+        finally:
+            config_file.unlink()
+
+    def test_load_config_if_exists_no_file(self, gui):
+        """Test loading config when file doesn't exist."""
+        gui.config_file = Path("/non/existent/path/config.yaml")
+        
+        # Should not raise exception
+        gui._load_config_if_exists()
+        
+        # Values should remain at defaults
+        assert gui.model_combo.currentText() == "yolov8x.pt"
+        assert gui.epochs_spin.value() == 50
+
+    def test_load_config_dialog_success(self, gui):
+        """Test successful config loading via dialog."""
+        config_data = {
+            "model": "yolov8l.pt",
+            "epochs": 150
+        }
+        
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+            yaml.safe_dump(config_data, f)
+            config_file = Path(f.name)
+        
+        try:
+            with patch('PySide6.QtWidgets.QFileDialog.getOpenFileName') as mock_dialog:
+                mock_dialog.return_value = (str(config_file), "")
+                
+                with patch('PySide6.QtWidgets.QMessageBox.information') as mock_info:
+                    gui._load_config_dialog()
+                    mock_info.assert_called_once()
+                
+                assert gui.model_combo.currentText() == "yolov8l.pt"
+                assert gui.epochs_spin.value() == 150
+        finally:
+            config_file.unlink()
+
+    def test_save_config_dialog_success(self, gui):
+        """Test successful config saving via dialog."""
+        gui.model_combo.setCurrentText("yolov8n.pt")
+        gui.epochs_spin.setValue(123)
+        
+        with tempfile.NamedTemporaryFile(suffix='.yaml', delete=False) as f:
+            config_file = Path(f.name)
+        
+        try:
+            with patch('PySide6.QtWidgets.QFileDialog.getSaveFileName') as mock_dialog:
+                mock_dialog.return_value = (str(config_file), "")
+                
+                with patch('PySide6.QtWidgets.QMessageBox.information') as mock_info:
+                    gui._save_config_dialog()
+                    mock_info.assert_called_once()
+                
+                # Verify file was written correctly
+                with open(config_file, 'r') as f:
+                    saved_config = yaml.safe_load(f)
+                
+                assert saved_config["model"] == "yolov8n.pt"
+                assert saved_config["epochs"] == 123
+        finally:
+            config_file.unlink()
+
+    def test_save_default_config(self, gui):
+        """Test saving current configuration as default."""
+        gui.model_combo.setCurrentText("yolov8n.pt")
+        gui.epochs_spin.setValue(99)
+        
+        with tempfile.NamedTemporaryFile(suffix='.yaml', delete=False) as f:
+            config_file = Path(f.name)
+        
+        try:
+            gui.config_file = config_file
+            
+            with patch('PySide6.QtWidgets.QMessageBox.information') as mock_info:
+                gui._save_default_config()
+                mock_info.assert_called_once()
+            
+            # Verify file was written correctly
+            with open(config_file, 'r') as f:
+                saved_config = yaml.safe_load(f)
+            
+            assert saved_config["model"] == "yolov8n.pt"
+            assert saved_config["epochs"] == 99
+        finally:
+            config_file.unlink()
 
     def test_training_finished_success(self, gui):
         """Test successful training completion handling."""

@@ -3,16 +3,17 @@
 import threading
 import sys
 import subprocess
+import yaml
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Dict, Any
 
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QLineEdit, QPushButton, QFrame, QFileDialog, QMessageBox,
-    QSpinBox, QDoubleSpinBox, QComboBox, QTextEdit, QScrollArea
+    QSpinBox, QDoubleSpinBox, QComboBox, QTextEdit, QScrollArea, QMenuBar
 )
 from PySide6.QtCore import Qt, QTimer, Signal, QObject
-from PySide6.QtGui import QFont
+from PySide6.QtGui import QFont, QAction
 
 
 class TrainingSignals(QObject):
@@ -34,6 +35,10 @@ class TrainYoloGUI(QMainWindow):
         self.data_dir = ""
         self.training_process = None
         self.is_training = False
+        self.config_file = Path(__file__).parent / "train_config.yaml"
+        
+        # Create menu bar
+        self._create_menu_bar()
         
         # Central widget and main layout
         central_widget = QWidget()
@@ -191,6 +196,9 @@ class TrainYoloGUI(QMainWindow):
         self.training_signals = TrainingSignals()
         self.training_signals.output_ready.connect(self._update_output)
         self.training_signals.training_finished.connect(self._training_finished)
+        
+        # Load default configuration
+        self._load_config_if_exists()
 
     def select_data_directory(self) -> None:
         """Prompt the user to select a directory containing images and annotations."""
@@ -322,6 +330,148 @@ class TrainYoloGUI(QMainWindow):
             QMessageBox.information(self, "Training Complete", message)
         else:
             QMessageBox.critical(self, "Training Failed", message)
+
+    def _create_menu_bar(self) -> None:
+        """Create the menu bar with config options."""
+        menubar = self.menuBar()
+        
+        # File menu
+        file_menu = menubar.addMenu("File")
+        
+        # Load config action
+        load_action = QAction("Load Config...", self)
+        load_action.setShortcut("Ctrl+O")
+        load_action.triggered.connect(self._load_config_dialog)
+        file_menu.addAction(load_action)
+        
+        # Save config action
+        save_action = QAction("Save Config...", self)
+        save_action.setShortcut("Ctrl+S")
+        save_action.triggered.connect(self._save_config_dialog)
+        file_menu.addAction(save_action)
+        
+        file_menu.addSeparator()
+        
+        # Save as default config action
+        save_default_action = QAction("Save as Default Config", self)
+        save_default_action.triggered.connect(self._save_default_config)
+        file_menu.addAction(save_default_action)
+
+    def _get_current_config(self) -> Dict[str, Any]:
+        """Get current GUI parameters as a config dictionary."""
+        return {
+            "data_dir": self.data_dir,
+            "model": self.model_combo.currentText(),
+            "epochs": self.epochs_spin.value(),
+            "batch": self.batch_spin.value(),
+            "imgsz": self.imgsz_spin.value(),
+            "device": self.device_combo.currentText(),
+            "val_ratio": self.val_ratio_spin.value(),
+            "onnx_out": self.onnx_edit.text()
+        }
+
+    def _apply_config(self, config: Dict[str, Any]) -> None:
+        """Apply configuration values to GUI elements."""
+        if "data_dir" in config and config["data_dir"]:
+            self.data_dir = config["data_dir"]
+            self.data_dir_label.setText(config["data_dir"])
+            self.data_dir_label.setStyleSheet("color: black;")
+        
+        if "model" in config:
+            self.model_combo.setCurrentText(config["model"])
+        
+        if "epochs" in config:
+            self.epochs_spin.setValue(config["epochs"])
+        
+        if "batch" in config:
+            self.batch_spin.setValue(config["batch"])
+        
+        if "imgsz" in config:
+            self.imgsz_spin.setValue(config["imgsz"])
+        
+        if "device" in config:
+            self.device_combo.setCurrentText(config["device"])
+        
+        if "val_ratio" in config:
+            self.val_ratio_spin.setValue(config["val_ratio"])
+        
+        if "onnx_out" in config:
+            self.onnx_edit.setText(config["onnx_out"])
+
+    def _load_config_if_exists(self) -> None:
+        """Load default configuration if it exists."""
+        if self.config_file.exists():
+            try:
+                with open(self.config_file, 'r') as f:
+                    config = yaml.safe_load(f)
+                    self._apply_config(config)
+            except Exception as e:
+                # Ignore errors loading default config
+                pass
+
+    def _load_config_dialog(self) -> None:
+        """Show dialog to load configuration from file."""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Load Training Configuration",
+            str(Path.cwd()),
+            "YAML files (*.yaml *.yml);;All files (*.*)"
+        )
+        
+        if file_path:
+            try:
+                with open(file_path, 'r') as f:
+                    config = yaml.safe_load(f)
+                    self._apply_config(config)
+                QMessageBox.information(
+                    self, "Config Loaded", 
+                    f"Configuration loaded from {Path(file_path).name}"
+                )
+            except Exception as e:
+                QMessageBox.critical(
+                    self, "Load Error", 
+                    f"Failed to load configuration:\n{str(e)}"
+                )
+
+    def _save_config_dialog(self) -> None:
+        """Show dialog to save current configuration to file."""
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save Training Configuration",
+            str(Path.cwd() / "train_config.yaml"),
+            "YAML files (*.yaml *.yml);;All files (*.*)"
+        )
+        
+        if file_path:
+            try:
+                config = self._get_current_config()
+                with open(file_path, 'w') as f:
+                    yaml.safe_dump(config, f, default_flow_style=False)
+                QMessageBox.information(
+                    self, "Config Saved", 
+                    f"Configuration saved to {Path(file_path).name}"
+                )
+            except Exception as e:
+                QMessageBox.critical(
+                    self, "Save Error", 
+                    f"Failed to save configuration:\n{str(e)}"
+                )
+
+    def _save_default_config(self) -> None:
+        """Save current configuration as the default."""
+        try:
+            config = self._get_current_config()
+            with open(self.config_file, 'w') as f:
+                yaml.safe_dump(config, f, default_flow_style=False)
+            QMessageBox.information(
+                self, "Default Config Saved", 
+                "Current configuration saved as default"
+            )
+        except Exception as e:
+            QMessageBox.critical(
+                self, "Save Error", 
+                f"Failed to save default configuration:\n{str(e)}"
+            )
 
 
 def create_app():
