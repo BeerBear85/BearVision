@@ -1,0 +1,43 @@
+# BLE Test GUI Configuration
+# Configuration file for the manual BLE tag testing GUI
+
+ble:
+  # BLE scanning timeout (0.0 = scan indefinitely)
+  scan_timeout: 0.0
+  # Movement threshold for motion detection in g-force
+  movement_threshold: 0.1
+  # RSSI distance calculation config path (relative to project root)
+  rssi_config_path: "rssi_distance.ini"
+
+gui:
+  # Main window settings
+  window_title: "BLE Tag Manual Test GUI"
+  window_width: 800
+  window_height: 600
+  
+  # Log display settings
+  log_max_lines: 1000  # Maximum lines to keep in log display
+  log_font_family: "Consolas"  # Monospace font for better data alignment
+  log_font_size: 9
+  auto_scroll: true  # Auto-scroll to bottom when new data arrives
+  
+  # Data display format
+  show_timestamp: true
+  show_address: true
+  show_name: true
+  show_rssi: true
+  show_distance: true
+  show_battery: true
+  show_accelerometer: true
+  show_movement: true
+  
+  # Colors (optional)
+  background_color: "#ffffff"
+  text_color: "#000000"
+  moving_tag_color: "#ff0000"  # Red for tags showing movement
+  
+logging:
+  # Log level for console output
+  level: INFO
+  # Format string for log messages
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
