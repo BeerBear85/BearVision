@@ -56,6 +56,6 @@ jobs:
         QT_QPA_PLATFORM: offscreen
     - name: Test with pytest
       run: |
-        pytest -m "not physical_ble"
+        pytest
       env:
         QT_QPA_PLATFORM: offscreen

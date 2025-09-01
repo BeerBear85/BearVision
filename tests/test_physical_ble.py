@@ -1,7 +1,7 @@
 """
 Tests for real physical BLE tag communication.
 
-This test only runs when explicitly triggered with: pytest -k physical_ble
+This test only runs when explicitly triggered with: pytest --run-physical-ble
 It requires a physical KBPro BLE tag to be available and powered on.
 """
 
@@ -81,7 +81,7 @@ def test_physical_ble_tag_data():
     """
     Test that validates communication with a real BLE tag.
     
-    Only runs when triggered with: pytest -k physical_ble
+    Only runs when triggered with: pytest --run-physical-ble
     
     Validates that:
     - Tag ID is received
