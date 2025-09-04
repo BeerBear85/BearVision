@@ -20,7 +20,7 @@ from PySide6.QtCore import Qt, QTimer, Signal, QThread
 from PySide6.QtGui import QPixmap, QImage, QFont
 
 # Add module path for GoProController
-MODULE_DIR = Path(__file__).resolve().parent / "code" / "modules"
+MODULE_DIR = Path(__file__).resolve().parent.parent / "code" / "modules"
 sys.path.append(str(MODULE_DIR))
 
 from GoProController import GoProController

@@ -23,7 +23,7 @@ from PySide6.QtCore import Qt, QTimer, Signal, QThread, QObject
 from PySide6.QtGui import QFont, QTextCursor
 
 # Add module path for BLE handler
-MODULE_DIR = Path(__file__).resolve().parent / "code" / "modules"
+MODULE_DIR = Path(__file__).resolve().parent.parent / "code" / "modules"
 sys.path.append(str(MODULE_DIR))
 
 from ble_beacon_handler import BleBeaconHandler, AccSensorValue
