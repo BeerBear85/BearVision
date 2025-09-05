@@ -13,10 +13,18 @@
         "justMyCode": false
     },
     {
-        "name": "Python Debugger: annotation_gui",
+        "name": "Python Debugger: Annotation GUI",
         "type": "debugpy",
         "request": "launch",
         "program": "${workspaceFolder}/pretraining/annotation/annotation_gui_pyqt.py",
+        "console": "integratedTerminal",
+        "justMyCode": false
+    },
+        {
+        "name": "Python Debugger: BLE Test GUI",
+        "type": "debugpy",
+        "request": "launch",
+        "program": "${workspaceFolder}/tools/ble_manual_test_gui.py",
         "console": "integratedTerminal",
         "justMyCode": false
     }

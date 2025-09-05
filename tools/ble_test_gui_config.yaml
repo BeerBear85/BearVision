@@ -5,7 +5,7 @@ ble:
   # BLE scanning timeout (0.0 = scan indefinitely)
   scan_timeout: 0.0
   # Movement threshold for motion detection in g-force
-  movement_threshold: 0.1
+  movement_threshold: 0.2
   # RSSI distance calculation config path (relative to project root)
   rssi_config_path: "rssi_distance.ini"
 
@@ -38,6 +38,6 @@ gui:
   
 logging:
   # Log level for console output
-  level: INFO
+  level: DEBUG
   # Format string for log messages
   format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
