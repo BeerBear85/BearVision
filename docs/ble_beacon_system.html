@@ -1,0 +1,593 @@
+
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <title>BLE Beacon System Documentation</title>
+        <style>
+            @media print {
+                @page {
+                    margin: 2cm;
+                    size: A4;
+                }
+                body {
+                    font-size: 11pt;
+                }
+                h1 {
+                    page-break-before: always;
+                }
+                h1:first-child {
+                    page-break-before: avoid;
+                }
+                pre, blockquote {
+                    page-break-inside: avoid;
+                }
+                img {
+                    max-width: 100% !important;
+                    height: auto !important;
+                }
+            }
+            
+            body {
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+                line-height: 1.6;
+                margin: 0;
+                padding: 40px;
+                color: #333;
+                background: white;
+            }
+            
+            h1, h2, h3, h4, h5, h6 {
+                color: #2c3e50;
+                margin-top: 2em;
+                margin-bottom: 0.5em;
+                font-weight: 600;
+            }
+            
+            h1 {
+                font-size: 2.2em;
+                border-bottom: 3px solid #3498db;
+                padding-bottom: 10px;
+                margin-top: 0;
+            }
+            
+            h2 {
+                font-size: 1.8em;
+                border-bottom: 2px solid #bdc3c7;
+                padding-bottom: 5px;
+            }
+            
+            h3 {
+                font-size: 1.4em;
+                color: #34495e;
+            }
+            
+            h4 {
+                font-size: 1.2em;
+                color: #7f8c8d;
+            }
+            
+            p {
+                margin-bottom: 1em;
+                text-align: justify;
+            }
+            
+            code {
+                background-color: #f8f9fa;
+                padding: 2px 6px;
+                border-radius: 3px;
+                font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+                font-size: 0.9em;
+                color: #d14;
+            }
+            
+            pre {
+                background-color: #f8f9fa;
+                padding: 16px;
+                border-radius: 6px;
+                overflow-x: auto;
+                border-left: 4px solid #3498db;
+                margin: 1.5em 0;
+                font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+                font-size: 0.85em;
+                line-height: 1.4;
+            }
+            
+            pre code {
+                background: none;
+                padding: 0;
+                color: #333;
+            }
+            
+            table {
+                border-collapse: collapse;
+                width: 100%;
+                margin: 1.5em 0;
+                font-size: 0.9em;
+            }
+            
+            table, th, td {
+                border: 1px solid #ddd;
+            }
+            
+            th, td {
+                padding: 12px;
+                text-align: left;
+                vertical-align: top;
+            }
+            
+            th {
+                background-color: #f2f2f2;
+                font-weight: 600;
+                color: #2c3e50;
+            }
+            
+            tr:nth-child(even) {
+                background-color: #f9f9f9;
+            }
+            
+            blockquote {
+                border-left: 4px solid #3498db;
+                margin: 1.5em 0;
+                padding-left: 20px;
+                color: #7f8c8d;
+                font-style: italic;
+            }
+            
+            ul, ol {
+                margin: 1em 0;
+                padding-left: 2em;
+            }
+            
+            li {
+                margin-bottom: 0.5em;
+            }
+            
+            strong {
+                color: #2c3e50;
+                font-weight: 600;
+            }
+            
+            em {
+                color: #7f8c8d;
+            }
+            
+            .mermaid {
+                text-align: center;
+                margin: 2em 0;
+                padding: 1em;
+                background-color: #f8f9fa;
+                border-radius: 6px;
+                border: 1px solid #e9ecef;
+            }
+            
+            /* Style for mermaid code blocks that couldn't be rendered */
+            pre:has(code[class*="mermaid"]) {
+                background-color: #e8f4f8;
+                border-left-color: #3498db;
+            }
+            
+            .toc {
+                background-color: #f8f9fa;
+                border: 1px solid #e9ecef;
+                border-radius: 6px;
+                padding: 1.5em;
+                margin: 2em 0;
+            }
+            
+            .toc h2 {
+                margin-top: 0;
+                border: none;
+                color: #2c3e50;
+            }
+            
+            /* Print optimizations */
+            @media print {
+                a {
+                    color: #333 !important;
+                    text-decoration: none;
+                }
+                
+                .no-print {
+                    display: none;
+                }
+            }
+        </style>
+    </head>
+    <body>
+        <div class="no-print" style="background-color: #e8f4f8; padding: 15px; margin-bottom: 30px; border-radius: 6px; border: 1px solid #3498db;">
+            <strong>📄 Print Instructions:</strong> Use your browser's print function (Ctrl+P) and select "Save as PDF" to generate a PDF version of this documentation.
+        </div>
+        
+        <h1 id="ble-beacon-system-documentation">BLE Beacon System Documentation</h1>
+
+<h2 id="overview">Overview</h2>
+
+<p>The BLE Beacon System consists of two main components:
+1. <strong>BleBeaconHandler</strong> (<code>code/modules/ble_beacon_handler.py</code>) - Core BLE scanning and data processing module
+2. <strong>BleManualTestGUI</strong> (<code>tools/ble_manual_test_gui.py</code>) - PySide6-based GUI for manual testing and real-time data visualization</p>
+
+<p>This system is designed to scan for KBPro BLE beacons, decode their sensor data (accelerometer and battery), and provide real-time monitoring capabilities for the BearVision wakeboard detection system.</p>
+
+<h2 id="architecture-overview">Architecture Overview</h2>
+
+<pre><code>graph TB
+    A[BleManualTestGUI] --&gt; B[BleWorker Thread]
+    B --&gt; C[BleBeaconHandler]
+    C --&gt; D[BLE Scanner]
+    D --&gt; E[KBPro Beacons]
+
+    C --&gt; F[Advertisement Queue]
+    F --&gt; G[Data Processing]
+    G --&gt; H[GUI Display]
+
+    I[RSSI Config] --&gt; C
+    J[YAML Config] --&gt; A
+
+    subgraph "BLE Data Flow"
+        E --&gt; |Advertisement| D
+        D --&gt; |Detection Callback| C
+        C --&gt; |Decode Sensor Data| K[AccSensorValue]
+        C --&gt; |Queue Data| F
+        F --&gt; |Signal| H
+    end
+
+    subgraph "GUI Components"
+        A --&gt; L[Control Panel]
+        A --&gt; M[Status Display]
+        A --&gt; N[Log Display]
+        A --&gt; O[Data Counter]
+    end
+</code></pre>
+
+<h2 id="blebeaconhandler-module">BleBeaconHandler Module</h2>
+
+<h3 id="core-functionality">Core Functionality</h3>
+
+<p>The <code>BleBeaconHandler</code> class provides asynchronous BLE beacon scanning and data processing capabilities.</p>
+
+<h4 id="key-features">Key Features</h4>
+
+<ul>
+<li><strong>Asynchronous BLE scanning</strong> using the <code>bleak</code> library</li>
+<li><strong>KBPro beacon filtering</strong> - Only processes beacons with "KBPro" in the name</li>
+<li><strong>Sensor data decoding</strong> - Extracts accelerometer and battery data from advertisement packets</li>
+<li><strong>Movement detection</strong> - Determines if the beacon is moving based on accelerometer readings</li>
+<li><strong>RSSI to distance conversion</strong> - Estimates distance using calibrated RSSI values</li>
+</ul>
+
+<h4 id="public-interface">Public Interface</h4>
+
+<div class="codehilite">
+<pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">BleBeaconHandler</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">start_scan</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mf">0.0</span><span class="p">)</span>
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">start_scan_async</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mf">0.0</span><span class="p">)</span>
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">look_for_advertisements</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mf">0.0</span><span class="p">)</span>
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">process_advertisements</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">discovery_callback</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">device</span><span class="p">,</span> <span class="n">advertisement_data</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">decode_sensor_data</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">)</span>
+</code></pre>
+</div>
+
+<h4 id="data-structures">Data Structures</h4>
+
+<div class="codehilite">
+<pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">AccSensorValue</span><span class="p">:</span>
+    <span class="n">x</span><span class="p">:</span> <span class="nb">float</span>          <span class="c1"># X-axis acceleration (g)</span>
+    <span class="n">y</span><span class="p">:</span> <span class="nb">float</span>          <span class="c1"># Y-axis acceleration (g) </span>
+    <span class="n">z</span><span class="p">:</span> <span class="nb">float</span>          <span class="c1"># Z-axis acceleration (g)</span>
+    <span class="n">norm</span><span class="p">:</span> <span class="nb">float</span>       <span class="c1"># Magnitude of acceleration vector</span>
+    <span class="n">diff_from_1_g</span><span class="p">:</span> <span class="nb">float</span>  <span class="c1"># Difference from 1g (gravity)</span>
+    <span class="n">is_moving</span><span class="p">:</span> <span class="nb">bool</span>   <span class="c1"># Movement detection flag</span>
+</code></pre>
+</div>
+
+<h4 id="advertisement-data-dictionary">Advertisement Data Dictionary</h4>
+
+<div class="codehilite">
+<pre><span></span><code><span class="p">{</span>
+    <span class="s1">&#39;address&#39;</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>           <span class="c1"># BLE device address</span>
+    <span class="s1">&#39;name&#39;</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>             <span class="c1"># Device name (e.g., &quot;KBPro-1234&quot;)</span>
+    <span class="s1">&#39;rssi&#39;</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>             <span class="c1"># Signal strength (dBm)</span>
+    <span class="s1">&#39;tx_power&#39;</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>         <span class="c1"># Transmission power</span>
+    <span class="s1">&#39;batteryLevel&#39;</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>     <span class="c1"># Battery level (0-100)</span>
+    <span class="s1">&#39;acc_sensor&#39;</span><span class="p">:</span> <span class="n">AccSensorValue</span><span class="p">,</span>  <span class="c1"># Accelerometer data</span>
+    <span class="s1">&#39;distance&#39;</span><span class="p">:</span> <span class="nb">float</span>        <span class="c1"># Estimated distance (meters)</span>
+<span class="p">}</span>
+</code></pre>
+</div>
+
+<h3 id="configuration">Configuration</h3>
+
+<p>The module uses an INI configuration file for RSSI-to-distance calibration:
+- <strong>Default location</strong>: <code>rssi_distance.ini</code> (two levels up from module)
+- <strong>Format</strong>: RSSI values mapped to corresponding distances using scipy interpolation</p>
+
+<h3 id="constants-and-thresholds">Constants and Thresholds</h3>
+
+<div class="codehilite">
+<pre><span></span><code><span class="n">KSENSOR_TYPE</span> <span class="o">=</span> <span class="mh">0x21</span>           <span class="c1"># Sensor data type identifier</span>
+<span class="n">MIN_SENSOR_ADV_LEN</span> <span class="o">=</span> <span class="mi">3</span>        <span class="c1"># Minimum advertisement length</span>
+<span class="n">SENSOR_MASK_VOLTAGE</span> <span class="o">=</span> <span class="mh">0x1</span>     <span class="c1"># Battery data mask</span>
+<span class="n">SENSOR_MASK_ACC_AIX</span> <span class="o">=</span> <span class="mh">0x8</span>     <span class="c1"># Accelerometer data mask</span>
+<span class="n">MOVEMENT_THRESHOLD</span> <span class="o">=</span> <span class="mf">0.1</span>      <span class="c1"># Movement detection threshold (g)</span>
+</code></pre>
+</div>
+
+<h2 id="blemanualtestgui-application">BleManualTestGUI Application</h2>
+
+<h3 id="overview-2">Overview</h3>
+
+<p>The GUI application provides a user-friendly interface for manual testing of BLE beacons with real-time data visualization and logging capabilities.</p>
+
+<h3 id="architecture-components">Architecture Components</h3>
+
+<h4 id="threading-model">Threading Model</h4>
+
+<ul>
+<li><strong>Main Thread</strong>: GUI operations and user interface</li>
+<li><strong>Worker Thread</strong> (<code>BleWorker</code>): BLE scanning and data processing</li>
+<li><strong>Signal/Slot Communication</strong>: Thread-safe data transfer using Qt signals</li>
+</ul>
+
+<h4 id="configuration-system">Configuration System</h4>
+
+<ul>
+<li><strong>YAML-based configuration</strong> (<code>ble_test_gui_config.yaml</code>)</li>
+<li><strong>Fallback to defaults</strong> if configuration file is missing or invalid</li>
+<li><strong>Configurable GUI elements</strong>: fonts, colors, display options, logging parameters</li>
+</ul>
+
+<h3 id="key-classes">Key Classes</h3>
+
+<h4 id="bleworker-qthread">BleWorker (QThread)</h4>
+
+<div class="codehilite">
+<pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">BleWorker</span><span class="p">(</span><span class="n">QThread</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">config</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">run</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">_scan_and_process</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">_process_advertisements</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">stop</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
+</code></pre>
+</div>
+
+<p><strong>Responsibilities:</strong>
+- Manages BLE scanning lifecycle in separate thread
+- Processes advertisement queue with timeout handling
+- Emits Qt signals for thread-safe GUI updates
+- Handles graceful shutdown and error reporting</p>
+
+<h4 id="bledatasignals-qobject">BleDataSignals (QObject)</h4>
+
+<div class="codehilite">
+<pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">BleDataSignals</span><span class="p">(</span><span class="n">QObject</span><span class="p">):</span>
+    <span class="n">data_received</span> <span class="o">=</span> <span class="n">Signal</span><span class="p">(</span><span class="nb">dict</span><span class="p">)</span>      <span class="c1"># New BLE data available</span>
+    <span class="n">error_occurred</span> <span class="o">=</span> <span class="n">Signal</span><span class="p">(</span><span class="nb">str</span><span class="p">)</span>      <span class="c1"># Error message</span>
+    <span class="n">logging_started</span> <span class="o">=</span> <span class="n">Signal</span><span class="p">()</span>        <span class="c1"># Scanning started</span>
+    <span class="n">logging_stopped</span> <span class="o">=</span> <span class="n">Signal</span><span class="p">()</span>        <span class="c1"># Scanning stopped</span>
+</code></pre>
+</div>
+
+<h4 id="blemanualtestgui-qmainwindow">BleManualTestGUI (QMainWindow)</h4>
+
+<div class="codehilite">
+<pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">BleManualTestGUI</span><span class="p">(</span><span class="n">QMainWindow</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">load_configuration</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">setup_ui</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">start_logging</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">stop_logging</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">handle_ble_data</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">format_ble_data</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">str</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">add_log_message</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">message</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span>
+</code></pre>
+</div>
+
+<h3 id="configuration-schema">Configuration Schema</h3>
+
+<div class="codehilite">
+<pre><span></span><code><span class="nt">ble</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">scan_timeout</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.0</span><span class="w">              </span><span class="c1"># 0 = infinite scanning</span>
+<span class="w">  </span><span class="nt">movement_threshold</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.1</span><span class="w">        </span><span class="c1"># Movement detection threshold (g)</span>
+
+<span class="nt">gui</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">window_title</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;BLE</span><span class="nv"> </span><span class="s">Tag</span><span class="nv"> </span><span class="s">Manual</span><span class="nv"> </span><span class="s">Test</span><span class="nv"> </span><span class="s">GUI&quot;</span>
+<span class="w">  </span><span class="nt">window_width</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">800</span>
+<span class="w">  </span><span class="nt">window_height</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">600</span>
+<span class="w">  </span><span class="nt">log_max_lines</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1000</span><span class="w">           </span><span class="c1"># Maximum log display lines</span>
+<span class="w">  </span><span class="nt">log_font_family</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Consolas&quot;</span>
+<span class="w">  </span><span class="nt">log_font_size</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">9</span>
+<span class="w">  </span><span class="nt">auto_scroll</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span><span class="w">             </span><span class="c1"># Auto-scroll to newest data</span>
+
+<span class="w">  </span><span class="c1"># Display options</span>
+<span class="w">  </span><span class="nt">show_timestamp</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">  </span><span class="nt">show_address</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">  </span><span class="nt">show_name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">  </span><span class="nt">show_rssi</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">  </span><span class="nt">show_distance</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">  </span><span class="nt">show_battery</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">  </span><span class="nt">show_accelerometer</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">  </span><span class="nt">show_movement</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+
+<span class="w">  </span><span class="c1"># Optional styling</span>
+<span class="w">  </span><span class="nt">background_color</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;#000000&quot;</span>
+<span class="w">  </span><span class="nt">text_color</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;#00FF00&quot;</span>
+
+<span class="nt">logging</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">level</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;INFO&quot;</span>
+<span class="w">  </span><span class="nt">format</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;%(asctime)s</span><span class="nv"> </span><span class="s">-</span><span class="nv"> </span><span class="s">%(levelname)s</span><span class="nv"> </span><span class="s">-</span><span class="nv"> </span><span class="s">%(message)s&quot;</span>
+</code></pre>
+</div>
+
+<h2 id="system-flow">System Flow</h2>
+
+<h3 id="startup-sequence">Startup Sequence</h3>
+
+<ol>
+<li><p><strong>GUI Initialization</strong></p>
+
+<ul>
+<li>Load YAML configuration (fallback to defaults)</li>
+<li>Setup logging system</li>
+<li>Create user interface components</li>
+<li>Initialize BLE worker (not started)</li>
+</ul></li>
+<li><p><strong>Configuration Loading</strong></p>
+
+<ul>
+<li>Parse YAML configuration file</li>
+<li>Handle missing or invalid configuration gracefully</li>
+<li>Apply GUI styling and display preferences</li>
+</ul></li>
+</ol>
+
+<h3 id="data-processing-flow">Data Processing Flow</h3>
+
+<pre><code>sequenceDiagram
+    participant User
+    participant GUI as BleManualTestGUI
+    participant Worker as BleWorker
+    participant Handler as BleBeaconHandler
+    participant Beacon as KBPro Beacon
+
+    User-&gt;&gt;GUI: Click "Start Logging"
+    GUI-&gt;&gt;Worker: Create and start worker thread
+    Worker-&gt;&gt;Handler: Initialize BLE scanner
+
+    loop Continuous Scanning
+        Handler-&gt;&gt;Beacon: Scan for advertisements
+        Beacon-&gt;&gt;Handler: BLE advertisement data
+        Handler-&gt;&gt;Handler: Filter KBPro beacons
+        Handler-&gt;&gt;Handler: Decode sensor data
+        Handler-&gt;&gt;Worker: Queue advertisement data
+        Worker-&gt;&gt;GUI: Emit data_received signal
+        GUI-&gt;&gt;GUI: Format and display data
+        GUI-&gt;&gt;GUI: Update counters and log
+    end
+
+    User-&gt;&gt;GUI: Click "Stop Logging"
+    GUI-&gt;&gt;Worker: Stop worker thread
+    Worker-&gt;&gt;Handler: Stop BLE scanning
+    Worker-&gt;&gt;GUI: Emit logging_stopped signal
+</code></pre>
+
+<h3 id="data-display-format">Data Display Format</h3>
+
+<p>The GUI formats received data into human-readable log entries:</p>
+
+<pre><code>[14:23:45.123] #0001 | ID: AA:BB:CC:DD:EE:FF | Name: KBPro-1234 | RSSI: -45 dBm | Dist: 2.31m | Batt: 85 | Acc: X:0.012g Y:0.045g Z:0.998g Norm:1.001g | Motion: STATIC
+</code></pre>
+
+<h3 id="error-handling">Error Handling</h3>
+
+<h4 id="ble-scanning-errors">BLE Scanning Errors</h4>
+
+<ul>
+<li><strong>Scanner initialization failures</strong>: Display error popup and log message</li>
+<li><strong>Advertisement processing errors</strong>: Continue scanning, log error details</li>
+<li><strong>Timeout handling</strong>: Normal operation, continues scanning loop</li>
+</ul>
+
+<h4 id="configuration-errors">Configuration Errors</h4>
+
+<ul>
+<li><strong>Missing YAML file</strong>: Use default configuration, show warning popup</li>
+<li><strong>Invalid YAML syntax</strong>: Parse error handling, fallback to defaults</li>
+<li><strong>Missing RSSI calibration</strong>: Distance calculations disabled, log warning</li>
+</ul>
+
+<h4 id="thread-safety">Thread Safety</h4>
+
+<ul>
+<li><strong>Qt Signals</strong>: Ensure thread-safe communication between worker and GUI</li>
+<li><strong>Exception handling</strong>: Catch and report errors without crashing</li>
+<li><strong>Graceful shutdown</strong>: Clean termination of scanning threads</li>
+</ul>
+
+<h2 id="usage-instructions">Usage Instructions</h2>
+
+<h3 id="prerequisites">Prerequisites</h3>
+
+<ul>
+<li>Python 3.8+ with PySide6, bleak, PyYAML, scipy, numpy</li>
+<li>BLE adapter (built-in or USB dongle)</li>
+<li>KBPro BLE beacons in range</li>
+</ul>
+
+<h3 id="running-the-application">Running the Application</h3>
+
+<div class="codehilite">
+<pre><span></span><code>python<span class="w"> </span>tools/ble_manual_test_gui.py
+</code></pre>
+</div>
+
+<h3 id="configuration-setup">Configuration Setup</h3>
+
+<ol>
+<li>Create <code>tools/ble_test_gui_config.yaml</code> with desired settings</li>
+<li>Adjust display options and styling preferences</li>
+<li>Configure BLE scanning parameters</li>
+</ol>
+
+<h3 id="testing-workflow">Testing Workflow</h3>
+
+<ol>
+<li><strong>Start Application</strong>: Launch GUI and verify configuration loading</li>
+<li><strong>Begin Scanning</strong>: Click "Start Logging" to begin BLE beacon detection</li>
+<li><strong>Monitor Data</strong>: Observe real-time data in scrollable log display</li>
+<li><strong>Data Analysis</strong>: Review accelerometer readings, battery levels, signal strength</li>
+<li><strong>Stop Scanning</strong>: Click "Stop Logging" to end data collection</li>
+</ol>
+
+<h2 id="integration-with-bearvision-system">Integration with BearVision System</h2>
+
+<p>The BLE Beacon System integrates with the broader BearVision wakeboard detection system by:</p>
+
+<ol>
+<li><strong>Motion Detection</strong>: Accelerometer data helps identify wakeboard tricks and movements</li>
+<li><strong>User Tracking</strong>: Beacon proximity and movement patterns correlate with GPS data</li>
+<li><strong>Battery Monitoring</strong>: Ensures beacons remain operational during recording sessions</li>
+<li><strong>Distance Estimation</strong>: RSSI-based ranging assists with spatial tracking</li>
+</ol>
+
+<p>The system provides essential sensor data that enhances the computer vision pipeline's ability to automatically detect and capture wakeboard highlight moments.</p>
+
+<h2 id="development-notes">Development Notes</h2>
+
+<h3 id="dependencies">Dependencies</h3>
+
+<ul>
+<li><strong>bleak</strong>: Cross-platform BLE library for Python</li>
+<li><strong>PySide6</strong>: Qt6-based GUI framework</li>
+<li><strong>asyncio</strong>: Asynchronous I/O for BLE operations</li>
+<li><strong>scipy</strong>: Scientific computing for RSSI interpolation</li>
+<li><strong>PyYAML</strong>: YAML configuration file parsing</li>
+</ul>
+
+<h3 id="testing-considerations">Testing Considerations</h3>
+
+<ul>
+<li><strong>Hardware Requirements</strong>: Physical BLE beacons for comprehensive testing</li>
+<li><strong>Platform Compatibility</strong>: Windows, Linux, macOS BLE stack differences  </li>
+<li><strong>Power Management</strong>: Beacon battery optimization and monitoring</li>
+<li><strong>Signal Interference</strong>: Environmental factors affecting BLE reception</li>
+</ul>
+
+        
+        <script>
+            // Add some JavaScript for enhanced functionality if needed
+            document.addEventListener('DOMContentLoaded', function() {
+                // Add print button functionality
+                const printBtn = document.createElement('button');
+                printBtn.textContent = '🖨️ Print to PDF';
+                printBtn.className = 'no-print';
+                printBtn.style.cssText = 'position: fixed; top: 20px; right: 20px; padding: 10px 15px; background: #3498db; color: white; border: none; border-radius: 5px; cursor: pointer; z-index: 1000;';
+                printBtn.onclick = () => window.print();
+                document.body.appendChild(printBtn);
+            });
+        </script>
+    </body>
+    </html>
+    
