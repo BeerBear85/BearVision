@@ -26,6 +26,26 @@ sys.path.append(str(MODULE_DIR))
 from GoProController import GoProController
 
 
+class PingTestWorker(QThread):
+    """Worker thread for testing GoPro connectivity."""
+    
+    ping_success = Signal()
+    ping_failed = Signal(str)
+    
+    def __init__(self):
+        super().__init__()
+        
+    def run(self):
+        """Test GoPro connectivity in background thread."""
+        try:
+            test_controller = GoProController()
+            test_controller.connect()
+            test_controller.disconnect()
+            self.ping_success.emit()
+        except Exception as e:
+            self.ping_failed.emit(str(e))
+
+
 class PreviewWorker(QThread):
     """Worker thread for handling GoPro preview stream."""
     
@@ -74,6 +94,7 @@ class GoProManualTestGUI(QMainWindow):
         super().__init__()
         self.gopro_controller = None
         self.preview_worker = None
+        self.ping_worker = None
         self.preview_active = False
         
         self.setWindowTitle("GoPro Manual Test GUI")
@@ -96,6 +117,11 @@ class GoProManualTestGUI(QMainWindow):
         # Control panel
         control_frame = QFrame()
         control_layout = QHBoxLayout(control_frame)
+        
+        self.ping_test_btn = QPushButton("Ping Test")
+        self.ping_test_btn.setMinimumHeight(40)
+        self.ping_test_btn.clicked.connect(self.run_ping_test)
+        control_layout.addWidget(self.ping_test_btn)
         
         self.start_preview_btn = QPushButton("Start Preview")
         self.start_preview_btn.setMinimumHeight(40)
@@ -124,6 +150,35 @@ class GoProManualTestGUI(QMainWindow):
         self.status_label.setAlignment(Qt.AlignCenter)
         self.status_label.setStyleSheet("color: #666666; font-size: 12px; padding: 5px;")
         main_layout.addWidget(self.status_label)
+        
+    def run_ping_test(self):
+        """Test basic GoPro connectivity in a background thread."""
+        if self.ping_worker and self.ping_worker.isRunning():
+            return  # Already running
+            
+        self.status_label.setText("Testing GoPro connection...")
+        self.ping_test_btn.setEnabled(False)
+        self.start_preview_btn.setEnabled(False)
+        
+        # Create and start ping test worker
+        self.ping_worker = PingTestWorker()
+        self.ping_worker.ping_success.connect(self.on_ping_success)
+        self.ping_worker.ping_failed.connect(self.on_ping_failed)
+        self.ping_worker.start()
+        
+    def on_ping_success(self):
+        """Handle successful ping test."""
+        self.status_label.setText("Ping test successful - GoPro is reachable")
+        self.show_info_popup("Connection Test", "✅ GoPro connection successful!\n\nThe camera is reachable and responding to commands.")
+        self.ping_test_btn.setEnabled(True)
+        self.start_preview_btn.setEnabled(True)
+        
+    def on_ping_failed(self, error_message):
+        """Handle failed ping test."""
+        self.status_label.setText("Ping test failed")
+        self.show_error_popup(f"Ping test failed: {error_message}")
+        self.ping_test_btn.setEnabled(True)
+        self.start_preview_btn.setEnabled(True)
         
     def toggle_preview(self):
         """Toggle the GoPro preview stream on/off."""
@@ -223,10 +278,22 @@ class GoProManualTestGUI(QMainWindow):
         msg_box.setStandardButtons(QMessageBox.Ok)
         msg_box.exec()
         
+    def show_info_popup(self, title, message):
+        """Show an info popup dialog."""
+        msg_box = QMessageBox(self)
+        msg_box.setIcon(QMessageBox.Information)
+        msg_box.setWindowTitle(title)
+        msg_box.setText(message)
+        msg_box.setStandardButtons(QMessageBox.Ok)
+        msg_box.exec()
+        
     def closeEvent(self, event):
         """Clean up when the window is closed."""
         if self.preview_active:
             self.stop_gopro_preview()
+        if self.ping_worker and self.ping_worker.isRunning():
+            self.ping_worker.quit()
+            self.ping_worker.wait()
         event.accept()
 
 

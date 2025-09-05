@@ -1,4 +1,5 @@
 import asyncio
+import threading
 from pathlib import Path
 import logging
 from open_gopro import WirelessGoPro, models
@@ -14,23 +15,54 @@ class GoProController:
 
     def __init__(self, target: str | None = None) -> None:
         self._gopro = WirelessGoPro(target=target)
+        self._loop = None
+        self._loop_thread = None
+
+    def _run_in_thread(self, coro):
+        """Run a coroutine in a separate thread with its own event loop."""
+        def run():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                return loop.run_until_complete(coro)
+            finally:
+                loop.close()
+        
+        result_container = []
+        exception_container = []
+        
+        def thread_target():
+            try:
+                result = run()
+                result_container.append(result)
+            except Exception as e:
+                exception_container.append(e)
+        
+        thread = threading.Thread(target=thread_target)
+        thread.start()
+        thread.join()
+        
+        if exception_container:
+            raise exception_container[0]
+        
+        return result_container[0] if result_container else None
 
     def connect(self) -> None:
         """Open connection to the GoPro."""
-        asyncio.run(self._gopro.open())
+        self._run_in_thread(self._gopro.open())
 
     def disconnect(self) -> None:
         """Close connection to the GoPro."""
-        asyncio.run(self._gopro.close())
+        self._run_in_thread(self._gopro.close())
 
     def list_videos(self) -> list[str]:
         """Return list of video filenames stored on the camera."""
-        resp = asyncio.run(self._gopro.http_command.get_media_list())
+        resp = self._run_in_thread(self._gopro.http_command.get_media_list())
         return [f.filename for f in resp.data.files]
 
     def download_file(self, camera_file: str, local_path: str) -> Path:
         """Download a specific file from the camera."""
-        resp = asyncio.run(
+        resp = self._run_in_thread(
             self._gopro.http_command.download_file(
                 camera_file=camera_file, local_file=Path(local_path)
             )
@@ -39,7 +71,7 @@ class GoProController:
 
     def configure(self) -> None:
         """Configure the GoPro for BearVision usage."""
-        asyncio.run(self._configure())
+        self._run_in_thread(self._configure())
 
     async def _configure(self) -> None:
         await self._gopro.http_command.load_preset_group(
@@ -58,13 +90,13 @@ class GoProController:
     def start_preview(self, port: int = 8554) -> str:
         """Start preview stream and return its URL."""
         options = PreviewStreamOptions(port=port)
-        asyncio.run(self._gopro.streaming.start_stream(StreamType.PREVIEW, options))
+        self._run_in_thread(self._gopro.streaming.start_stream(StreamType.PREVIEW, options))
         assert self._gopro.streaming.url is not None
         return self._gopro.streaming.url
 
     def start_hindsight_clip(self, duration: float = 1.0) -> None:
         """Trigger a HindSight capture on the camera."""
-        asyncio.run(self._start_hindsight_clip(duration))
+        self._run_in_thread(self._start_hindsight_clip(duration))
 
     async def _start_hindsight_clip(self, duration: float) -> None:
         await self._gopro.http_command.set_shutter(shutter=constants.Toggle.ENABLE)
