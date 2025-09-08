@@ -226,8 +226,12 @@ class GoProManualTestGUI(QMainWindow):
                 self.preview_worker.stop()
                 self.preview_worker = None
                 
-            # Disconnect from GoPro
+            # Stop preview stream and disconnect from GoPro
             if self.gopro_controller:
+                try:
+                    self.gopro_controller.stop_preview()
+                except:
+                    pass  # Ignore errors when stopping preview
                 self.gopro_controller.disconnect()
                 self.gopro_controller = None
                 

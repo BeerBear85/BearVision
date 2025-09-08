@@ -2,9 +2,8 @@ import asyncio
 import threading
 from pathlib import Path
 import logging
-from open_gopro import WirelessGoPro, models
+from open_gopro import WiredGoPro, models
 from open_gopro.models.constants import settings
-from open_gopro.models.streaming import StreamType, PreviewStreamOptions
 from open_gopro.models.constants import constants
 
 logger = logging.getLogger(__name__)
@@ -14,7 +13,7 @@ class GoProController:
     """Simplified wrapper around the OpenGoPro API."""
 
     def __init__(self, target: str | None = None) -> None:
-        self._gopro = WirelessGoPro(target=target)
+        self._gopro = WiredGoPro(target=target)
         self._loop = None
         self._loop_thread = None
 
@@ -89,10 +88,43 @@ class GoProController:
 
     def start_preview(self, port: int = 8554) -> str:
         """Start preview stream and return its URL."""
-        options = PreviewStreamOptions(port=port)
-        self._run_in_thread(self._gopro.streaming.start_stream(StreamType.PREVIEW, options))
-        assert self._gopro.streaming.url is not None
-        return self._gopro.streaming.url
+        # For wired connection, use HTTP command instead of streaming feature
+        ip_address = self._run_in_thread(self._start_preview_http(port))
+        # Return the UDP stream URL (GoPro wired uses UDP, not RTMP)
+        return f"udp://{ip_address}:{port}"
+    
+    async def _start_preview_http(self, port: int) -> str:
+        """Start preview stream using HTTP commands (for wired connection)."""
+        # First, stop any existing preview stream to avoid 409 conflict
+        try:
+            await self._gopro.http_command.set_preview_stream(mode=constants.Toggle.DISABLE)
+            await asyncio.sleep(0.5)  # Brief pause to ensure stream stops
+        except:
+            pass  # Ignore errors if no stream was running
+        
+        # Start new preview stream
+        result = await self._gopro.http_command.set_preview_stream(
+            mode=constants.Toggle.ENABLE, port=port
+        )
+        # Extract IP from the HTTP response URL
+        response_url = result.data.get('id', result.id if hasattr(result, 'id') else str(result))
+        if '://' in response_url:
+            # Extract IP from URL like "http://172.24.106.51:8080/gopro/camera/stream/start?port=8554"
+            ip_part = response_url.split('://')[1].split(':')[0]
+            return ip_part
+        else:
+            # Fallback to common GoPro wired IP
+            return "172.24.106.51"
+
+    def stop_preview(self) -> None:
+        """Stop preview stream."""
+        self._run_in_thread(self._stop_preview_http())
+    
+    async def _stop_preview_http(self) -> None:
+        """Stop preview stream using HTTP commands (for wired connection)."""
+        await self._gopro.http_command.set_preview_stream(
+            mode=constants.Toggle.DISABLE
+        )
 
     def start_hindsight_clip(self, duration: float = 1.0) -> None:
         """Trigger a HindSight capture on the camera."""
