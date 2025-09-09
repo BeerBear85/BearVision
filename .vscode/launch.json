@@ -27,6 +27,14 @@
         "program": "${workspaceFolder}/tools/ble_manual_test_gui.py",
         "console": "integratedTerminal",
         "justMyCode": false
+    },
+    {
+        "name": "Python Debugger: GoPro Manual Test GUI",
+        "type": "debugpy",
+        "request": "launch",
+        "program": "${workspaceFolder}/tools/gopro_manual_test_gui.py",
+        "console": "integratedTerminal",
+        "justMyCode": false
     }
     ]
 }
