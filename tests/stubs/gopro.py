@@ -118,9 +118,12 @@ class FakeGoPro:
         self.streaming = FakeStreaming()
         # Set the _serial attribute to simulate a properly opened WiredGoPro
         self._serial = "fake_serial_123"
+        # Mock additional attributes that may be needed
+        self._identifier = "fake_identifier"
+        self._target = "172.24.106.51"
 
     async def open(self, *a, **k):
-        # Ensure _serial is set when opening
+        # Ensure _serial is set when opening - just return success without network calls
         self._serial = "fake_serial_123"
         return None
 
