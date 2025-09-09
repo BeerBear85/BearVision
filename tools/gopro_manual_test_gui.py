@@ -96,6 +96,7 @@ class GoProManualTestGUI(QMainWindow):
         self.preview_worker = None
         self.ping_worker = None
         self.preview_active = False
+        self.recording_active = False
         
         self.setWindowTitle("GoPro Manual Test GUI")
         self.setGeometry(100, 100, 800, 600)
@@ -116,19 +117,58 @@ class GoProManualTestGUI(QMainWindow):
         
         # Control panel
         control_frame = QFrame()
-        control_layout = QHBoxLayout(control_frame)
+        control_layout = QVBoxLayout(control_frame)
+        
+        # First row of buttons
+        first_row_layout = QHBoxLayout()
         
         self.ping_test_btn = QPushButton("Ping Test")
         self.ping_test_btn.setMinimumHeight(40)
         self.ping_test_btn.clicked.connect(self.run_ping_test)
-        control_layout.addWidget(self.ping_test_btn)
+        first_row_layout.addWidget(self.ping_test_btn)
         
         self.start_preview_btn = QPushButton("Start Preview")
         self.start_preview_btn.setMinimumHeight(40)
         self.start_preview_btn.clicked.connect(self.toggle_preview)
-        control_layout.addWidget(self.start_preview_btn)
+        first_row_layout.addWidget(self.start_preview_btn)
         
-        control_layout.addStretch()
+        first_row_layout.addStretch()
+        control_layout.addLayout(first_row_layout)
+        
+        # Second row of buttons
+        second_row_layout = QHBoxLayout()
+        
+        self.hindsight_btn = QPushButton("Capture Hindsight (15s)")
+        self.hindsight_btn.setMinimumHeight(40)
+        self.hindsight_btn.clicked.connect(self.capture_hindsight)
+        self.hindsight_btn.setEnabled(False)  # Enable only when connected
+        second_row_layout.addWidget(self.hindsight_btn)
+        
+        self.recording_btn = QPushButton("Start Recording")
+        self.recording_btn.setMinimumHeight(40)
+        self.recording_btn.clicked.connect(self.toggle_recording)
+        self.recording_btn.setEnabled(False)  # Enable only when connected
+        second_row_layout.addWidget(self.recording_btn)
+        
+        second_row_layout.addStretch()
+        control_layout.addLayout(second_row_layout)
+        
+        # Recording status indicator
+        self.recording_status_label = QLabel("● Not Recording")
+        self.recording_status_label.setAlignment(Qt.AlignCenter)
+        self.recording_status_label.setStyleSheet("""
+            QLabel {
+                color: #666666;
+                font-size: 14px;
+                font-weight: bold;
+                padding: 5px;
+                border: 1px solid #cccccc;
+                border-radius: 5px;
+                background-color: #f9f9f9;
+            }
+        """)
+        control_layout.addWidget(self.recording_status_label)
+        
         main_layout.addWidget(control_frame)
         
         # Preview display area
@@ -172,6 +212,8 @@ class GoProManualTestGUI(QMainWindow):
         self.show_info_popup("Connection Test", "✅ GoPro connection successful!\n\nThe camera is reachable and responding to commands.")
         self.ping_test_btn.setEnabled(True)
         self.start_preview_btn.setEnabled(True)
+        self.hindsight_btn.setEnabled(True)
+        self.recording_btn.setEnabled(True)
         
     def on_ping_failed(self, error_message):
         """Handle failed ping test."""
@@ -179,6 +221,8 @@ class GoProManualTestGUI(QMainWindow):
         self.show_error_popup(f"Ping test failed: {error_message}")
         self.ping_test_btn.setEnabled(True)
         self.start_preview_btn.setEnabled(True)
+        self.hindsight_btn.setEnabled(False)
+        self.recording_btn.setEnabled(False)
         
     def toggle_preview(self):
         """Toggle the GoPro preview stream on/off."""
@@ -290,6 +334,139 @@ class GoProManualTestGUI(QMainWindow):
         msg_box.setText(message)
         msg_box.setStandardButtons(QMessageBox.Ok)
         msg_box.exec()
+
+    def capture_hindsight(self):
+        """Capture a 15-second HindSight clip."""
+        try:
+            if not self.gopro_controller:
+                self.gopro_controller = GoProController()
+                self.gopro_controller.connect()
+                
+            self.status_label.setText("Capturing HindSight clip...")
+            self.hindsight_btn.setEnabled(False)
+            
+            # Run hindsight capture in background thread
+            def run_hindsight():
+                try:
+                    self.gopro_controller.start_hindsight_clip(1.0)  # 1 second trigger
+                    QTimer.singleShot(0, lambda: self.on_hindsight_success())
+                except Exception as e:
+                    QTimer.singleShot(0, lambda: self.on_hindsight_failed(str(e)))
+            
+            threading.Thread(target=run_hindsight, daemon=True).start()
+            
+        except Exception as e:
+            self.on_hindsight_failed(str(e))
+    
+    def on_hindsight_success(self):
+        """Handle successful hindsight capture."""
+        self.status_label.setText("HindSight clip captured successfully")
+        self.show_info_popup("HindSight Capture", "✅ 15-second HindSight clip captured successfully!")
+        self.hindsight_btn.setEnabled(True)
+    
+    def on_hindsight_failed(self, error_message):
+        """Handle failed hindsight capture."""
+        self.status_label.setText("HindSight capture failed")
+        self.show_error_popup(f"HindSight capture failed: {error_message}")
+        self.hindsight_btn.setEnabled(True)
+
+    def toggle_recording(self):
+        """Toggle video recording on/off."""
+        if not self.recording_active:
+            self.start_recording()
+        else:
+            self.stop_recording()
+    
+    def start_recording(self):
+        """Start video recording."""
+        try:
+            if not self.gopro_controller:
+                self.gopro_controller = GoProController()
+                self.gopro_controller.connect()
+                
+            self.status_label.setText("Starting recording...")
+            self.recording_btn.setEnabled(False)
+            
+            # Run recording start in background thread
+            def run_start_recording():
+                try:
+                    self.gopro_controller.start_recording()
+                    QTimer.singleShot(0, lambda: self.on_recording_started())
+                except Exception as e:
+                    QTimer.singleShot(0, lambda: self.on_recording_failed(str(e)))
+            
+            threading.Thread(target=run_start_recording, daemon=True).start()
+            
+        except Exception as e:
+            self.on_recording_failed(str(e))
+    
+    def stop_recording(self):
+        """Stop video recording."""
+        try:
+            if not self.gopro_controller:
+                return
+                
+            self.status_label.setText("Stopping recording...")
+            self.recording_btn.setEnabled(False)
+            
+            # Run recording stop in background thread
+            def run_stop_recording():
+                try:
+                    self.gopro_controller.stop_recording()
+                    QTimer.singleShot(0, lambda: self.on_recording_stopped())
+                except Exception as e:
+                    QTimer.singleShot(0, lambda: self.on_recording_failed(str(e)))
+            
+            threading.Thread(target=run_stop_recording, daemon=True).start()
+            
+        except Exception as e:
+            self.on_recording_failed(str(e))
+    
+    def on_recording_started(self):
+        """Handle successful recording start."""
+        self.recording_active = True
+        self.recording_btn.setText("Stop Recording")
+        self.recording_btn.setStyleSheet("background-color: #ff4444; color: white; font-weight: bold;")
+        self.recording_btn.setEnabled(True)
+        self.recording_status_label.setText("● Recording")
+        self.recording_status_label.setStyleSheet("""
+            QLabel {
+                color: #ff0000;
+                font-size: 14px;
+                font-weight: bold;
+                padding: 5px;
+                border: 1px solid #ff4444;
+                border-radius: 5px;
+                background-color: #ffe6e6;
+            }
+        """)
+        self.status_label.setText("Recording started")
+    
+    def on_recording_stopped(self):
+        """Handle successful recording stop."""
+        self.recording_active = False
+        self.recording_btn.setText("Start Recording")
+        self.recording_btn.setStyleSheet("")  # Reset to default style
+        self.recording_btn.setEnabled(True)
+        self.recording_status_label.setText("● Not Recording")
+        self.recording_status_label.setStyleSheet("""
+            QLabel {
+                color: #666666;
+                font-size: 14px;
+                font-weight: bold;
+                padding: 5px;
+                border: 1px solid #cccccc;
+                border-radius: 5px;
+                background-color: #f9f9f9;
+            }
+        """)
+        self.status_label.setText("Recording stopped")
+    
+    def on_recording_failed(self, error_message):
+        """Handle failed recording operation."""
+        self.show_error_popup(f"Recording operation failed: {error_message}")
+        self.recording_btn.setEnabled(True)
+        self.status_label.setText("Recording operation failed")
         
     def closeEvent(self, event):
         """Clean up when the window is closed."""

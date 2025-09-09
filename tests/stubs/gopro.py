@@ -37,6 +37,11 @@ class FakeHttpCommand:
         self.shutter.append(shutter)
         return DummyResp()
 
+    async def get_camera_status(self):
+        # Mock camera status data
+        data = {'recording': False, 'encoding': False}  
+        return DummyResp(data)
+
 
 class FakeSetting:
     def __init__(self):

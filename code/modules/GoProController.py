@@ -134,3 +134,16 @@ class GoProController:
         await self._gopro.http_command.set_shutter(shutter=constants.Toggle.ENABLE)
         await asyncio.sleep(duration)
         await self._gopro.http_command.set_shutter(shutter=constants.Toggle.DISABLE)
+
+    def start_recording(self) -> None:
+        """Start video recording on the camera."""
+        self._run_in_thread(self._gopro.http_command.set_shutter(shutter=constants.Toggle.ENABLE))
+
+    def stop_recording(self) -> None:
+        """Stop video recording on the camera."""
+        self._run_in_thread(self._gopro.http_command.set_shutter(shutter=constants.Toggle.DISABLE))
+
+    def get_camera_status(self) -> dict:
+        """Get current camera status including recording state."""
+        resp = self._run_in_thread(self._gopro.http_command.get_camera_status())
+        return resp.data

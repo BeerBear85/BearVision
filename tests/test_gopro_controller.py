@@ -49,3 +49,28 @@ def test_start_hindsight_clip():
         assert gopro.http_command.shutter == [constants.Toggle.ENABLE, constants.Toggle.DISABLE]
         ctrl.disconnect()
 
+
+def test_recording_controls():
+    with mock.patch('GoProController.WiredGoPro', FakeGoPro):
+        ctrl = GoProController()
+        ctrl.connect()  # Connect first to set up the GoPro properly
+        gopro = ctrl._gopro
+        
+        # Test start recording
+        ctrl.start_recording()
+        assert constants.Toggle.ENABLE in gopro.http_command.shutter
+        
+        # Reset shutter list for stop test
+        gopro.http_command.shutter.clear()
+        
+        # Test stop recording  
+        ctrl.stop_recording()
+        assert gopro.http_command.shutter == [constants.Toggle.DISABLE]
+        
+        # Test get camera status
+        status = ctrl.get_camera_status()
+        assert isinstance(status, dict)
+        assert 'recording' in status
+        
+        ctrl.disconnect()
+
