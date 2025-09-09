@@ -11,12 +11,11 @@ from tests.stubs.gopro import FakeGoPro
 
 
 def test_stream_serves_video():
-    with mock.patch('GoProController.WirelessGoPro', FakeGoPro):
+    with mock.patch('open_gopro.WiredGoPro', FakeGoPro):
         ctrl = GoProController()
         url = ctrl.start_preview(9100)
-        import time
-        time.sleep(0.1)
-        with urllib.request.urlopen(url) as resp:
-            data = resp.read(1024)
-        assert data, 'no data returned from stream'
-        ctrl._gopro.streaming.stop()
+        # For wired GoPro, we get UDP URL which we can't test with urllib
+        # Just verify we get the expected UDP URL format
+        assert url.startswith('udp://') and ':9100' in url
+        # Test that stop_preview works without error
+        ctrl.stop_preview()

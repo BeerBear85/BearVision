@@ -29,7 +29,9 @@ class FakeHttpCommand:
 
     async def set_preview_stream(self, *, mode, port=None):
         self.preview = (mode, port)
-        return DummyResp()
+        # Return response with data containing an ID for wired GoPro compatibility
+        data = {'id': f'http://172.24.106.51:8080/gopro/camera/stream/start?port={port}'}
+        return DummyResp(data)
 
     async def set_shutter(self, *, shutter):
         self.shutter.append(shutter)

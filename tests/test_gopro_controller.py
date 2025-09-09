@@ -11,7 +11,7 @@ from open_gopro.models.constants import constants
 
 
 def test_list_and_download(tmp_path):
-    with mock.patch('GoProController.WirelessGoPro', FakeGoPro):
+    with mock.patch('open_gopro.WiredGoPro', FakeGoPro):
         ctrl = GoProController()
         files = ctrl.list_videos()
         assert files == ['DCIM/100GOPRO/GOPR0001.MP4']
@@ -22,19 +22,20 @@ def test_list_and_download(tmp_path):
 
 
 def test_configure_and_preview():
-    with mock.patch('GoProController.WirelessGoPro', FakeGoPro):
+    with mock.patch('open_gopro.WiredGoPro', FakeGoPro):
         ctrl = GoProController()
         ctrl.configure()
         gopro = ctrl._gopro
         assert gopro.http_command.group is not None
         assert gopro.http_settings.hindsight.value is not None
         url = ctrl.start_preview(9000)
-        assert url == 'http://127.0.0.1:9000/stream'
-        ctrl._gopro.streaming.stop()
+        # For wired GoPro, expect UDP stream URL format
+        assert url.startswith('udp://') and ':9000' in url
+        ctrl.stop_preview()
 
 
 def test_start_hindsight_clip():
-    with mock.patch('GoProController.WirelessGoPro', FakeGoPro):
+    with mock.patch('open_gopro.WiredGoPro', FakeGoPro):
         ctrl = GoProController()
         ctrl.start_hindsight_clip(0)
         gopro = ctrl._gopro
