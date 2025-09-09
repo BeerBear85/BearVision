@@ -116,10 +116,22 @@ class FakeGoPro:
         self.http_command = FakeHttpCommand()
         self.http_settings = FakeHttpSettings()
         self.streaming = FakeStreaming()
+        # Set the _serial attribute to simulate a properly opened WiredGoPro
+        self._serial = "fake_serial_123"
 
     async def open(self, *a, **k):
+        # Ensure _serial is set when opening
+        self._serial = "fake_serial_123"
         return None
 
     async def close(self, *a, **k):
         return None
+    
+    @property
+    def _base_url(self) -> str:
+        """Mock the _base_url property that depends on _serial."""
+        if not self._serial:
+            from open_gopro.domain.exceptions import GoProNotOpened
+            raise GoProNotOpened("Serial / IP has not yet been discovered")
+        return f"http://172.24.106.51:8080/gopro"
 
