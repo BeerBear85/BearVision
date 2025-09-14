@@ -348,7 +348,7 @@ class GoProManualTestGUI(QMainWindow):
             # Run hindsight capture in background thread
             def run_hindsight():
                 try:
-                    self.gopro_controller.start_hindsight_clip(1.0)  # 1 second trigger
+                    self.gopro_controller.startHindsightMode()  # Use simplified hindsight mode
                     QTimer.singleShot(0, lambda: self.on_hindsight_success())
                 except Exception as e:
                     QTimer.singleShot(0, lambda: self.on_hindsight_failed(str(e)))

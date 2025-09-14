@@ -143,6 +143,14 @@ class GoProController:
         """Stop video recording on the camera."""
         self._run_in_thread(self._gopro.http_command.set_shutter(shutter=constants.Toggle.DISABLE))
 
+    def startHindsightMode(self) -> None:
+        """Start Hindsight Mode with hardcoded 15 seconds buffer.
+        
+        This is a simplified function that always uses 15 seconds for hindsight.
+        The hindsight buffer is configured in the configure() method.
+        """
+        self.start_hindsight_clip(1.0)  # Trigger recording for 1 second
+
     def get_camera_status(self) -> dict:
         """Get current camera status including recording state."""
         resp = self._run_in_thread(self._gopro.http_command.get_camera_status())

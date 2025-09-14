@@ -50,6 +50,17 @@ def test_start_hindsight_clip():
         ctrl.disconnect()
 
 
+def test_startHindsightMode():
+    with mock.patch('GoProController.WiredGoPro', FakeGoPro):
+        ctrl = GoProController()
+        ctrl.connect()  # Connect first to set up the GoPro properly
+        ctrl.startHindsightMode()
+        gopro = ctrl._gopro
+        # Verify that startHindsightMode triggers the same shutter sequence as start_hindsight_clip
+        assert gopro.http_command.shutter == [constants.Toggle.ENABLE, constants.Toggle.DISABLE]
+        ctrl.disconnect()
+
+
 def test_recording_controls():
     with mock.patch('GoProController.WiredGoPro', FakeGoPro):
         ctrl = GoProController()
