@@ -14,10 +14,10 @@ from pathlib import Path
 
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QLabel, QPushButton, QFrame, QMessageBox
+    QLabel, QPushButton, QFrame, QMessageBox, QMenuBar, QFileDialog
 )
 from PySide6.QtCore import Qt, QTimer, Signal, QThread
-from PySide6.QtGui import QPixmap, QImage, QFont
+from PySide6.QtGui import QPixmap, QImage, QFont, QAction
 
 # Add module path for GoProController
 MODULE_DIR = Path(__file__).resolve().parent.parent / "code" / "modules"
@@ -100,6 +100,9 @@ class GoProManualTestGUI(QMainWindow):
         
         self.setWindowTitle("GoPro Manual Test GUI")
         self.setGeometry(100, 100, 800, 600)
+        
+        # Create menu bar
+        self.create_menu_bar()
         
         # Create central widget and layout
         central_widget = QWidget()
@@ -190,6 +193,25 @@ class GoProManualTestGUI(QMainWindow):
         self.status_label.setAlignment(Qt.AlignCenter)
         self.status_label.setStyleSheet("color: #666666; font-size: 12px; padding: 5px;")
         main_layout.addWidget(self.status_label)
+        
+    def create_menu_bar(self):
+        """Create the menu bar with Configuration menu."""
+        menu_bar = self.menuBar()
+        
+        # Configuration menu
+        config_menu = menu_bar.addMenu("Configuration")
+        
+        # Download configuration action
+        download_action = QAction("Download Configuration from GoPro", self)
+        download_action.setStatusTip("Download current GoPro configuration and save to YAML file")
+        download_action.triggered.connect(self.download_configuration)
+        config_menu.addAction(download_action)
+        
+        # Upload configuration action  
+        upload_action = QAction("Upload Configuration to GoPro", self)
+        upload_action.setStatusTip("Upload configuration from YAML file to GoPro")
+        upload_action.triggered.connect(self.upload_configuration)
+        config_menu.addAction(upload_action)
         
     def run_ping_test(self):
         """Test basic GoPro connectivity in a background thread."""
@@ -467,6 +489,134 @@ class GoProManualTestGUI(QMainWindow):
         self.show_error_popup(f"Recording operation failed: {error_message}")
         self.recording_btn.setEnabled(True)
         self.status_label.setText("Recording operation failed")
+    
+    def download_configuration(self):
+        """Download configuration from GoPro and save to YAML file."""
+        try:
+            # Get save location from user
+            default_filename = f"gopro_config_{self.get_timestamp()}.yaml"
+            file_path, _ = QFileDialog.getSaveFileName(
+                self,
+                "Save GoPro Configuration",
+                default_filename,
+                "YAML Files (*.yaml *.yml);;All Files (*)"
+            )
+            
+            if not file_path:
+                return  # User cancelled
+            
+            self.status_label.setText("Downloading configuration...")
+            
+            # Run download in background thread
+            def run_download():
+                try:
+                    if not self.gopro_controller:
+                        self.gopro_controller = GoProController()
+                        self.gopro_controller.connect()
+                    
+                    saved_path = self.gopro_controller.download_configuration(file_path)
+                    QTimer.singleShot(0, lambda: self.on_download_success(saved_path))
+                except Exception as e:
+                    QTimer.singleShot(0, lambda: self.on_download_failed(str(e)))
+            
+            threading.Thread(target=run_download, daemon=True).start()
+            
+        except Exception as e:
+            self.on_download_failed(str(e))
+    
+    def upload_configuration(self):
+        """Upload configuration from YAML file to GoPro."""
+        try:
+            # Get file from user
+            file_path, _ = QFileDialog.getOpenFileName(
+                self,
+                "Select GoPro Configuration File",
+                "",
+                "YAML Files (*.yaml *.yml);;All Files (*)"
+            )
+            
+            if not file_path:
+                return  # User cancelled
+            
+            self.status_label.setText("Uploading configuration...")
+            
+            # Run upload in background thread
+            def run_upload():
+                try:
+                    if not self.gopro_controller:
+                        self.gopro_controller = GoProController()
+                        self.gopro_controller.connect()
+                    
+                    success = self.gopro_controller.upload_configuration(file_path)
+                    if success:
+                        QTimer.singleShot(0, lambda: self.on_upload_success(file_path))
+                    else:
+                        QTimer.singleShot(0, lambda: self.on_upload_failed("Configuration upload returned False"))
+                        
+                except Exception as e:
+                    QTimer.singleShot(0, lambda: self.on_upload_failed(str(e)))
+            
+            threading.Thread(target=run_upload, daemon=True).start()
+            
+        except Exception as e:
+            self.on_upload_failed(str(e))
+    
+    def on_download_success(self, saved_path):
+        """Handle successful configuration download."""
+        self.status_label.setText("Configuration downloaded successfully")
+        self.show_info_popup(
+            "Configuration Downloaded", 
+            f"✅ GoPro configuration successfully downloaded!\n\nSaved to: {saved_path}"
+        )
+    
+    def on_download_failed(self, error_message):
+        """Handle failed configuration download."""
+        self.status_label.setText("Configuration download failed")
+        
+        # Provide user-friendly error messages
+        if "ConnectionError" in error_message or "connection" in error_message.lower():
+            user_message = "❌ GoPro Connection Error\n\nPlease ensure:\n• GoPro is connected via USB\n• GoPro is powered on\n• Try the 'Ping Test' button first"
+        elif "PermissionError" in error_message or "permission denied" in error_message.lower():
+            user_message = f"❌ File Permission Error\n\nUnable to save configuration file.\nPlease check folder permissions or try saving to a different location.\n\nDetails: {error_message}"
+        elif "OSError" in error_message:
+            user_message = f"❌ File System Error\n\nUnable to save configuration file.\nPlease check available disk space and try again.\n\nDetails: {error_message}"
+        else:
+            user_message = f"❌ Configuration Download Failed\n\n{error_message}"
+            
+        self.show_error_popup(user_message)
+    
+    def on_upload_success(self, file_path):
+        """Handle successful configuration upload."""
+        self.status_label.setText("Configuration uploaded successfully")
+        self.show_info_popup(
+            "Configuration Uploaded",
+            f"✅ Configuration successfully uploaded to GoPro!\n\nFrom file: {file_path}"
+        )
+    
+    def on_upload_failed(self, error_message):
+        """Handle failed configuration upload."""
+        self.status_label.setText("Configuration upload failed")
+        
+        # Provide user-friendly error messages
+        if "FileNotFoundError" in error_message or "not found" in error_message.lower():
+            user_message = "❌ Configuration File Not Found\n\nThe selected configuration file could not be found.\nPlease verify the file path and try again."
+        elif "ConnectionError" in error_message or "connection" in error_message.lower():
+            user_message = "❌ GoPro Connection Error\n\nLost connection to GoPro during upload.\n\nPlease ensure:\n• GoPro is connected via USB\n• GoPro is powered on\n• Try the 'Ping Test' button to verify connection"
+        elif "ValidationError" in error_message or "validation failed" in error_message.lower():
+            user_message = f"❌ Configuration File Invalid\n\nThe configuration file format is invalid or contains unsupported values.\n\nPlease check the file format and try again.\n\nDetails:\n{error_message}"
+        elif "ValueError" in error_message or "invalid" in error_message.lower():
+            user_message = f"❌ Invalid Configuration File\n\nThe configuration file contains errors:\n\n{error_message}"
+        elif "yaml" in error_message.lower() or "YAML" in error_message:
+            user_message = f"❌ YAML Format Error\n\nThe configuration file has invalid YAML format.\nPlease check the file syntax and try again.\n\nDetails: {error_message}"
+        else:
+            user_message = f"❌ Configuration Upload Failed\n\n{error_message}"
+            
+        self.show_error_popup(user_message)
+    
+    def get_timestamp(self):
+        """Get current timestamp for filename generation."""
+        from datetime import datetime
+        return datetime.now().strftime("%Y%m%d_%H%M%S")
         
     def closeEvent(self, event):
         """Clean up when the window is closed."""

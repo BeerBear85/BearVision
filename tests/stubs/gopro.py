@@ -41,6 +41,26 @@ class FakeHttpCommand:
         # Mock camera status data
         data = {'recording': False, 'encoding': False}  
         return DummyResp(data)
+    
+    async def get_camera_state(self):
+        # Mock camera state data with settings and status
+        data = {
+            'settings': {
+                'video_resolution': 12,  # Mock value for 4K
+                'frames_per_second': 8,   # Mock value for 60 FPS
+                'hindsight': 1,           # Mock value for 15 seconds
+                'video_lens': 0,          # Mock value for Wide
+                'hypersmooth': 3,         # Mock value for High
+                'gps': 1,                 # Mock value for ON
+                'video_bit_rate': 1,      # Mock value for High
+                'video_performance_mode': 0  # Mock value for Maximum Video
+            },
+            'status': {
+                'encoding': False,
+                'recording': False
+            }
+        }
+        return DummyResp(data)
 
 
 class FakeSetting:
