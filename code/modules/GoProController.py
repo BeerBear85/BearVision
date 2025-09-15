@@ -17,6 +17,7 @@ class GoProController:
         self._gopro = WiredGoPro(target=target)
         self._loop = None
         self._loop_thread = None
+        self._is_connected = False
 
     def _run_in_thread(self, coro):
         """Run a coroutine in a separate thread with its own event loop."""
@@ -50,10 +51,12 @@ class GoProController:
     def connect(self) -> None:
         """Open connection to the GoPro."""
         self._run_in_thread(self._gopro.open())
+        self._is_connected = True
 
     def disconnect(self) -> None:
         """Close connection to the GoPro."""
         self._run_in_thread(self._gopro.close())
+        self._is_connected = False
 
     def list_videos(self) -> list[str]:
         """Return list of video filenames stored on the camera."""
@@ -178,9 +181,9 @@ class GoProController:
             output_path = f"gopro_config_{timestamp}.yaml"
         
         # Check if we have a GoPro connection
-        if not self._gopro:
+        if not self._is_connected:
             raise ConnectionError("No GoPro connection available. Please connect to a GoPro first.")
-        
+
         try:
             # Verify GoPro is still reachable by checking if _serial is set
             if not hasattr(self._gopro, '_serial') or not self._gopro._serial:
@@ -251,9 +254,9 @@ class GoProController:
             raise FileNotFoundError(f"Configuration file not found: {config_path}")
         
         # Check if we have a GoPro connection
-        if not self._gopro:
+        if not self._is_connected:
             raise ConnectionError("No GoPro connection available. Please connect to a GoPro first.")
-        
+
         try:
             # Verify GoPro is still reachable
             if not hasattr(self._gopro, '_serial') or not self._gopro._serial:
