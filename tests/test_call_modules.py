@@ -10,6 +10,15 @@ MODULE_DIR = Path(__file__).resolve().parents[1] / 'code' / 'modules'
 sys.path.append(str(MODULE_DIR))
 
 def _call_func(func):
+    # Skip functions that are known to block indefinitely or cause side effects
+    blocking_functions = {
+        'start_scan',  # BLE beacon scanning - infinite loop
+        'init',        # DNN model loading - may hang on missing models
+    }
+
+    if func.__name__ in blocking_functions:
+        return
+
     sig = inspect.signature(func)
     args = []
     for p in sig.parameters.values():
