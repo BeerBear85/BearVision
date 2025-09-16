@@ -80,13 +80,13 @@ class GoProController:
         await self._gopro.http_command.load_preset_group(
             group=models.proto.EnumPresetGroup.PRESET_GROUP_ID_VIDEO
         )
-        await self._gopro.http_settings.video_resolution.set(
+        await self._gopro.http_setting.video_resolution.set(
             settings.VideoResolution.NUM_4K
         )
-        await self._gopro.http_settings.frames_per_second.set(
+        await self._gopro.http_setting.frames_per_second.set(
             settings.FramesPerSecond.NUM_60_0
         )
-        await self._gopro.http_settings.hindsight.set(
+        await self._gopro.http_setting.hindsight.set(
             settings.Hindsight.NUM_15_SECONDS
         )
 
@@ -157,7 +157,7 @@ class GoProController:
 
     def get_camera_status(self) -> dict:
         """Get current camera status including recording state."""
-        resp = self._run_in_thread(self._gopro.http_command.get_camera_status())
+        resp = self._run_in_thread(self._gopro.http_command.get_camera_state())
         return resp.data
 
     def download_configuration(self, output_path: str = None) -> str:
@@ -317,33 +317,33 @@ class GoProController:
                 # Handle both enum objects and string values
                 resolution_value = config.video_resolution.value if hasattr(config.video_resolution, 'value') else config.video_resolution
                 if resolution_value == "4K":
-                    await self._gopro.http_settings.video_resolution.set(settings.VideoResolution.NUM_4K)
+                    await self._gopro.http_setting.video_resolution.set(settings.VideoResolution.NUM_4K)
                 elif resolution_value == "2.7K":
-                    await self._gopro.http_settings.video_resolution.set(settings.VideoResolution.NUM_2_7K)
+                    await self._gopro.http_setting.video_resolution.set(settings.VideoResolution.NUM_2_7K)
                 elif resolution_value == "1080p":
-                    await self._gopro.http_settings.video_resolution.set(settings.VideoResolution.NUM_1080)
+                    await self._gopro.http_setting.video_resolution.set(settings.VideoResolution.NUM_1080)
             
             # Apply frame rate if specified
             if config.frame_rate:
                 # Handle both enum objects and string values
                 frame_rate_value = config.frame_rate.value if hasattr(config.frame_rate, 'value') else config.frame_rate
                 if frame_rate_value == "60":
-                    await self._gopro.http_settings.frames_per_second.set(settings.FramesPerSecond.NUM_60_0)
+                    await self._gopro.http_setting.frames_per_second.set(settings.FramesPerSecond.NUM_60_0)
                 elif frame_rate_value == "30":
-                    await self._gopro.http_settings.frames_per_second.set(settings.FramesPerSecond.NUM_30_0)
+                    await self._gopro.http_setting.frames_per_second.set(settings.FramesPerSecond.NUM_30_0)
                 elif frame_rate_value == "24":
-                    await self._gopro.http_settings.frames_per_second.set(settings.FramesPerSecond.NUM_24_0)
+                    await self._gopro.http_setting.frames_per_second.set(settings.FramesPerSecond.NUM_24_0)
             
             # Apply hindsight if specified
             if config.hindsight:
                 # Handle both enum objects and string values
                 hindsight_value = config.hindsight.value if hasattr(config.hindsight, 'value') else config.hindsight
                 if hindsight_value == "15 seconds":
-                    await self._gopro.http_settings.hindsight.set(settings.Hindsight.NUM_15_SECONDS)
+                    await self._gopro.http_setting.hindsight.set(settings.Hindsight.NUM_15_SECONDS)
                 elif hindsight_value == "30 seconds":
-                    await self._gopro.http_settings.hindsight.set(settings.Hindsight.NUM_30_SECONDS)
+                    await self._gopro.http_setting.hindsight.set(settings.Hindsight.NUM_30_SECONDS)
                 elif hindsight_value == "OFF":
-                    await self._gopro.http_settings.hindsight.set(settings.Hindsight.OFF)
+                    await self._gopro.http_setting.hindsight.set(settings.Hindsight.OFF)
             
             # Apply additional settings as needed
             # Note: More settings mappings would be added here as the open_gopro library
