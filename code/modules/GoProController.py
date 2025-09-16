@@ -72,6 +72,90 @@ class GoProController:
         )
         return resp.data
 
+    def delete_all_files(self) -> None:
+        """Delete all files from the camera."""
+        self._run_in_thread(self._gopro.http_command.delete_all())
+
+    def delete_file(self, camera_file: str) -> None:
+        """Delete a specific file from the camera."""
+        self._run_in_thread(self._gopro.http_command.delete_file(camera_file=camera_file))
+
+    def delete_all_files_with_confirmation(self, verbose: bool = True) -> dict:
+        """
+        Delete all files from the camera with confirmation and status reporting.
+
+        Args:
+            verbose: Whether to print status messages
+
+        Returns:
+            Dictionary with deletion results
+        """
+        try:
+            if verbose:
+                print("Connecting to GoPro...")
+
+            # Get file count before deletion
+            files_before = self.list_videos()
+            files_count_before = len(files_before)
+
+            if verbose:
+                print(f"Files on GoPro before deletion: {files_count_before}")
+
+            if files_count_before == 0:
+                if verbose:
+                    print("No files to delete - GoPro is already empty")
+                return {
+                    "success": True,
+                    "files_before": 0,
+                    "files_after": 0,
+                    "deleted_count": 0,
+                    "message": "No files to delete"
+                }
+
+            # Delete all files
+            if verbose:
+                print("Deleting all files from GoPro...")
+            self.delete_all_files()
+
+            # Verify deletion
+            files_after = self.list_videos()
+            files_count_after = len(files_after)
+            deleted_count = files_count_before - files_count_after
+
+            if verbose:
+                print(f"Files on GoPro after deletion: {files_count_after}")
+
+            success = files_count_after == 0
+            if success:
+                if verbose:
+                    print("SUCCESS: All files successfully deleted from GoPro!")
+                message = f"Successfully deleted {deleted_count} files"
+            else:
+                if verbose:
+                    print(f"WARNING: {files_count_after} files remaining:")
+                    for file in files_after:
+                        print(f"   - {file}")
+                message = f"Partial deletion: {deleted_count} files deleted, {files_count_after} remaining"
+
+            return {
+                "success": success,
+                "files_before": files_count_before,
+                "files_after": files_count_after,
+                "deleted_count": deleted_count,
+                "message": message,
+                "remaining_files": files_after if not success else []
+            }
+
+        except Exception as e:
+            error_msg = f"Error during file deletion: {e}"
+            if verbose:
+                print(f"ERROR: {error_msg}")
+            return {
+                "success": False,
+                "error": error_msg,
+                "message": error_msg
+            }
+
     def configure(self) -> None:
         """Configure the GoPro for BearVision usage."""
         self._run_in_thread(self._configure())
