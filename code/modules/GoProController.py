@@ -408,22 +408,22 @@ class GoProController:
                 # Handle both enum objects and string values
                 resolution_value = config.video_resolution.value if hasattr(config.video_resolution, 'value') else config.video_resolution
                 if resolution_value == "4K":
-                    await self._gopro.http_setting.video_resolution.set(settings.VideoResolution.NUM_4K)
+                    await self._gopro.http_settings.video_resolution.set(settings.VideoResolution.NUM_4K)
                 elif resolution_value == "2.7K":
-                    await self._gopro.http_setting.video_resolution.set(settings.VideoResolution.NUM_2_7K)
+                    await self._gopro.http_settings.video_resolution.set(settings.VideoResolution.NUM_2_7K)
                 elif resolution_value == "1080p":
-                    await self._gopro.http_setting.video_resolution.set(settings.VideoResolution.NUM_1080)
+                    await self._gopro.http_settings.video_resolution.set(settings.VideoResolution.NUM_1080)
             
             # Apply frame rate if specified
             if config.frame_rate:
                 # Handle both enum objects and string values
                 frame_rate_value = config.frame_rate.value if hasattr(config.frame_rate, 'value') else config.frame_rate
                 if frame_rate_value == "60":
-                    await self._gopro.http_setting.frames_per_second.set(settings.FramesPerSecond.NUM_60_0)
+                    await self._gopro.http_settings.frames_per_second.set(settings.FramesPerSecond.NUM_60_0)
                 elif frame_rate_value == "30":
-                    await self._gopro.http_setting.frames_per_second.set(settings.FramesPerSecond.NUM_30_0)
+                    await self._gopro.http_settings.frames_per_second.set(settings.FramesPerSecond.NUM_30_0)
                 elif frame_rate_value == "24":
-                    await self._gopro.http_setting.frames_per_second.set(settings.FramesPerSecond.NUM_24_0)
+                    await self._gopro.http_settings.frames_per_second.set(settings.FramesPerSecond.NUM_24_0)
             
             # Apply hindsight if specified
             if config.hindsight:
