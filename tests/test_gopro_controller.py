@@ -59,8 +59,10 @@ def test_startHindsightMode():
         ctrl.connect()  # Connect first to set up the GoPro properly
         ctrl.startHindsightMode()
         gopro = ctrl._gopro
-        # Verify that startHindsightMode triggers the same shutter sequence as start_hindsight_clip
-        assert gopro.http_command.shutter == [constants.Toggle.ENABLE, constants.Toggle.DISABLE]
+        # Verify that startHindsightMode sets hindsight to 15 seconds instead of triggering recording
+        assert gopro.http_settings.hindsight.value == 2  # 15 seconds (NUM_15_SECONDS)
+        # Verify that no shutter commands were triggered
+        assert gopro.http_command.shutter == []
         ctrl.disconnect()
 
 
@@ -84,7 +86,8 @@ def test_recording_controls():
         # Test get camera status
         status = ctrl.get_camera_status()
         assert isinstance(status, dict)
-        assert 'recording' in status
+        assert 'status' in status
+        assert 'recording' in status['status']
         
         ctrl.disconnect()
 

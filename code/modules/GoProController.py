@@ -164,13 +164,13 @@ class GoProController:
         await self._gopro.http_command.load_preset_group(
             group=models.proto.EnumPresetGroup.PRESET_GROUP_ID_VIDEO
         )
-        await self._gopro.http_setting.video_resolution.set(
+        await self._gopro.http_settings.video_resolution.set(
             settings.VideoResolution.NUM_4K
         )
-        await self._gopro.http_setting.frames_per_second.set(
+        await self._gopro.http_settings.frames_per_second.set(
             settings.FramesPerSecond.NUM_60_0
         )
-        await self._gopro.http_setting.hindsight.set(
+        await self._gopro.http_settings.hindsight.set(
             settings.Hindsight.NUM_15_SECONDS
         )
 
@@ -232,12 +232,19 @@ class GoProController:
         self._run_in_thread(self._gopro.http_command.set_shutter(shutter=constants.Toggle.DISABLE))
 
     def startHindsightMode(self) -> None:
-        """Start Hindsight Mode with hardcoded 15 seconds buffer.
-        
-        This is a simplified function that always uses 15 seconds for hindsight.
-        The hindsight buffer is configured in the configure() method.
+        """Enable Hindsight Mode with 15 seconds buffer.
+
+        This configures the camera to continuously buffer the last 15 seconds of video,
+        which can be saved when recording is triggered.
         """
-        self.start_hindsight_clip(1.0)  # Trigger recording for 1 second
+        self._run_in_thread(self._gopro.http_settings.hindsight.set(settings.Hindsight.NUM_15_SECONDS))
+
+    def disableHindsightMode(self) -> None:
+        """Disable Hindsight Mode.
+
+        This turns off the hindsight buffer on the camera.
+        """
+        self._run_in_thread(self._gopro.http_settings.hindsight.set(settings.Hindsight.OFF))
 
     def get_camera_status(self) -> dict:
         """Get current camera status including recording state."""
@@ -423,11 +430,11 @@ class GoProController:
                 # Handle both enum objects and string values
                 hindsight_value = config.hindsight.value if hasattr(config.hindsight, 'value') else config.hindsight
                 if hindsight_value == "15 seconds":
-                    await self._gopro.http_setting.hindsight.set(settings.Hindsight.NUM_15_SECONDS)
+                    await self._gopro.http_settings.hindsight.set(settings.Hindsight.NUM_15_SECONDS)
                 elif hindsight_value == "30 seconds":
-                    await self._gopro.http_setting.hindsight.set(settings.Hindsight.NUM_30_SECONDS)
+                    await self._gopro.http_settings.hindsight.set(settings.Hindsight.NUM_30_SECONDS)
                 elif hindsight_value == "OFF":
-                    await self._gopro.http_setting.hindsight.set(settings.Hindsight.OFF)
+                    await self._gopro.http_settings.hindsight.set(settings.Hindsight.OFF)
             
             # Apply additional settings as needed
             # Note: More settings mappings would be added here as the open_gopro library

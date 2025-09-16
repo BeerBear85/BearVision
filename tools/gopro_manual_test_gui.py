@@ -482,7 +482,7 @@ class GoProManualTestGUI(QMainWindow):
         hindsight_section = self.create_control_section(
             "Hindsight Mode",
             "Record up to 15 seconds before starting recording",
-            "Disabled", 
+            "Activate",
             self.toggle_hindsight
         )
         self.hindsight_btn = hindsight_section["button"]
@@ -746,38 +746,53 @@ class GoProManualTestGUI(QMainWindow):
     def start_gopro_preview(self):
         """Start the GoPro preview stream."""
         try:
-            self.start_preview_btn.setEnabled(False)
-            
+            # Immediately update UI to reflect the operation
+            self.preview_active = True
+            self.start_preview_btn.setText("Stop Preview")
+            self.start_preview_btn.setProperty("class", "destructive")
+            self.start_preview_btn.style().unpolish(self.start_preview_btn)
+            self.start_preview_btn.style().polish(self.start_preview_btn)
+
+            # Show and prepare preview area
+            self.preview_area.show()
+            self.preview_area.setText("📹 Connecting to GoPro...\nStarting preview stream")
+
             # Initialize and connect to GoPro
             self.gopro_controller = GoProController()
             self.gopro_controller.connect()
-            
+
             # Start preview stream
             stream_url = self.gopro_controller.start_preview()
-            
+
             # Start the preview worker thread
             self.preview_worker = PreviewWorker(stream_url)
             self.preview_worker.frame_ready.connect(self.update_preview_frame)
             self.preview_worker.error_occurred.connect(self.handle_preview_error)
             self.preview_worker.start()
-            
-            # Update UI state
-            self.preview_active = True
-            self.start_preview_btn.setText("Stop Preview")
-            self.start_preview_btn.setEnabled(True)
-            
+
         except Exception as e:
             self.handle_preview_error(f"Failed to start preview: {str(e)}")
             
     def stop_gopro_preview(self):
         """Stop the GoPro preview stream."""
         try:
-            
+            # Immediately update UI to reflect the operation
+            self.preview_active = False
+            self.start_preview_btn.setText("Start Preview")
+            self.start_preview_btn.setProperty("class", "primary")
+            self.start_preview_btn.style().unpolish(self.start_preview_btn)
+            self.start_preview_btn.style().polish(self.start_preview_btn)
+
+            # Hide preview area and clear content
+            self.preview_area.hide()
+            self.preview_area.setText("📹\nPreview Window\nLive camera feed will appear here")
+            self.preview_area.setPixmap(QPixmap())  # Clear any existing image
+
             # Stop preview worker
             if self.preview_worker:
                 self.preview_worker.stop()
                 self.preview_worker = None
-                
+
             # Stop preview stream and disconnect from GoPro
             if self.gopro_controller:
                 try:
@@ -786,13 +801,7 @@ class GoProManualTestGUI(QMainWindow):
                     pass  # Ignore errors when stopping preview
                 self.gopro_controller.disconnect()
                 self.gopro_controller = None
-                
-            # Reset UI
-            self.preview_active = False
-            self.start_preview_btn.setText("Start Preview")
-            self.preview_label.setText("GoPro preview will appear here")
-            self.preview_label.setPixmap(QPixmap())  # Clear any existing image
-            
+
         except Exception as e:
             self.show_error_popup(f"Error stopping preview: {str(e)}")
             
@@ -803,18 +812,18 @@ class GoProManualTestGUI(QMainWindow):
             rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             height, width, channels = rgb_frame.shape
             bytes_per_line = channels * width
-            
+
             # Create QImage and QPixmap
             q_image = QImage(rgb_frame.data, width, height, bytes_per_line, QImage.Format_RGB888)
-            
-            # Scale to fit preview label while maintaining aspect ratio
-            label_size = self.preview_label.size()
+
+            # Scale to fit preview area while maintaining aspect ratio
+            label_size = self.preview_area.size()
             scaled_pixmap = QPixmap.fromImage(q_image).scaled(
                 label_size, Qt.KeepAspectRatio, Qt.SmoothTransformation
             )
-            
-            self.preview_label.setPixmap(scaled_pixmap)
-            
+
+            self.preview_area.setPixmap(scaled_pixmap)
+
         except Exception as e:
             self.handle_preview_error(f"Failed to update preview frame: {str(e)}")
             
@@ -855,48 +864,84 @@ class GoProManualTestGUI(QMainWindow):
             if not self.gopro_controller:
                 self.gopro_controller = GoProController()
                 self.gopro_controller.connect()
-                
+
+            # Immediately update UI to reflect the operation
+            self.hindsight_enabled = True
+            self.hindsight_btn.setText("Deactivate")
+            self.hindsight_btn.setProperty("class", "success")
+            self.hindsight_btn.style().unpolish(self.hindsight_btn)
+            self.hindsight_btn.style().polish(self.hindsight_btn)
             self.add_log("info", "Enabling HindSight mode...")
-            self.hindsight_btn.setEnabled(False)
-            
+
             # Run hindsight enable in background thread
             def run_hindsight():
                 try:
-                    self.gopro_controller.startHindsightMode()  # Use simplified hindsight mode
+                    self.gopro_controller.startHindsightMode()
                     QTimer.singleShot(0, lambda: self.on_hindsight_enabled())
                 except Exception as e:
                     QTimer.singleShot(0, lambda: self.on_hindsight_failed(str(e)))
-            
+
             threading.Thread(target=run_hindsight, daemon=True).start()
-            
+
         except Exception as e:
             self.on_hindsight_failed(str(e))
             
     def disable_hindsight(self):
         """Disable hindsight mode."""
-        self.hindsight_enabled = False
-        self.hindsight_btn.setText("⏰ Disabled")
-        self.hindsight_btn.setProperty("class", "")
-        self.hindsight_btn.style().unpolish(self.hindsight_btn)
-        self.hindsight_btn.style().polish(self.hindsight_btn)
-        self.hindsight_btn.setEnabled(True)
-        self.add_log("info", "HindSight mode disabled")
-    
+        try:
+            if not self.gopro_controller:
+                self.gopro_controller = GoProController()
+                self.gopro_controller.connect()
+
+            # Immediately update UI to reflect the operation
+            self.hindsight_enabled = False
+            self.hindsight_btn.setText("Activate")
+            self.hindsight_btn.setProperty("class", "")
+            self.hindsight_btn.style().unpolish(self.hindsight_btn)
+            self.hindsight_btn.style().polish(self.hindsight_btn)
+            self.add_log("info", "Disabling HindSight mode...")
+
+            # Run hindsight disable in background thread
+            def run_disable_hindsight():
+                try:
+                    self.gopro_controller.disableHindsightMode()
+                    QTimer.singleShot(0, lambda: self.on_hindsight_disabled())
+                except Exception as e:
+                    QTimer.singleShot(0, lambda: self.on_hindsight_failed(str(e)))
+
+            threading.Thread(target=run_disable_hindsight, daemon=True).start()
+
+        except Exception as e:
+            self.on_hindsight_failed(str(e))
+
+    def on_hindsight_disabled(self):
+        """Handle successful hindsight disable."""
+        self.add_log("success", "HindSight mode disabled")
+
     def on_hindsight_enabled(self):
         """Handle successful hindsight enable."""
-        self.hindsight_enabled = True
-        self.hindsight_btn.setText("✅ Enabled")
-        self.hindsight_btn.setProperty("class", "success")
-        self.hindsight_btn.style().unpolish(self.hindsight_btn)
-        self.hindsight_btn.style().polish(self.hindsight_btn)
-        self.hindsight_btn.setEnabled(True)
         self.add_log("success", "HindSight mode enabled")
-    
+
     def on_hindsight_failed(self, error_message):
         """Handle failed hindsight operation."""
+        # Revert UI state since operation failed
+        if self.hindsight_enabled:
+            # Was trying to disable, revert to enabled state
+            self.hindsight_btn.setText("Deactivate")
+            self.hindsight_btn.setProperty("class", "success")
+        else:
+            # Was trying to enable, revert to disabled state
+            self.hindsight_btn.setText("Activate")
+            self.hindsight_btn.setProperty("class", "")
+
+        self.hindsight_btn.style().unpolish(self.hindsight_btn)
+        self.hindsight_btn.style().polish(self.hindsight_btn)
+
+        # Reset internal state
+        self.hindsight_enabled = not self.hindsight_enabled
+
         self.add_log("error", f"HindSight operation failed: {error_message}")
         self.show_error_popup(f"HindSight operation failed: {error_message}")
-        self.hindsight_btn.setEnabled(True)
 
     def toggle_recording(self):
         """Toggle video recording on/off."""
@@ -911,9 +956,14 @@ class GoProManualTestGUI(QMainWindow):
             if not self.gopro_controller:
                 self.gopro_controller = GoProController()
                 self.gopro_controller.connect()
-                
-            self.recording_btn.setEnabled(False)
-            
+
+            # Immediately update UI to reflect the operation
+            self.recording_active = True
+            self.recording_btn.setText("Stop Recording")
+            self.recording_btn.setProperty("class", "destructive")
+            self.recording_btn.style().unpolish(self.recording_btn)
+            self.recording_btn.style().polish(self.recording_btn)
+
             # Run recording start in background thread
             def run_start_recording():
                 try:
@@ -921,9 +971,9 @@ class GoProManualTestGUI(QMainWindow):
                     QTimer.singleShot(0, lambda: self.on_recording_started())
                 except Exception as e:
                     QTimer.singleShot(0, lambda: self.on_recording_failed(str(e)))
-            
+
             threading.Thread(target=run_start_recording, daemon=True).start()
-            
+
         except Exception as e:
             self.on_recording_failed(str(e))
     
@@ -932,9 +982,14 @@ class GoProManualTestGUI(QMainWindow):
         try:
             if not self.gopro_controller:
                 return
-                
-            self.recording_btn.setEnabled(False)
-            
+
+            # Immediately update UI to reflect the operation
+            self.recording_active = False
+            self.recording_btn.setText("Start Recording")
+            self.recording_btn.setProperty("class", "")
+            self.recording_btn.style().unpolish(self.recording_btn)
+            self.recording_btn.style().polish(self.recording_btn)
+
             # Run recording stop in background thread
             def run_stop_recording():
                 try:
@@ -942,30 +997,40 @@ class GoProManualTestGUI(QMainWindow):
                     QTimer.singleShot(0, lambda: self.on_recording_stopped())
                 except Exception as e:
                     QTimer.singleShot(0, lambda: self.on_recording_failed(str(e)))
-            
+
             threading.Thread(target=run_stop_recording, daemon=True).start()
-            
+
         except Exception as e:
             self.on_recording_failed(str(e))
     
     def on_recording_started(self):
         """Handle successful recording start."""
-        self.recording_active = True
-        self.recording_btn.setText("Stop Recording")
-        self.recording_btn.setStyleSheet("background-color: #ff4444; color: white; font-weight: bold;")
-        self.recording_btn.setEnabled(True)
-    
+        self.add_log("success", "Recording started")
+
     def on_recording_stopped(self):
         """Handle successful recording stop."""
-        self.recording_active = False
-        self.recording_btn.setText("Start Recording")
-        self.recording_btn.setStyleSheet("")  # Reset to default style
-        self.recording_btn.setEnabled(True)
-    
+        self.add_log("success", "Recording stopped")
+
     def on_recording_failed(self, error_message):
         """Handle failed recording operation."""
+        # Revert UI state since operation failed
+        if self.recording_active:
+            # Was trying to stop, revert to recording state
+            self.recording_btn.setText("Stop Recording")
+            self.recording_btn.setProperty("class", "destructive")
+        else:
+            # Was trying to start, revert to stopped state
+            self.recording_btn.setText("Start Recording")
+            self.recording_btn.setProperty("class", "")
+
+        self.recording_btn.style().unpolish(self.recording_btn)
+        self.recording_btn.style().polish(self.recording_btn)
+
+        # Reset internal state
+        self.recording_active = not self.recording_active
+
+        self.add_log("error", f"Recording operation failed: {error_message}")
         self.show_error_popup(f"Recording operation failed: {error_message}")
-        self.recording_btn.setEnabled(True)
     
     def get_file_list(self):
         """Get list of files from GoPro."""
