@@ -1,0 +1,868 @@
+"""
+EDGE Application GUI
+
+A PySide6 GUI application for manually interacting with the BearVision EDGE device.
+Provides real-time monitoring of detection status, video preview, and event logging.
+Based on the React mock-up design from temp/EDGE Application GUI Design/.
+
+Features:
+- Real-time video preview with YOLO detection overlays
+- Status indicators for system state (Active, Hindsight Mode, Recording, Preview)
+- Event log with timestamped messages
+- Dark theme interface
+- Manual controls for EDGE device functionality
+"""
+
+import sys
+import os
+import threading
+import cv2
+import numpy as np
+import json
+import asyncio
+import logging
+from pathlib import Path
+from datetime import datetime
+from typing import List, Dict, Tuple, Optional
+from dataclasses import dataclass
+from enum import Enum
+
+from PySide6.QtWidgets import (
+    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
+    QLabel, QPushButton, QFrame, QTextEdit, QScrollArea, QGridLayout,
+    QGroupBox, QSplitter, QListWidget, QListWidgetItem, QSizePolicy,
+    QProgressBar, QMenuBar, QFileDialog, QMessageBox, QSpacerItem
+)
+from PySide6.QtCore import Qt, QTimer, Signal, QThread, QSize
+from PySide6.QtGui import QPixmap, QImage, QFont, QAction, QIcon, QColor, QPalette, QPainter, QPen
+
+# Add module paths
+MODULE_DIR = Path(__file__).resolve().parent.parent / "code" / "modules"
+APP_DIR = Path(__file__).resolve().parent.parent / "code" / "Application"
+sys.path.append(str(MODULE_DIR))
+sys.path.append(str(APP_DIR))
+
+# Import EDGE application modules
+try:
+    from ConfigurationHandler import ConfigurationHandler
+    from GoProController import GoProController
+    import edge_main
+    EDGE_AVAILABLE = True
+except ImportError as e:
+    logging.warning(f"EDGE modules not available: {e}")
+    EDGE_AVAILABLE = False
+
+
+class EventType(Enum):
+    """Event types for logging."""
+    INFO = "info"
+    WARNING = "warning"
+    ERROR = "error"
+    SUCCESS = "success"
+
+
+@dataclass
+class DetectionBox:
+    """YOLO detection bounding box."""
+    id: str
+    x: float  # Percentage
+    y: float  # Percentage
+    width: float  # Percentage
+    height: float  # Percentage
+    label: str
+    confidence: float = 0.0
+
+
+@dataclass
+class Event:
+    """Event log entry."""
+    id: str
+    timestamp: str
+    type: EventType
+    message: str
+
+
+@dataclass
+class StatusIndicators:
+    """System status indicators."""
+    active: bool = False
+    hindsight_mode: bool = False
+    recording: bool = False
+    preview: bool = False
+
+
+class EDGEBackend(QThread):
+    """Backend thread for EDGE application integration."""
+
+    # Signals for communicating with GUI
+    motion_detected = Signal()
+    hindsight_triggered = Signal()
+    status_changed = Signal(StatusIndicators)
+    log_event = Signal(EventType, str)
+    preview_frame = Signal(np.ndarray)
+
+    def __init__(self):
+        super().__init__()
+        self.gopro_controller: Optional[GoProController] = None
+        self.edge_threads: List[threading.Thread] = []
+        self.motion_event = asyncio.Event()
+        self.running = False
+        self.status = StatusIndicators()
+
+    def initialize_edge(self):
+        """Initialize EDGE system."""
+        if not EDGE_AVAILABLE:
+            self.log_event.emit(EventType.ERROR, "EDGE modules not available")
+            return False
+
+        try:
+            # Load configuration
+            cfg_path = Path(__file__).resolve().parents[1] / "config.ini"
+            ConfigurationHandler.read_config_file(str(cfg_path))
+            self.log_event.emit(EventType.SUCCESS, f"Loaded configuration from {cfg_path}")
+
+            # Initialize GoPro
+            self.gopro_controller = GoProController()
+            self.log_event.emit(EventType.INFO, "Initializing GoPro connection...")
+
+            return True
+        except Exception as e:
+            self.log_event.emit(EventType.ERROR, f"Failed to initialize EDGE: {str(e)}")
+            return False
+
+    def connect_gopro(self):
+        """Connect to GoPro camera."""
+        if not self.gopro_controller:
+            return False
+
+        try:
+            self.gopro_controller.connect()
+            self.gopro_controller.configure()
+            self.log_event.emit(EventType.SUCCESS, "GoPro connected and configured")
+            self.status.active = True
+            self.status_changed.emit(self.status)
+            return True
+        except Exception as e:
+            self.log_event.emit(EventType.ERROR, f"Failed to connect GoPro: {str(e)}")
+            return False
+
+    def start_preview(self):
+        """Start GoPro preview."""
+        if not self.gopro_controller:
+            return False
+
+        try:
+            self.gopro_controller.start_preview()
+            self.log_event.emit(EventType.SUCCESS, "Preview started")
+            self.status.preview = True
+            self.status_changed.emit(self.status)
+            return True
+        except Exception as e:
+            self.log_event.emit(EventType.ERROR, f"Failed to start preview: {str(e)}")
+            return False
+
+    def stop_preview(self):
+        """Stop GoPro preview."""
+        if not self.gopro_controller:
+            return False
+
+        try:
+            self.gopro_controller.stop_preview()
+            self.log_event.emit(EventType.INFO, "Preview stopped")
+            self.status.preview = False
+            self.status_changed.emit(self.status)
+            return True
+        except Exception as e:
+            self.log_event.emit(EventType.ERROR, f"Failed to stop preview: {str(e)}")
+            return False
+
+    def start_edge_processing(self):
+        """Start EDGE processing threads."""
+        if not EDGE_AVAILABLE:
+            return False
+
+        try:
+            # Start EDGE main threads
+            self.edge_threads = edge_main.main(self.gopro_controller)
+            self.log_event.emit(EventType.SUCCESS, "EDGE processing started")
+            self.status.recording = True
+            self.status_changed.emit(self.status)
+            self.running = True
+            return True
+        except Exception as e:
+            self.log_event.emit(EventType.ERROR, f"Failed to start EDGE processing: {str(e)}")
+            return False
+
+    def trigger_hindsight(self):
+        """Manually trigger hindsight clip."""
+        if self.gopro_controller:
+            try:
+                self.gopro_controller.start_hindsight_clip()
+                self.log_event.emit(EventType.SUCCESS, "Hindsight clip triggered manually")
+                self.hindsight_triggered.emit()
+                self.status.hindsight_mode = True
+                self.status_changed.emit(self.status)
+            except Exception as e:
+                self.log_event.emit(EventType.ERROR, f"Failed to trigger hindsight: {str(e)}")
+
+    def stop_edge(self):
+        """Stop EDGE processing."""
+        self.running = False
+        if self.gopro_controller:
+            try:
+                self.gopro_controller.disconnect()
+                self.log_event.emit(EventType.INFO, "GoPro disconnected")
+            except Exception as e:
+                self.log_event.emit(EventType.WARNING, f"Error disconnecting GoPro: {str(e)}")
+
+        self.status = StatusIndicators()
+        self.status_changed.emit(self.status)
+
+    def run(self):
+        """Main backend thread loop."""
+        # Simulate periodic status updates when running
+        while self.running:
+            self.msleep(1000)  # Sleep for 1 second
+
+            # Simulate motion detection
+            if self.status.active and self.status.preview:
+                import random
+                if random.random() < 0.1:  # 10% chance per second
+                    self.motion_detected.emit()
+                    self.log_event.emit(EventType.INFO, "Motion detected in preview stream")
+
+
+class StatusBar(QWidget):
+    """Top status bar with logo and dynamic status message."""
+
+    def __init__(self):
+        super().__init__()
+        self.setup_ui()
+
+    def setup_ui(self):
+        """Setup the status bar UI."""
+        layout = QHBoxLayout()
+        layout.setContentsMargins(20, 10, 20, 10)
+
+        # Left side - Logo and title
+        left_layout = QHBoxLayout()
+
+        # Logo placeholder (in real implementation, load actual logo)
+        logo_label = QLabel("🐻")  # Bear emoji as placeholder
+        logo_label.setStyleSheet("font-size: 32px;")
+        left_layout.addWidget(logo_label)
+
+        title_label = QLabel("EDGE Application")
+        title_label.setStyleSheet("font-size: 18px; font-weight: bold; color: white; margin-left: 10px;")
+        left_layout.addWidget(title_label)
+
+        # Right side - Status message
+        self.status_label = QLabel("Initializing...")
+        self.status_label.setStyleSheet("""
+            background-color: #374151;
+            color: white;
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-weight: bold;
+        """)
+
+        layout.addLayout(left_layout)
+        layout.addStretch()
+        layout.addWidget(self.status_label)
+
+        self.setLayout(layout)
+        self.setStyleSheet("background-color: #1f2937; border-bottom: 1px solid #374151;")
+
+    def update_status(self, message: str):
+        """Update the status message."""
+        self.status_label.setText(message)
+
+
+class PreviewArea(QWidget):
+    """Video preview area with YOLO detection overlays."""
+
+    def __init__(self):
+        super().__init__()
+        self.detections: List[DetectionBox] = []
+        self.current_image: Optional[QImage] = None
+        self.setup_ui()
+
+    def setup_ui(self):
+        """Setup the preview area UI."""
+        layout = QVBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
+
+        self.image_label = QLabel()
+        self.image_label.setMinimumSize(640, 480)
+        self.image_label.setStyleSheet("""
+            background-color: #374151;
+            border: 2px solid #4b5563;
+            border-radius: 8px;
+        """)
+        self.image_label.setAlignment(Qt.AlignCenter)
+        self.image_label.setText("No Preview Available")
+        self.image_label.setScaledContents(True)
+
+        layout.addWidget(self.image_label)
+        self.setLayout(layout)
+
+    def update_image(self, image: np.ndarray):
+        """Update the preview image."""
+        if image is None:
+            return
+
+        # Convert BGR to RGB
+        rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        height, width, channel = rgb_image.shape
+        bytes_per_line = 3 * width
+
+        q_image = QImage(rgb_image.data, width, height, bytes_per_line, QImage.Format_RGB888)
+        self.current_image = q_image
+
+        # Draw detection boxes
+        self.draw_detections()
+
+    def draw_detections(self):
+        """Draw YOLO detection boxes on the image."""
+        if self.current_image is None:
+            return
+
+        pixmap = QPixmap.fromImage(self.current_image)
+
+        if self.detections:
+            painter = QPainter(pixmap)
+            pen = QPen(QColor(34, 197, 94), 3)  # Green color
+            painter.setPen(pen)
+            painter.setFont(QFont("Arial", 12, QFont.Bold))
+
+            img_width = pixmap.width()
+            img_height = pixmap.height()
+
+            for detection in self.detections:
+                # Convert percentage to actual coordinates
+                x = int(detection.x * img_width / 100)
+                y = int(detection.y * img_height / 100)
+                w = int(detection.width * img_width / 100)
+                h = int(detection.height * img_height / 100)
+
+                # Draw bounding box
+                painter.drawRect(x, y, w, h)
+
+                # Draw label
+                label_text = f"{detection.label}"
+                if detection.confidence > 0:
+                    label_text += f" ({detection.confidence:.2f})"
+
+                label_rect = painter.fontMetrics().boundingRect(label_text)
+                label_bg_rect = label_rect.adjusted(-4, -2, 4, 2)
+                label_bg_rect.translate(x, y - label_rect.height() - 5)
+
+                painter.fillRect(label_bg_rect, QColor(34, 197, 94))
+                painter.setPen(QPen(QColor(255, 255, 255)))
+                painter.drawText(label_bg_rect, Qt.AlignCenter, label_text)
+                painter.setPen(pen)
+
+            painter.end()
+
+        self.image_label.setPixmap(pixmap)
+
+    def update_detections(self, detections: List[DetectionBox]):
+        """Update detection boxes."""
+        self.detections = detections
+        self.draw_detections()
+
+
+class IndicatorWidget(QWidget):
+    """Individual status indicator widget."""
+
+    def __init__(self, label: str, icon: str, active: bool = False):
+        super().__init__()
+        self.label = label
+        self.icon = icon
+        self.active = active
+        self.setup_ui()
+
+    def setup_ui(self):
+        """Setup the indicator UI."""
+        layout = QHBoxLayout()
+        layout.setContentsMargins(5, 5, 5, 5)
+
+        # Icon
+        self.icon_label = QLabel(self.icon)
+        self.icon_label.setFixedSize(32, 32)
+        self.icon_label.setAlignment(Qt.AlignCenter)
+        self.update_icon_style()
+
+        # Label and status
+        text_layout = QVBoxLayout()
+        text_layout.setSpacing(2)
+
+        self.label_text = QLabel(self.label)
+        self.label_text.setStyleSheet("color: white; font-weight: bold; font-size: 12px;")
+
+        self.status_text = QLabel("OFF")
+        self.update_status_style()
+
+        text_layout.addWidget(self.label_text)
+        text_layout.addWidget(self.status_text)
+
+        layout.addWidget(self.icon_label)
+        layout.addLayout(text_layout)
+        layout.addStretch()
+
+        self.setLayout(layout)
+
+    def update_icon_style(self):
+        """Update icon styling based on active state."""
+        bg_color = "#22c55e" if self.active else "#ef4444"  # Green or Red
+        self.icon_label.setStyleSheet(f"""
+            background-color: {bg_color};
+            color: white;
+            border-radius: 16px;
+            font-size: 16px;
+            font-weight: bold;
+        """)
+
+    def update_status_style(self):
+        """Update status text styling."""
+        color = "#22c55e" if self.active else "#ef4444"  # Green or Red
+        text = "ON" if self.active else "OFF"
+        self.status_text.setText(text)
+        self.status_text.setStyleSheet(f"color: {color}; font-size: 10px; font-weight: bold;")
+
+    def set_active(self, active: bool):
+        """Set the active state."""
+        self.active = active
+        self.update_icon_style()
+        self.update_status_style()
+
+
+class IndicatorsPanel(QWidget):
+    """Status indicators panel."""
+
+    def __init__(self):
+        super().__init__()
+        self.indicators: Dict[str, IndicatorWidget] = {}
+        self.setup_ui()
+
+    def setup_ui(self):
+        """Setup the indicators panel UI."""
+        layout = QVBoxLayout()
+        layout.setContentsMargins(15, 15, 15, 15)
+        layout.setSpacing(10)
+
+        title = QLabel("Status Indicators")
+        title.setStyleSheet("color: white; font-size: 16px; font-weight: bold; margin-bottom: 10px;")
+        layout.addWidget(title)
+
+        # Create indicators
+        indicators_data = [
+            ("active", "Active", "⚡"),
+            ("hindsight", "Hindsight Mode", "👁"),
+            ("recording", "Recording", "🎥"),
+            ("preview", "Preview", "🖥")
+        ]
+
+        for key, label, icon in indicators_data:
+            indicator = IndicatorWidget(label, icon)
+            self.indicators[key] = indicator
+            layout.addWidget(indicator)
+
+        layout.addStretch()
+
+        self.setLayout(layout)
+        self.setStyleSheet("""
+            background-color: #374151;
+            border-radius: 8px;
+            border: 1px solid #4b5563;
+        """)
+        self.setFixedWidth(250)
+
+    def update_indicators(self, status: StatusIndicators):
+        """Update all indicators."""
+        self.indicators["active"].set_active(status.active)
+        self.indicators["hindsight"].set_active(status.hindsight_mode)
+        self.indicators["recording"].set_active(status.recording)
+        self.indicators["preview"].set_active(status.preview)
+
+
+class EventList(QWidget):
+    """Event log list widget."""
+
+    def __init__(self):
+        super().__init__()
+        self.events: List[Event] = []
+        self.setup_ui()
+
+    def setup_ui(self):
+        """Setup the event list UI."""
+        layout = QVBoxLayout()
+        layout.setContentsMargins(15, 15, 15, 15)
+
+        title = QLabel("Event Log")
+        title.setStyleSheet("color: white; font-size: 16px; font-weight: bold; margin-bottom: 10px;")
+        layout.addWidget(title)
+
+        self.text_area = QTextEdit()
+        self.text_area.setReadOnly(True)
+        self.text_area.setStyleSheet("""
+            background-color: #1f2937;
+            color: white;
+            border: 1px solid #4b5563;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 11px;
+            padding: 5px;
+        """)
+        layout.addWidget(self.text_area)
+
+        self.setLayout(layout)
+        self.setStyleSheet("""
+            background-color: #374151;
+            border-radius: 8px;
+            border: 1px solid #4b5563;
+        """)
+
+    def add_event(self, event: Event):
+        """Add a new event to the log."""
+        self.events.append(event)
+
+        # Color mapping
+        color_map = {
+            EventType.INFO: "#60a5fa",      # Blue
+            EventType.WARNING: "#fbbf24",   # Yellow
+            EventType.ERROR: "#f87171",     # Red
+            EventType.SUCCESS: "#34d399"    # Green
+        }
+
+        type_labels = {
+            EventType.INFO: "[INFO]",
+            EventType.WARNING: "[WARN]",
+            EventType.ERROR: "[ERROR]",
+            EventType.SUCCESS: "[SUCCESS]"
+        }
+
+        color = color_map.get(event.type, "#60a5fa")
+        type_label = type_labels.get(event.type, "[INFO]")
+
+        # Format event line
+        event_html = f'<span style="color: #9ca3af;">{event.timestamp}</span> <span style="color: {color};">{type_label}</span> <span style="color: white;">{event.message}</span>'
+
+        self.text_area.append(event_html)
+
+        # Scroll to bottom
+        scrollbar = self.text_area.verticalScrollBar()
+        scrollbar.setValue(scrollbar.maximum())
+
+
+class EDGEMainWindow(QMainWindow):
+    """Main EDGE application window."""
+
+    def __init__(self):
+        super().__init__()
+        self.status_indicators = StatusIndicators()
+        self.backend = EDGEBackend()
+        self.setup_ui()
+        self.setup_backend_connections()
+        self.setup_demo_data()
+
+        # Start backend thread
+        self.backend.start()
+
+        # Keep some demo simulation for fallback
+        self.start_demo_simulation()
+
+    def setup_ui(self):
+        """Setup the main window UI."""
+        self.setWindowTitle("BearVision EDGE Application")
+        self.setMinimumSize(1200, 800)
+
+        # Set dark theme
+        self.setStyleSheet("""
+            QMainWindow {
+                background-color: #111827;
+                color: white;
+            }
+        """)
+
+        # Create main widget
+        main_widget = QWidget()
+        self.setCentralWidget(main_widget)
+
+        # Main layout
+        main_layout = QVBoxLayout()
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+
+        # Status bar
+        self.status_bar = StatusBar()
+        main_layout.addWidget(self.status_bar)
+
+        # Content area
+        content_layout = QHBoxLayout()
+        content_layout.setContentsMargins(20, 20, 20, 20)
+        content_layout.setSpacing(20)
+
+        # Left side - Preview area
+        self.preview_area = PreviewArea()
+        content_layout.addWidget(self.preview_area, 2)
+
+        # Right side - Indicators and events
+        right_layout = QVBoxLayout()
+        right_layout.setSpacing(20)
+
+        self.indicators_panel = IndicatorsPanel()
+        right_layout.addWidget(self.indicators_panel)
+
+        self.event_list = EventList()
+        right_layout.addWidget(self.event_list, 1)
+
+        content_layout.addLayout(right_layout, 1)
+
+        main_layout.addLayout(content_layout)
+        main_widget.setLayout(main_layout)
+
+        # Setup menu bar
+        self.setup_menu_bar()
+
+    def setup_backend_connections(self):
+        """Setup connections between backend and GUI."""
+        # Connect backend signals to GUI updates
+        self.backend.log_event.connect(self.handle_backend_log_event)
+        self.backend.status_changed.connect(self.handle_status_changed)
+        self.backend.motion_detected.connect(self.handle_motion_detected)
+        self.backend.hindsight_triggered.connect(self.handle_hindsight_triggered)
+        self.backend.preview_frame.connect(self.handle_preview_frame)
+
+    def handle_backend_log_event(self, event_type: EventType, message: str):
+        """Handle log events from backend."""
+        self.add_log_event(event_type, message)
+
+    def handle_status_changed(self, status: StatusIndicators):
+        """Handle status changes from backend."""
+        self.status_indicators = status
+        self.indicators_panel.update_indicators(status)
+
+    def handle_motion_detected(self):
+        """Handle motion detection from backend."""
+        self.status_bar.update_status("Motion detected - analyzing...")
+
+    def handle_hindsight_triggered(self):
+        """Handle hindsight trigger from backend."""
+        self.status_bar.update_status("Hindsight clip triggered")
+
+    def handle_preview_frame(self, frame: np.ndarray):
+        """Handle preview frame from backend."""
+        self.preview_area.update_image(frame)
+
+    def setup_menu_bar(self):
+        """Setup the menu bar."""
+        menubar = self.menuBar()
+
+        # File menu
+        file_menu = menubar.addMenu("File")
+
+        exit_action = QAction("Exit", self)
+        exit_action.triggered.connect(self.close)
+        file_menu.addAction(exit_action)
+
+        # Tools menu
+        tools_menu = menubar.addMenu("Tools")
+
+        init_action = QAction("Initialize EDGE System", self)
+        init_action.triggered.connect(self.initialize_edge_system)
+        tools_menu.addAction(init_action)
+
+        connect_action = QAction("Connect to GoPro", self)
+        connect_action.triggered.connect(self.connect_gopro)
+        tools_menu.addAction(connect_action)
+
+        start_preview_action = QAction("Start Preview", self)
+        start_preview_action.triggered.connect(self.start_preview)
+        tools_menu.addAction(start_preview_action)
+
+        stop_preview_action = QAction("Stop Preview", self)
+        stop_preview_action.triggered.connect(self.stop_preview)
+        tools_menu.addAction(stop_preview_action)
+
+        tools_menu.addSeparator()
+
+        start_edge_action = QAction("Start EDGE Processing", self)
+        start_edge_action.triggered.connect(self.start_edge_processing)
+        tools_menu.addAction(start_edge_action)
+
+        trigger_hindsight_action = QAction("Trigger Hindsight Manually", self)
+        trigger_hindsight_action.triggered.connect(self.trigger_hindsight)
+        tools_menu.addAction(trigger_hindsight_action)
+
+        stop_edge_action = QAction("Stop EDGE Processing", self)
+        stop_edge_action.triggered.connect(self.stop_edge_processing)
+        tools_menu.addAction(stop_edge_action)
+
+    def setup_demo_data(self):
+        """Setup demo data for testing."""
+        # Add some demo events
+        demo_events = [
+            Event("1", "14:32:15", EventType.SUCCESS, "Wakeboarder detected successfully"),
+            Event("2", "14:32:12", EventType.INFO, "YOLO model inference completed"),
+            Event("3", "14:32:10", EventType.INFO, "Processing frame 2847"),
+            Event("4", "14:32:08", EventType.WARNING, "Low confidence detection threshold"),
+            Event("5", "14:32:05", EventType.INFO, "Camera feed initialized"),
+            Event("6", "14:32:03", EventType.SUCCESS, "Application started successfully")
+        ]
+
+        for event in demo_events:
+            self.event_list.add_event(event)
+
+        # Setup demo detections
+        self.demo_detections = [
+            DetectionBox("person-1", 25, 30, 15, 25, "Wakeboarder", 0.85),
+            DetectionBox("person-2", 65, 45, 12, 20, "Person", 0.72)
+        ]
+
+        # Update indicators
+        self.status_indicators.active = True
+        self.status_indicators.preview = True
+        self.status_indicators.recording = True
+        self.indicators_panel.update_indicators(self.status_indicators)
+
+    def start_demo_simulation(self):
+        """Start demo simulation with timers."""
+        # Status message rotation timer
+        self.status_messages = [
+            "Searching for wakeboarder...",
+            "Processing video feed...",
+            "Analyzing motion patterns...",
+            "Wakeboarder detected - tracking...",
+            "Recording highlight reel..."
+        ]
+        self.status_index = 0
+
+        self.status_timer = QTimer()
+        self.status_timer.timeout.connect(self.update_demo_status)
+        self.status_timer.start(3000)  # 3 seconds
+
+        # Indicators update timer
+        self.indicators_timer = QTimer()
+        self.indicators_timer.timeout.connect(self.update_demo_indicators)
+        self.indicators_timer.start(5000)  # 5 seconds
+
+    def update_demo_status(self):
+        """Update demo status message."""
+        message = self.status_messages[self.status_index]
+        self.status_bar.update_status(message)
+        self.status_index = (self.status_index + 1) % len(self.status_messages)
+
+    def update_demo_indicators(self):
+        """Update demo indicators."""
+        self.status_indicators.hindsight_mode = not self.status_indicators.hindsight_mode
+        self.indicators_panel.update_indicators(self.status_indicators)
+
+    def initialize_edge_system(self):
+        """Initialize EDGE system."""
+        self.add_log_event(EventType.INFO, "Initializing EDGE system...")
+        success = self.backend.initialize_edge()
+        if success:
+            self.status_bar.update_status("EDGE system initialized")
+        else:
+            self.status_bar.update_status("EDGE system initialization failed")
+
+    def connect_gopro(self):
+        """Connect to GoPro camera."""
+        self.add_log_event(EventType.INFO, "Connecting to GoPro...")
+        success = self.backend.connect_gopro()
+        if success:
+            self.status_bar.update_status("GoPro connected")
+        else:
+            self.status_bar.update_status("GoPro connection failed")
+
+    def start_preview(self):
+        """Start video preview."""
+        self.add_log_event(EventType.INFO, "Starting preview...")
+        success = self.backend.start_preview()
+        if success:
+            self.status_bar.update_status("Preview active")
+            # Create demo image with detections for preview
+            demo_image = np.zeros((480, 640, 3), dtype=np.uint8)
+            demo_image[:] = (60, 60, 60)  # Dark gray background
+            cv2.putText(demo_image, "GoPro Preview Feed", (180, 240),
+                       cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+            self.preview_area.update_image(demo_image)
+            self.preview_area.update_detections(self.demo_detections)
+        else:
+            self.status_bar.update_status("Preview start failed")
+
+    def stop_preview(self):
+        """Stop video preview."""
+        self.add_log_event(EventType.INFO, "Stopping preview...")
+        success = self.backend.stop_preview()
+        if success:
+            self.status_bar.update_status("Preview stopped")
+        else:
+            self.status_bar.update_status("Preview stop failed")
+
+    def start_edge_processing(self):
+        """Start EDGE processing."""
+        self.add_log_event(EventType.INFO, "Starting EDGE processing...")
+        success = self.backend.start_edge_processing()
+        if success:
+            self.status_bar.update_status("EDGE processing active")
+        else:
+            self.status_bar.update_status("EDGE processing start failed")
+
+    def trigger_hindsight(self):
+        """Trigger hindsight clip manually."""
+        self.add_log_event(EventType.INFO, "Triggering hindsight clip...")
+        self.backend.trigger_hindsight()
+
+    def stop_edge_processing(self):
+        """Stop EDGE processing."""
+        self.add_log_event(EventType.INFO, "Stopping EDGE processing...")
+        self.backend.stop_edge()
+        self.status_bar.update_status("EDGE processing stopped")
+
+    def add_log_event(self, event_type: EventType, message: str):
+        """Add a new event to the log."""
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        event_id = str(len(self.event_list.events) + 1)
+        event = Event(event_id, timestamp, event_type, message)
+        self.event_list.add_event(event)
+
+    def closeEvent(self, event):
+        """Handle application close event."""
+        self.add_log_event(EventType.INFO, "Shutting down EDGE application...")
+
+        # Stop backend processing
+        self.backend.stop_edge()
+
+        # Wait for backend thread to finish
+        if self.backend.isRunning():
+            self.backend.quit()
+            self.backend.wait(3000)  # Wait up to 3 seconds
+
+        # Stop demo timers
+        if hasattr(self, 'status_timer'):
+            self.status_timer.stop()
+        if hasattr(self, 'indicators_timer'):
+            self.indicators_timer.stop()
+
+        event.accept()
+
+
+def main():
+    """Main application entry point."""
+    app = QApplication(sys.argv)
+
+    # Set application properties
+    app.setApplicationName("BearVision EDGE GUI")
+    app.setApplicationVersion("1.0.0")
+
+    # Create and show main window
+    window = EDGEMainWindow()
+    window.show()
+
+    sys.exit(app.exec())
+
+
+if __name__ == "__main__":
+    main()
