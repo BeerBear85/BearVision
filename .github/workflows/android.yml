@@ -31,6 +31,12 @@ jobs:
       uses: gradle/actions/setup-gradle@v3
       with:
         build-root-directory: android_app
-    - name: Build with Gradle
-      run: ./gradlew build
+    - name: Build Debug APK
+      run: ./gradlew assembleDebug
       working-directory: android_app
+
+    - name: Upload APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: app-debug
+        path: android_app/app/build/outputs/apk/debug/*.apk
