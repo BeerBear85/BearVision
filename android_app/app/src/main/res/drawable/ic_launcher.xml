@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- This is a placeholder for the app icon. 
+     For a production build, you would need to:
+     1. Copy logo/Logo.png to this drawable directory as ic_launcher.png
+     2. Or create proper adaptive icons with different densities
+     
+     For now, this references the logo in the project root.
+     To complete the icon setup, run:
+     cp ../../../../../../logo/Logo.png ic_launcher.png
+-->
+<bitmap xmlns:android="http://schemas.android.com/apk/res/android" 
+    android:src="@android:drawable/ic_menu_gallery" />
