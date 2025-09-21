@@ -247,9 +247,23 @@ class StatusBar(QWidget):
         # Left side - Logo and title
         left_layout = QHBoxLayout()
 
-        # Logo placeholder (in real implementation, load actual logo)
-        logo_label = QLabel("🐻")  # Bear emoji as placeholder
-        logo_label.setStyleSheet("font-size: 32px;")
+        # Load and display the actual BearVision logo
+        logo_label = QLabel()
+        try:
+            logo_path = Path(__file__).resolve().parent.parent / "logo" / "Logo.png"
+            logo_pixmap = QPixmap(str(logo_path))
+            if not logo_pixmap.isNull():
+                # Scale logo to appropriate size
+                scaled_logo = logo_pixmap.scaled(32, 32, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                logo_label.setPixmap(scaled_logo)
+            else:
+                logo_label.setText("🐻")  # Fallback to emoji
+                logo_label.setStyleSheet("font-size: 32px;")
+        except Exception as e:
+            logging.warning(f"Failed to load logo: {e}")
+            logo_label.setText("🐻")  # Fallback to emoji
+            logo_label.setStyleSheet("font-size: 32px;")
+
         left_layout.addWidget(logo_label)
 
         title_label = QLabel("EDGE Application")
@@ -259,11 +273,12 @@ class StatusBar(QWidget):
         # Right side - Status message
         self.status_label = QLabel("Initializing...")
         self.status_label.setStyleSheet("""
-            background-color: #374151;
+            background-color: #44403c;
             color: white;
-            padding: 8px 16px;
-            border-radius: 8px;
-            font-weight: bold;
+            padding: 6px 12px;
+            border: 1px solid #57534e;
+            font-weight: 500;
+            font-size: 12px;
         """)
 
         layout.addLayout(left_layout)
@@ -271,7 +286,7 @@ class StatusBar(QWidget):
         layout.addWidget(self.status_label)
 
         self.setLayout(layout)
-        self.setStyleSheet("background-color: #1f2937; border-bottom: 1px solid #374151;")
+        self.setStyleSheet("background-color: #252525; border-bottom: 1px solid #404040;")
 
     def update_status(self, message: str):
         """Update the status message."""
@@ -291,20 +306,42 @@ class PreviewArea(QWidget):
         """Setup the preview area UI."""
         layout = QVBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
 
+        # Preview header
+        header_frame = QFrame()
+        header_frame.setStyleSheet("""
+            background-color: #252525;
+            border-bottom: 1px solid #404040;
+            padding: 8px 12px;
+        """)
+        header_layout = QHBoxLayout(header_frame)
+        header_layout.setContentsMargins(12, 8, 12, 8)
+
+        header_label = QLabel("Video Preview")
+        header_label.setStyleSheet("color: white; font-weight: 500; font-size: 14px;")
+        header_layout.addWidget(header_label)
+        header_layout.addStretch()
+
+        layout.addWidget(header_frame)
+
+        # Main preview area
         self.image_label = QLabel()
         self.image_label.setMinimumSize(640, 480)
         self.image_label.setStyleSheet("""
-            background-color: #374151;
-            border: 2px solid #4b5563;
-            border-radius: 8px;
+            background-color: #000000;
+            border: 1px solid #404040;
         """)
         self.image_label.setAlignment(Qt.AlignCenter)
-        self.image_label.setText("No Preview Available")
+        self.image_label.setText("No preview available")
         self.image_label.setScaledContents(True)
 
         layout.addWidget(self.image_label)
         self.setLayout(layout)
+        self.setStyleSheet("""
+            background-color: #171717;
+            border: 1px solid #404040;
+        """)
 
     def update_image(self, image: np.ndarray):
         """Update the preview image."""
@@ -389,7 +426,7 @@ class IndicatorWidget(QWidget):
 
         # Icon
         self.icon_label = QLabel(self.icon)
-        self.icon_label.setFixedSize(32, 32)
+        self.icon_label.setFixedSize(24, 24)
         self.icon_label.setAlignment(Qt.AlignCenter)
         self.update_icon_style()
 
@@ -398,7 +435,7 @@ class IndicatorWidget(QWidget):
         text_layout.setSpacing(2)
 
         self.label_text = QLabel(self.label)
-        self.label_text.setStyleSheet("color: white; font-weight: bold; font-size: 12px;")
+        self.label_text.setStyleSheet("color: white; font-weight: 500; font-size: 11px;")
 
         self.status_text = QLabel("OFF")
         self.update_status_style()
@@ -418,8 +455,8 @@ class IndicatorWidget(QWidget):
         self.icon_label.setStyleSheet(f"""
             background-color: {bg_color};
             color: white;
-            border-radius: 16px;
-            font-size: 16px;
+            border: 1px solid #404040;
+            font-size: 12px;
             font-weight: bold;
         """)
 
@@ -428,7 +465,7 @@ class IndicatorWidget(QWidget):
         color = "#22c55e" if self.active else "#ef4444"  # Green or Red
         text = "ON" if self.active else "OFF"
         self.status_text.setText(text)
-        self.status_text.setStyleSheet(f"color: {color}; font-size: 10px; font-weight: bold;")
+        self.status_text.setStyleSheet(f"color: {color}; font-size: 9px; font-weight: bold;")
 
     def set_active(self, active: bool):
         """Set the active state."""
@@ -448,12 +485,31 @@ class IndicatorsPanel(QWidget):
     def setup_ui(self):
         """Setup the indicators panel UI."""
         layout = QVBoxLayout()
-        layout.setContentsMargins(15, 15, 15, 15)
-        layout.setSpacing(10)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
+        # Panel header
+        header_frame = QFrame()
+        header_frame.setStyleSheet("""
+            background-color: #252525;
+            border-bottom: 1px solid #404040;
+            padding: 8px 12px;
+        """)
+        header_layout = QHBoxLayout(header_frame)
+        header_layout.setContentsMargins(12, 8, 12, 8)
 
         title = QLabel("Status Indicators")
-        title.setStyleSheet("color: white; font-size: 16px; font-weight: bold; margin-bottom: 10px;")
-        layout.addWidget(title)
+        title.setStyleSheet("color: white; font-weight: 500; font-size: 14px;")
+        header_layout.addWidget(title)
+        header_layout.addStretch()
+
+        layout.addWidget(header_frame)
+
+        # Content area
+        content_widget = QWidget()
+        content_layout = QVBoxLayout(content_widget)
+        content_layout.setContentsMargins(12, 12, 12, 12)
+        content_layout.setSpacing(12)
 
         # Create indicators
         indicators_data = [
@@ -466,17 +522,16 @@ class IndicatorsPanel(QWidget):
         for key, label, icon in indicators_data:
             indicator = IndicatorWidget(label, icon)
             self.indicators[key] = indicator
-            layout.addWidget(indicator)
+            content_layout.addWidget(indicator)
 
-        layout.addStretch()
+        content_layout.addStretch()
+        layout.addWidget(content_widget)
 
         self.setLayout(layout)
         self.setStyleSheet("""
-            background-color: #374151;
-            border-radius: 8px;
-            border: 1px solid #4b5563;
+            background-color: #252525;
+            border: 1px solid #404040;
         """)
-        self.setFixedWidth(250)
 
     def update_indicators(self, status: StatusIndicators):
         """Update all indicators."""
@@ -497,30 +552,42 @@ class EventList(QWidget):
     def setup_ui(self):
         """Setup the event list UI."""
         layout = QVBoxLayout()
-        layout.setContentsMargins(15, 15, 15, 15)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
+        # Panel header
+        header_frame = QFrame()
+        header_frame.setStyleSheet("""
+            background-color: #252525;
+            border-bottom: 1px solid #404040;
+            padding: 8px 12px;
+        """)
+        header_layout = QHBoxLayout(header_frame)
+        header_layout.setContentsMargins(12, 8, 12, 8)
 
         title = QLabel("Event Log")
-        title.setStyleSheet("color: white; font-size: 16px; font-weight: bold; margin-bottom: 10px;")
-        layout.addWidget(title)
+        title.setStyleSheet("color: white; font-weight: 500; font-size: 14px;")
+        header_layout.addWidget(title)
+        header_layout.addStretch()
+
+        layout.addWidget(header_frame)
 
         self.text_area = QTextEdit()
         self.text_area.setReadOnly(True)
         self.text_area.setStyleSheet("""
-            background-color: #1f2937;
+            background-color: #252525;
             color: white;
-            border: 1px solid #4b5563;
-            border-radius: 4px;
+            border: none;
             font-family: 'Courier New', monospace;
-            font-size: 11px;
-            padding: 5px;
+            font-size: 10px;
+            padding: 8px;
         """)
         layout.addWidget(self.text_area)
 
         self.setLayout(layout)
         self.setStyleSheet("""
-            background-color: #374151;
-            border-radius: 8px;
-            border: 1px solid #4b5563;
+            background-color: #252525;
+            border: 1px solid #404040;
         """)
 
     def add_event(self, event: Event):
@@ -545,8 +612,8 @@ class EventList(QWidget):
         color = color_map.get(event.type, "#60a5fa")
         type_label = type_labels.get(event.type, "[INFO]")
 
-        # Format event line
-        event_html = f'<span style="color: #9ca3af;">{event.timestamp}</span> <span style="color: {color};">{type_label}</span> <span style="color: white;">{event.message}</span>'
+        # Format event line with better spacing like the mockup
+        event_html = f'<span style="color: #9ca3af; font-size: 10px;">{event.timestamp}</span>&nbsp;&nbsp;<span style="color: {color}; font-size: 10px;">{type_label}</span>&nbsp;&nbsp;<span style="color: white; font-size: 10px;">{event.message}</span>'
 
         self.text_area.append(event_html)
 
@@ -577,10 +644,10 @@ class EDGEMainWindow(QMainWindow):
         self.setWindowTitle("BearVision EDGE Application")
         self.setMinimumSize(1200, 800)
 
-        # Set dark theme
+        # Set dark theme to match mockup
         self.setStyleSheet("""
             QMainWindow {
-                background-color: #111827;
+                background-color: #252525;
                 color: white;
             }
         """)
@@ -594,30 +661,33 @@ class EDGEMainWindow(QMainWindow):
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
 
-        # Status bar
+        # Status bar with fixed height (like mockup)
         self.status_bar = StatusBar()
+        self.status_bar.setFixedHeight(64)  # Fixed height like in mockup
         main_layout.addWidget(self.status_bar)
 
-        # Content area
+        # Content area with 4-column grid layout (3:1 ratio like mockup)
         content_layout = QHBoxLayout()
-        content_layout.setContentsMargins(20, 20, 20, 20)
-        content_layout.setSpacing(20)
+        content_layout.setContentsMargins(4, 4, 4, 4)
+        content_layout.setSpacing(4)
 
-        # Left side - Preview area
+        # Left side - Preview area (takes 3/4 of space)
         self.preview_area = PreviewArea()
-        content_layout.addWidget(self.preview_area, 2)
+        content_layout.addWidget(self.preview_area, 3)
 
-        # Right side - Indicators and events
+        # Right side - Indicators and events (takes 1/4 of space)
         right_layout = QVBoxLayout()
-        right_layout.setSpacing(20)
+        right_layout.setSpacing(4)
 
         self.indicators_panel = IndicatorsPanel()
-        right_layout.addWidget(self.indicators_panel)
+        right_layout.addWidget(self.indicators_panel, 1)
 
         self.event_list = EventList()
         right_layout.addWidget(self.event_list, 1)
 
-        content_layout.addLayout(right_layout, 1)
+        right_widget = QWidget()
+        right_widget.setLayout(right_layout)
+        content_layout.addWidget(right_widget, 1)
 
         main_layout.addLayout(content_layout)
         main_widget.setLayout(main_layout)
