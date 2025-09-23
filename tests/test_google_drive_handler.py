@@ -1,3 +1,14 @@
+"""
+Unit tests for GoogleDriveHandler using mocked Google Drive API.
+
+This test file focuses on testing the core upload/download/delete functionality
+of GoogleDriveHandler using mocks. It does NOT make actual network calls and
+runs quickly as part of the standard test suite.
+
+For actual Google Drive API integration testing, see test_google_drive.py
+For authentication-specific testing, see test_google_drive_authenticate.py
+"""
+
 import sys
 from pathlib import Path
 from unittest import mock

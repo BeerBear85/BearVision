@@ -1,3 +1,15 @@
+"""
+Basic unit tests for BleBeaconHandler functionality.
+
+This test file focuses on core BLE beacon handling functionality including
+advertisement data parsing and discovery callback processing. Tests basic
+sensor data decoding with mocked BLE advertisements.
+
+For extended functionality tests (RSSI-to-distance, full flow), see test_ble_handler_extended.py
+For physical hardware testing, see test_physical_ble.py
+For ringbuffer-specific functionality, see test_ble_ringbuffer.py
+"""
+
 import asyncio
 from types import SimpleNamespace
 from pathlib import Path

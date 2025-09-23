@@ -47,7 +47,7 @@ try:
     from ConfigurationHandler import ConfigurationHandler
     from GoProController import GoProController
     import edge_main
-    from EdgeApplication import EdgeApplication, EdgeStatus, SystemStatus, DetectionResult
+    from edge_application import EdgeApplication, EdgeStatus, SystemStatus, DetectionResult
     EDGE_AVAILABLE = True
 except ImportError as e:
     logging.warning(f"EDGE modules not available: {e}")
@@ -628,15 +628,13 @@ class EDGEMainWindow(QMainWindow):
         super().__init__()
         self.status_indicators = StatusIndicators()
         self.backend = EDGEBackend()
+        self.demo_active = False  # Track demo mode state
         self.setup_ui()
         self.setup_backend_connections()
         self.setup_demo_data()
 
         # Start backend thread
         self.backend.start()
-
-        # Keep some demo simulation for fallback
-        self.start_demo_simulation()
 
     def setup_ui(self):
         """Setup the main window UI."""
@@ -773,6 +771,17 @@ class EDGEMainWindow(QMainWindow):
         stop_edge_action.triggered.connect(self.stop_edge_processing)
         tools_menu.addAction(stop_edge_action)
 
+        # Demo menu
+        demo_menu = menubar.addMenu("Demo")
+
+        start_demo_action = QAction("Start Demo Mode", self)
+        start_demo_action.triggered.connect(self.start_demo_mode)
+        demo_menu.addAction(start_demo_action)
+
+        stop_demo_action = QAction("Stop Demo Mode", self)
+        stop_demo_action.triggered.connect(self.stop_demo_mode)
+        demo_menu.addAction(stop_demo_action)
+
     def setup_demo_data(self):
         """Setup demo data for testing."""
         # Add some demo events
@@ -831,6 +840,25 @@ class EDGEMainWindow(QMainWindow):
         """Update demo indicators."""
         self.status_indicators.hindsight_mode = not self.status_indicators.hindsight_mode
         self.indicators_panel.update_indicators(self.status_indicators)
+
+    def start_demo_mode(self):
+        """Start demo mode manually."""
+        if not self.demo_active:
+            self.demo_active = True
+            self.start_demo_simulation()
+            self.add_log_event(EventType.INFO, "Demo mode started")
+
+    def stop_demo_mode(self):
+        """Stop demo mode manually."""
+        if self.demo_active:
+            self.demo_active = False
+            # Stop demo timers
+            if hasattr(self, 'status_timer'):
+                self.status_timer.stop()
+            if hasattr(self, 'indicators_timer'):
+                self.indicators_timer.stop()
+            self.add_log_event(EventType.INFO, "Demo mode stopped")
+            self.status_bar.update_status("Demo mode stopped")
 
     def initialize_edge_system(self):
         """Initialize EDGE system."""

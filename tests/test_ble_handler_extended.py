@@ -1,3 +1,15 @@
+"""
+Extended tests for BleBeaconHandler functionality.
+
+This test file covers advanced BLE beacon features including RSSI-to-distance
+conversion, acceleration norm calculations, and full-flow end-to-end testing
+with configuration files.
+
+For basic BLE functionality tests, see test_ble_beacon_handler.py
+For physical hardware testing, see test_physical_ble.py
+For ringbuffer-specific functionality, see test_ble_ringbuffer.py
+"""
+
 import asyncio
 from types import SimpleNamespace
 from pathlib import Path

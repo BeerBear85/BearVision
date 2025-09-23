@@ -1,4 +1,13 @@
-"""Tests for the GoogleDriveHandler authentication logic."""
+"""
+Tests for GoogleDriveHandler authentication logic.
+
+This test file focuses specifically on authentication mechanisms including
+service account authentication, OAuth user flow, split environment variables,
+and error handling for missing credentials.
+
+For core functionality testing with mocks, see test_google_drive_handler.py
+For actual Google Drive API integration testing, see test_google_drive.py
+"""
 
 import base64
 import sys

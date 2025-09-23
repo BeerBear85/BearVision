@@ -1,3 +1,14 @@
+"""
+Unit tests for BoxHandler using mocked Box SDK.
+
+This test file focuses on testing the core upload/download/delete functionality
+of BoxHandler using mocks. It does NOT make actual network calls and
+runs quickly as part of the standard test suite.
+
+For actual Box API integration testing, see test_box_drive.py
+For authentication-specific testing, see test_box_authenticate.py
+"""
+
 import sys
 from pathlib import Path
 from unittest import mock

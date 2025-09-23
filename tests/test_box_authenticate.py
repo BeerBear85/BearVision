@@ -1,4 +1,13 @@
-"""Tests for the BoxHandler authentication logic."""
+"""
+Tests for BoxHandler authentication logic.
+
+This test file focuses specifically on authentication mechanisms including
+service account authentication, split environment variables, and error
+handling for missing credentials.
+
+For core functionality testing with mocks, see test_box_handler.py
+For actual Box API integration testing, see test_box_drive.py
+"""
 
 import base64
 import sys

@@ -1,3 +1,16 @@
+"""
+Integration tests for BoxHandler using the actual Box API.
+
+This test file performs real network calls to Box API and is skipped
+by default to avoid network usage and API rate limits. These tests verify
+end-to-end functionality with the actual Box service.
+
+For fast unit testing with mocks, see test_box_handler.py
+For authentication-specific testing, see test_box_authenticate.py
+
+To run these tests, ensure STORAGE_CREDENTIALS_B64 environment variable is set.
+"""
+
 import os
 import sys
 import uuid

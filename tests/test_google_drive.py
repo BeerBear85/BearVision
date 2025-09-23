@@ -1,3 +1,16 @@
+"""
+Integration tests for GoogleDriveHandler using the actual Google Drive API.
+
+This test file performs real network calls to Google Drive API and is skipped
+by default to avoid network usage and API rate limits. These tests verify
+end-to-end functionality with the actual Google Drive service.
+
+For fast unit testing with mocks, see test_google_drive_handler.py
+For authentication-specific testing, see test_google_drive_authenticate.py
+
+To run these tests, ensure STORAGE_CREDENTIALS_B64 environment variable is set.
+"""
+
 import os
 import sys
 import uuid
