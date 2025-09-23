@@ -216,6 +216,44 @@ class EdgeApplication:
             self._log("error", f"Failed to initialize BLE: {str(e)}")
             return False
 
+    def _wait_for_gopro_ready(self, max_retries: int = 10, initial_delay: float = 0.1) -> bool:
+        """
+        Wait for GoPro connection to be fully established.
+
+        Parameters
+        ----------
+        max_retries : int
+            Maximum number of retry attempts
+        initial_delay : float
+            Initial delay in seconds, doubles with each retry
+
+        Returns
+        -------
+        bool
+            True if GoPro is ready, False if timeout
+        """
+        import time
+
+        delay = initial_delay
+        for attempt in range(max_retries):
+            try:
+                # Check if the GoPro has http_settings attribute
+                if hasattr(self.gopro_controller._gopro, 'http_settings'):
+                    self._log("debug", f"GoPro connection ready (attempt {attempt + 1})")
+                    return True
+
+                self._log("debug", f"GoPro not ready, waiting {delay:.1f}s (attempt {attempt + 1}/{max_retries})")
+                time.sleep(delay)
+                delay = min(delay * 2, 2.0)  # Exponential backoff, max 2 seconds
+
+            except Exception as e:
+                self._log("debug", f"Error checking GoPro readiness: {e}")
+                time.sleep(delay)
+                delay = min(delay * 2, 2.0)
+
+        self._log("warning", f"GoPro connection not ready after {max_retries} attempts")
+        return False
+
     def connect_gopro(self) -> bool:
         """
         Connect to GoPro camera.
@@ -229,6 +267,14 @@ class EdgeApplication:
             self._log("info", "Connecting to GoPro...")
             self.gopro_controller = GoProController()
             self.gopro_controller.connect()
+
+            # Wait for connection to be fully established with retry logic
+            self._log("info", "Verifying GoPro connection...")
+            if not self._wait_for_gopro_ready():
+                self._log("error", "GoPro connection not ready after waiting")
+                return False
+
+            self._log("info", "Configuring GoPro settings...")
             self.gopro_controller.configure()
 
             self._update_status(gopro_connected=True)
