@@ -35,6 +35,14 @@
         "program": "${workspaceFolder}/tools/gopro_manual_test_gui.py",
         "console": "integratedTerminal",
         "justMyCode": false
+    },
+    {
+        "name": "Python Debugger: EDGE GUI",
+        "type": "debugpy",
+        "request": "launch",
+        "program": "${workspaceFolder}/tools/edge_gui.py",
+        "console": "integratedTerminal",
+        "justMyCode": false
     }
     ]
 }
