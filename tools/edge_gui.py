@@ -23,7 +23,7 @@ import asyncio
 import logging
 from pathlib import Path
 from datetime import datetime
-from typing import List, Dict, Tuple, Optional
+from typing import List, Dict, Tuple, Optional, Any
 from dataclasses import dataclass
 from enum import Enum
 
@@ -47,6 +47,7 @@ try:
     from ConfigurationHandler import ConfigurationHandler
     from GoProController import GoProController
     import edge_main
+    from EdgeApplication import EdgeApplication, EdgeStatus, SystemStatus, DetectionResult
     EDGE_AVAILABLE = True
 except ImportError as e:
     logging.warning(f"EDGE modules not available: {e}")
@@ -92,144 +93,142 @@ class StatusIndicators:
 
 
 class EDGEBackend(QThread):
-    """Backend thread for EDGE application integration."""
+    """Backend thread for EDGE application integration using EdgeApplication."""
 
     # Signals for communicating with GUI
     motion_detected = Signal()
     hindsight_triggered = Signal()
     status_changed = Signal(StatusIndicators)
+    status_message_changed = Signal(str)
     log_event = Signal(EventType, str)
     preview_frame = Signal(np.ndarray)
 
     def __init__(self):
         super().__init__()
-        self.gopro_controller: Optional[GoProController] = None
-        self.edge_threads: List[threading.Thread] = []
-        self.motion_event = asyncio.Event()
+        self.edge_app: Optional[EdgeApplication] = None
         self.running = False
         self.status = StatusIndicators()
 
+        # Initialize EdgeApplication with callbacks
+        if EDGE_AVAILABLE:
+            self.edge_app = EdgeApplication(
+                status_callback=self._on_status_update,
+                detection_callback=self._on_detection,
+                ble_callback=self._on_ble_data,
+                log_callback=self._on_log
+            )
+
+    def _on_status_update(self, edge_status: SystemStatus):
+        """Handle status updates from EdgeApplication."""
+        # Convert EdgeApplication status to GUI status
+        self.status.active = edge_status.gopro_connected
+        self.status.preview = edge_status.preview_active
+        self.status.recording = edge_status.recording
+        self.status.hindsight_mode = edge_status.hindsight_mode
+
+        # Map EdgeStatus to status bar messages
+        status_messages = {
+            EdgeStatus.INITIALIZING: "Initializing EDGE system...",
+            EdgeStatus.READY: "EDGE system ready",
+            EdgeStatus.ACTIVE: "EDGE system active",
+            EdgeStatus.LOOKING_FOR_WAKEBOARDER: "Looking for wakeboarder",
+            EdgeStatus.MOTION_DETECTED: "Motion detected - analyzing...",
+            EdgeStatus.RECORDING: "Recording highlight clip",
+            EdgeStatus.ERROR: "System error",
+            EdgeStatus.STOPPED: "System stopped"
+        }
+
+        status_message = status_messages.get(edge_status.overall_status, "Unknown status")
+        self.status_message_changed.emit(status_message)
+        self.log_event.emit(EventType.INFO, f"Status: {status_message}")
+
+        self.status_changed.emit(self.status)
+
+    def _on_detection(self, detection: DetectionResult):
+        """Handle detection results from EdgeApplication."""
+        self.motion_detected.emit()
+
+    def _on_ble_data(self, ble_data: Dict[str, Any]):
+        """Handle BLE data from EdgeApplication."""
+        # Log BLE data for now
+        acc = ble_data.get('acc_sensor')
+        if acc:
+            self._on_log("debug", f"BLE: {acc.get_value_string()}")
+
+    def _on_log(self, level: str, message: str):
+        """Handle log messages from EdgeApplication."""
+        level_map = {
+            "info": EventType.INFO,
+            "warning": EventType.WARNING,
+            "error": EventType.ERROR,
+            "debug": EventType.INFO
+        }
+        event_type = level_map.get(level, EventType.INFO)
+        self.log_event.emit(event_type, message)
+
     def initialize_edge(self):
         """Initialize EDGE system."""
-        if not EDGE_AVAILABLE:
+        if not EDGE_AVAILABLE or not self.edge_app:
             self.log_event.emit(EventType.ERROR, "EDGE modules not available")
             return False
 
-        try:
-            # Load configuration
-            cfg_path = Path(__file__).resolve().parents[1] / "config.ini"
-            ConfigurationHandler.read_config_file(str(cfg_path))
-            self.log_event.emit(EventType.SUCCESS, f"Loaded configuration from {cfg_path}")
-
-            # Initialize GoPro
-            self.gopro_controller = GoProController()
-            self.log_event.emit(EventType.INFO, "Initializing GoPro connection...")
-
-            return True
-        except Exception as e:
-            self.log_event.emit(EventType.ERROR, f"Failed to initialize EDGE: {str(e)}")
-            return False
+        return self.edge_app.initialize()
 
     def connect_gopro(self):
         """Connect to GoPro camera."""
-        if not self.gopro_controller:
+        if not self.edge_app:
             return False
 
-        try:
-            self.gopro_controller.connect()
-            self.gopro_controller.configure()
-            self.log_event.emit(EventType.SUCCESS, "GoPro connected and configured")
-            self.status.active = True
-            self.status_changed.emit(self.status)
-            return True
-        except Exception as e:
-            self.log_event.emit(EventType.ERROR, f"Failed to connect GoPro: {str(e)}")
-            return False
+        return self.edge_app.connect_gopro()
 
     def start_preview(self):
         """Start GoPro preview."""
-        if not self.gopro_controller:
+        if not self.edge_app:
             return False
 
-        try:
-            self.gopro_controller.start_preview()
-            self.log_event.emit(EventType.SUCCESS, "Preview started")
-            self.status.preview = True
-            self.status_changed.emit(self.status)
-            return True
-        except Exception as e:
-            self.log_event.emit(EventType.ERROR, f"Failed to start preview: {str(e)}")
-            return False
+        return self.edge_app.start_preview()
 
     def stop_preview(self):
         """Stop GoPro preview."""
-        if not self.gopro_controller:
+        if not self.edge_app:
             return False
 
-        try:
-            self.gopro_controller.stop_preview()
-            self.log_event.emit(EventType.INFO, "Preview stopped")
-            self.status.preview = False
-            self.status_changed.emit(self.status)
-            return True
-        except Exception as e:
-            self.log_event.emit(EventType.ERROR, f"Failed to stop preview: {str(e)}")
-            return False
+        return self.edge_app.stop_preview()
 
     def start_edge_processing(self):
-        """Start EDGE processing threads."""
-        if not EDGE_AVAILABLE:
+        """Start complete EDGE system."""
+        if not self.edge_app:
             return False
 
-        try:
-            # Start EDGE main threads
-            self.edge_threads = edge_main.main(self.gopro_controller)
-            self.log_event.emit(EventType.SUCCESS, "EDGE processing started")
-            self.status.recording = True
-            self.status_changed.emit(self.status)
+        success = self.edge_app.start_system()
+        if success:
             self.running = True
-            return True
-        except Exception as e:
-            self.log_event.emit(EventType.ERROR, f"Failed to start EDGE processing: {str(e)}")
-            return False
+            self.log_event.emit(EventType.SUCCESS, "EDGE system started - Looking for wakeboarder")
+
+        return success
 
     def trigger_hindsight(self):
         """Manually trigger hindsight clip."""
-        if self.gopro_controller:
-            try:
-                self.gopro_controller.start_hindsight_clip()
-                self.log_event.emit(EventType.SUCCESS, "Hindsight clip triggered manually")
-                self.hindsight_triggered.emit()
-                self.status.hindsight_mode = True
-                self.status_changed.emit(self.status)
-            except Exception as e:
-                self.log_event.emit(EventType.ERROR, f"Failed to trigger hindsight: {str(e)}")
+        if not self.edge_app:
+            return False
+
+        success = self.edge_app.trigger_hindsight()
+        if success:
+            self.hindsight_triggered.emit()
+
+        return success
 
     def stop_edge(self):
         """Stop EDGE processing."""
         self.running = False
-        if self.gopro_controller:
-            try:
-                self.gopro_controller.disconnect()
-                self.log_event.emit(EventType.INFO, "GoPro disconnected")
-            except Exception as e:
-                self.log_event.emit(EventType.WARNING, f"Error disconnecting GoPro: {str(e)}")
-
-        self.status = StatusIndicators()
-        self.status_changed.emit(self.status)
+        if self.edge_app:
+            self.edge_app.stop_system()
 
     def run(self):
         """Main backend thread loop."""
-        # Simulate periodic status updates when running
+        # Keep the thread alive and handle any background processing
         while self.running:
             self.msleep(1000)  # Sleep for 1 second
-
-            # Simulate motion detection
-            if self.status.active and self.status.preview:
-                import random
-                if random.random() < 0.1:  # 10% chance per second
-                    self.motion_detected.emit()
-                    self.log_event.emit(EventType.INFO, "Motion detected in preview stream")
 
 
 class StatusBar(QWidget):
@@ -700,6 +699,7 @@ class EDGEMainWindow(QMainWindow):
         # Connect backend signals to GUI updates
         self.backend.log_event.connect(self.handle_backend_log_event)
         self.backend.status_changed.connect(self.handle_status_changed)
+        self.backend.status_message_changed.connect(self.handle_status_message_changed)
         self.backend.motion_detected.connect(self.handle_motion_detected)
         self.backend.hindsight_triggered.connect(self.handle_hindsight_triggered)
         self.backend.preview_frame.connect(self.handle_preview_frame)
@@ -712,6 +712,10 @@ class EDGEMainWindow(QMainWindow):
         """Handle status changes from backend."""
         self.status_indicators = status
         self.indicators_panel.update_indicators(status)
+
+    def handle_status_message_changed(self, message: str):
+        """Handle status message changes from backend."""
+        self.status_bar.update_status(message)
 
     def handle_motion_detected(self):
         """Handle motion detection from backend."""
