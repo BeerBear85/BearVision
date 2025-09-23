@@ -10,3 +10,6 @@ android_app/app/build/
 last_used_config.ini
 
 .claude/settings.local.json
+temp/*
+code/obsolite_junk_box/GPMD2CSV_extract_gopro_sensor_data/gopro2json.exe
+code/obsolite_junk_box/GPMD2CSV_extract_gopro_sensor_data/gpmdinfo.exe
