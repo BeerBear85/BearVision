@@ -1,0 +1,614 @@
+"""
+Edge Application with State Machine Architecture
+
+This module provides a modular and maintainable architecture for the Edge Application,
+centered around a main state machine with supporting threads for asynchronous operations.
+
+The application supports three main states:
+- INITIALIZING: Setup all subsystems
+- SEARCHING_FOR_WAKEBOARDER: Monitor for person detection
+- RECORDING: Actively recording/capturing footage
+
+Background threads handle:
+- BLE tag logging (continuous)
+- Video post-processing (queued)
+- File uploads to cloud storage (queued)
+"""
+
+import logging
+import threading
+import time
+import queue
+from pathlib import Path
+from typing import Optional, Callable, Dict, Any, List
+from dataclasses import dataclass
+from enum import Enum
+import sys
+
+# Add module paths
+MODULE_DIR = Path(__file__).resolve().parents[1] / "modules"
+sys.path.append(str(MODULE_DIR))
+
+from ConfigurationHandler import ConfigurationHandler
+from ble_beacon_handler import BleBeaconHandler
+from GoogleDriveHandler import GoogleDriveHandler
+from BoxHandler import BoxHandler
+from FullClipExtractor import FullClipExtractor
+from TrackerClipExtractor import TrackerClipExtractor
+from EdgeApplication import EdgeApplication, EdgeStatus, SystemStatus, DetectionResult
+
+logger = logging.getLogger(__name__)
+
+
+class ApplicationState(Enum):
+    """Main application states for the state machine."""
+    INITIALIZING = "initializing"
+    SEARCHING_FOR_WAKEBOARDER = "searching_for_wakeboarder"
+    RECORDING = "recording"
+    SHUTDOWN = "shutdown"
+
+
+@dataclass
+class VideoFile:
+    """Represents a video file to be processed."""
+    file_path: Path
+    timestamp: float
+    metadata: Dict[str, Any]
+
+
+@dataclass
+class ProcessedVideo:
+    """Represents a processed video ready for upload."""
+    original_path: Path
+    processed_path: Path
+    metadata: Dict[str, Any]
+    processing_time: float
+
+
+class BLELoggerThread(threading.Thread):
+    """Continuous BLE tag logging thread."""
+
+    def __init__(self, status_callback: Optional[Callable[[str, Any], None]] = None):
+        super().__init__(name="BLELogger", daemon=True)
+        self.ble_handler = BleBeaconHandler()
+        self.status_callback = status_callback
+        self.running = False
+        self.ble_data_queue = queue.Queue()
+
+    def start_logging(self):
+        """Start BLE logging."""
+        self.running = True
+        self.start()
+        logger.info("BLE logging thread started")
+
+    def stop_logging(self):
+        """Stop BLE logging."""
+        self.running = False
+        logger.info("BLE logging thread stopped")
+
+    def run(self):
+        """Main BLE logging loop."""
+        logger.info("BLE logging thread running")
+
+        while self.running:
+            try:
+                # Start BLE scanning for a short duration
+                self.ble_handler.start_scan(timeout=1.0)
+
+                # Process any queued BLE data
+                while not self.ble_data_queue.empty():
+                    try:
+                        ble_data = self.ble_data_queue.get_nowait()
+                        if self.status_callback:
+                            self.status_callback("ble_data", ble_data)
+                        self.ble_data_queue.task_done()
+                    except queue.Empty:
+                        break
+
+                time.sleep(0.1)  # Brief pause between scans
+
+            except Exception as e:
+                logger.error(f"BLE logging error: {e}")
+                time.sleep(1.0)  # Longer pause on error
+
+
+class PostProcessorThread(threading.Thread):
+    """Video post-processing thread."""
+
+    def __init__(self, video_queue: queue.Queue, processed_queue: queue.Queue,
+                 status_callback: Optional[Callable[[str, Any], None]] = None):
+        super().__init__(name="PostProcessor", daemon=True)
+        self.video_queue = video_queue
+        self.processed_queue = processed_queue
+        self.status_callback = status_callback
+        self.running = False
+
+        # Initialize video processors
+        self.full_clip_extractor = FullClipExtractor()
+        self.tracker_clip_extractor = TrackerClipExtractor()
+
+    def start_processing(self):
+        """Start video processing."""
+        self.running = True
+        self.start()
+        logger.info("Video post-processing thread started")
+
+    def stop_processing(self):
+        """Stop video processing."""
+        self.running = False
+        logger.info("Video post-processing thread stopped")
+
+    def run(self):
+        """Main video processing loop."""
+        logger.info("Video post-processing thread running")
+
+        while self.running:
+            try:
+                # Wait for video to process
+                video_file = self.video_queue.get(timeout=1.0)
+
+                if video_file is None:  # Shutdown signal
+                    break
+
+                logger.info(f"Processing video: {video_file.file_path}")
+
+                if self.status_callback:
+                    self.status_callback("processing_started", video_file)
+
+                # Process the video file
+                processed_video = self._process_video(video_file)
+
+                if processed_video:
+                    self.processed_queue.put(processed_video)
+                    logger.info(f"Video processed successfully: {processed_video.processed_path}")
+
+                    if self.status_callback:
+                        self.status_callback("processing_completed", processed_video)
+                else:
+                    logger.error(f"Failed to process video: {video_file.file_path}")
+
+                self.video_queue.task_done()
+
+            except queue.Empty:
+                continue
+            except Exception as e:
+                logger.error(f"Post-processing error: {e}")
+                if not self.video_queue.empty():
+                    self.video_queue.task_done()
+
+    def _process_video(self, video_file: VideoFile) -> Optional[ProcessedVideo]:
+        """Process a single video file."""
+        try:
+            start_time = time.time()
+
+            # Determine processing type based on metadata
+            use_tracker = video_file.metadata.get("use_tracker", False)
+
+            if use_tracker:
+                # Use tracker-based clip extraction
+                processed_path = self._process_with_tracker(video_file)
+            else:
+                # Use full clip extraction
+                processed_path = self._process_full_clip(video_file)
+
+            if processed_path and processed_path.exists():
+                processing_time = time.time() - start_time
+
+                return ProcessedVideo(
+                    original_path=video_file.file_path,
+                    processed_path=processed_path,
+                    metadata=video_file.metadata.copy(),
+                    processing_time=processing_time
+                )
+            else:
+                return None
+
+        except Exception as e:
+            logger.error(f"Error processing video {video_file.file_path}: {e}")
+            return None
+
+    def _process_with_tracker(self, video_file: VideoFile) -> Optional[Path]:
+        """Process video using tracker clip extractor."""
+        # This is a placeholder - actual implementation would depend on
+        # the specific requirements and API of TrackerClipExtractor
+        logger.info(f"Processing with tracker: {video_file.file_path}")
+
+        # For now, return a mock processed path
+        output_dir = video_file.file_path.parent / "processed"
+        output_dir.mkdir(exist_ok=True)
+        output_path = output_dir / f"tracker_{video_file.file_path.name}"
+
+        # TODO: Implement actual tracker processing
+        # self.tracker_clip_extractor.extract_clips_from_list([clip_spec])
+
+        return output_path
+
+    def _process_full_clip(self, video_file: VideoFile) -> Optional[Path]:
+        """Process video using full clip extractor."""
+        logger.info(f"Processing full clip: {video_file.file_path}")
+
+        # For now, return a mock processed path
+        output_dir = video_file.file_path.parent / "processed"
+        output_dir.mkdir(exist_ok=True)
+        output_path = output_dir / f"full_{video_file.file_path.name}"
+
+        # TODO: Implement actual full clip processing
+        # self.full_clip_extractor.extract_clips_from_list([clip_spec])
+
+        return output_path
+
+
+class UploaderThread(threading.Thread):
+    """File upload thread for cloud storage."""
+
+    def __init__(self, processed_queue: queue.Queue,
+                 status_callback: Optional[Callable[[str, Any], None]] = None):
+        super().__init__(name="Uploader", daemon=True)
+        self.processed_queue = processed_queue
+        self.status_callback = status_callback
+        self.running = False
+
+        # Initialize upload handlers
+        try:
+            self.google_drive_handler = GoogleDriveHandler()
+            self.google_drive_available = True
+        except Exception as e:
+            logger.warning(f"Google Drive handler not available: {e}")
+            self.google_drive_handler = None
+            self.google_drive_available = False
+
+        try:
+            self.box_handler = BoxHandler()
+            self.box_available = True
+        except Exception as e:
+            logger.warning(f"Box handler not available: {e}")
+            self.box_handler = None
+            self.box_available = False
+
+    def start_uploading(self):
+        """Start file uploading."""
+        self.running = True
+        self.start()
+        logger.info("File upload thread started")
+
+    def stop_uploading(self):
+        """Stop file uploading."""
+        self.running = False
+        logger.info("File upload thread stopped")
+
+    def run(self):
+        """Main upload loop."""
+        logger.info("File upload thread running")
+
+        while self.running:
+            try:
+                # Wait for processed video to upload
+                processed_video = self.processed_queue.get(timeout=1.0)
+
+                if processed_video is None:  # Shutdown signal
+                    break
+
+                logger.info(f"Uploading video: {processed_video.processed_path}")
+
+                if self.status_callback:
+                    self.status_callback("upload_started", processed_video)
+
+                # Upload the processed video
+                success = self._upload_video(processed_video)
+
+                if success:
+                    logger.info(f"Video uploaded successfully: {processed_video.processed_path}")
+
+                    if self.status_callback:
+                        self.status_callback("upload_completed", processed_video)
+                else:
+                    logger.error(f"Failed to upload video: {processed_video.processed_path}")
+
+                self.processed_queue.task_done()
+
+            except queue.Empty:
+                continue
+            except Exception as e:
+                logger.error(f"Upload error: {e}")
+                if not self.processed_queue.empty():
+                    self.processed_queue.task_done()
+
+    def _upload_video(self, processed_video: ProcessedVideo) -> bool:
+        """Upload a processed video to cloud storage."""
+        try:
+            # Try Google Drive first
+            if self.google_drive_available and self.google_drive_handler:
+                try:
+                    self.google_drive_handler.upload_file(
+                        str(processed_video.processed_path),
+                        processed_video.processed_path.name
+                    )
+                    logger.info(f"Uploaded to Google Drive: {processed_video.processed_path}")
+                    return True
+                except Exception as e:
+                    logger.warning(f"Google Drive upload failed: {e}")
+
+            # Try Box as fallback
+            if self.box_available and self.box_handler:
+                try:
+                    self.box_handler.upload_file(
+                        str(processed_video.processed_path),
+                        processed_video.processed_path.name
+                    )
+                    logger.info(f"Uploaded to Box: {processed_video.processed_path}")
+                    return True
+                except Exception as e:
+                    logger.warning(f"Box upload failed: {e}")
+
+            logger.error("No upload handlers available")
+            return False
+
+        except Exception as e:
+            logger.error(f"Error uploading video {processed_video.processed_path}: {e}")
+            return False
+
+
+class EdgeApplicationStateMachine:
+    """
+    Main Edge Application with state machine architecture.
+
+    Coordinates all edge device functionality through a state machine
+    with supporting background threads for asynchronous operations.
+    """
+
+    def __init__(self, status_callback: Optional[Callable[[ApplicationState, str], None]] = None):
+        """
+        Initialize the Edge Application state machine.
+
+        Parameters
+        ----------
+        status_callback : Callable[[ApplicationState, str], None], optional
+            Callback function for state and status updates
+        """
+        self.status_callback = status_callback
+        self.current_state = ApplicationState.INITIALIZING
+        self.running = False
+
+        # Core EdgeApplication for GoPro/YOLO functionality
+        self.edge_app: Optional[EdgeApplication] = None
+
+        # Background threads
+        self.ble_thread: Optional[BLELoggerThread] = None
+        self.processor_thread: Optional[PostProcessorThread] = None
+        self.uploader_thread: Optional[UploaderThread] = None
+
+        # Inter-thread communication
+        self.video_queue = queue.Queue()
+        self.processed_queue = queue.Queue()
+
+        # State management
+        self.state_lock = threading.Lock()
+        self.shutdown_event = threading.Event()
+
+        # Detection tracking
+        self.last_detection_time = 0
+        self.recording_start_time = 0
+        self.recording_duration = 30.0  # Default recording duration in seconds
+
+    def _log_status(self, message: str):
+        """Log status with callback notification."""
+        logger.info(f"[{self.current_state.value.upper()}] {message}")
+        if self.status_callback:
+            self.status_callback(self.current_state, message)
+
+    def _change_state(self, new_state: ApplicationState):
+        """Change application state with logging."""
+        with self.state_lock:
+            old_state = self.current_state
+            self.current_state = new_state
+            self._log_status(f"State transition: {old_state.value} -> {new_state.value}")
+
+    def _thread_status_callback(self, event_type: str, data: Any):
+        """Handle status updates from background threads."""
+        logger.debug(f"Thread event: {event_type} - {data}")
+
+        if event_type == "ble_data":
+            # Handle BLE data
+            self._log_status(f"BLE data received: {data.get('name', 'Unknown')}")
+
+        elif event_type == "processing_started":
+            self._log_status(f"Started processing: {data.file_path.name}")
+
+        elif event_type == "processing_completed":
+            self._log_status(f"Completed processing: {data.processed_path.name}")
+
+        elif event_type == "upload_started":
+            self._log_status(f"Started upload: {data.processed_path.name}")
+
+        elif event_type == "upload_completed":
+            self._log_status(f"Completed upload: {data.processed_path.name}")
+
+    def _detection_callback(self, detection: DetectionResult):
+        """Handle detection results from EdgeApplication."""
+        self.last_detection_time = time.time()
+
+        if self.current_state == ApplicationState.SEARCHING_FOR_WAKEBOARDER:
+            self._log_status("Wakeboarder detected! Starting recording...")
+            self._change_state(ApplicationState.RECORDING)
+            self.recording_start_time = time.time()
+
+            # Trigger recording in EdgeApplication
+            if self.edge_app:
+                self.edge_app.trigger_hindsight()
+
+    def initialize(self) -> bool:
+        """Initialize all subsystems."""
+        try:
+            self._log_status("Initializing Edge Application...")
+
+            # Initialize core EdgeApplication
+            self.edge_app = EdgeApplication(
+                detection_callback=self._detection_callback,
+                log_callback=self._edge_log_callback
+            )
+
+            if not self.edge_app.initialize():
+                self._log_status("Failed to initialize EdgeApplication")
+                return False
+
+            # Initialize background threads
+            self.ble_thread = BLELoggerThread(status_callback=self._thread_status_callback)
+            self.processor_thread = PostProcessorThread(
+                self.video_queue,
+                self.processed_queue,
+                status_callback=self._thread_status_callback
+            )
+            self.uploader_thread = UploaderThread(
+                self.processed_queue,
+                status_callback=self._thread_status_callback
+            )
+
+            # Start background threads
+            self.ble_thread.start_logging()
+            self.processor_thread.start_processing()
+            self.uploader_thread.start_uploading()
+
+            self._log_status("All subsystems initialized successfully")
+            return True
+
+        except Exception as e:
+            self._log_status(f"Initialization failed: {e}")
+            return False
+
+    def _edge_log_callback(self, level: str, message: str):
+        """Handle log messages from EdgeApplication."""
+        logger.info(f"EdgeApp [{level}]: {message}")
+
+    def start_system(self) -> bool:
+        """Start the complete Edge system."""
+        if not self.initialize():
+            return False
+
+        try:
+            # Start EdgeApplication system
+            if not self.edge_app.start_system():
+                self._log_status("Failed to start EdgeApplication system")
+                return False
+
+            self.running = True
+            self._change_state(ApplicationState.SEARCHING_FOR_WAKEBOARDER)
+
+            return True
+
+        except Exception as e:
+            self._log_status(f"Failed to start system: {e}")
+            return False
+
+    def run(self):
+        """Main state machine loop."""
+        if not self.start_system():
+            return
+
+        self._log_status("Edge Application state machine started")
+
+        try:
+            while self.running and not self.shutdown_event.is_set():
+                current_time = time.time()
+
+                if self.current_state == ApplicationState.SEARCHING_FOR_WAKEBOARDER:
+                    # Continue searching for wakeboarder
+                    time.sleep(0.1)
+
+                elif self.current_state == ApplicationState.RECORDING:
+                    # Check if recording duration has elapsed
+                    if current_time - self.recording_start_time >= self.recording_duration:
+                        self._log_status("Recording completed, returning to search mode")
+
+                        # Create mock video file for processing
+                        video_file = VideoFile(
+                            file_path=Path(f"/tmp/recording_{int(self.recording_start_time)}.mp4"),
+                            timestamp=self.recording_start_time,
+                            metadata={"detection_time": self.last_detection_time}
+                        )
+
+                        # Queue for processing
+                        self.video_queue.put(video_file)
+
+                        self._change_state(ApplicationState.SEARCHING_FOR_WAKEBOARDER)
+                    else:
+                        time.sleep(0.1)
+
+                elif self.current_state == ApplicationState.SHUTDOWN:
+                    break
+
+                else:
+                    time.sleep(0.1)
+
+        except KeyboardInterrupt:
+            self._log_status("Received interrupt signal")
+        except Exception as e:
+            self._log_status(f"State machine error: {e}")
+        finally:
+            self.shutdown()
+
+    def shutdown(self):
+        """Gracefully shutdown all threads and systems."""
+        self._log_status("Initiating graceful shutdown...")
+        self._change_state(ApplicationState.SHUTDOWN)
+        self.running = False
+        self.shutdown_event.set()
+
+        # Stop background threads
+        if self.ble_thread:
+            self.ble_thread.stop_logging()
+
+        if self.processor_thread:
+            self.processor_thread.stop_processing()
+            # Send shutdown signal
+            self.video_queue.put(None)
+
+        if self.uploader_thread:
+            self.uploader_thread.stop_uploading()
+            # Send shutdown signal
+            self.processed_queue.put(None)
+
+        # Stop EdgeApplication
+        if self.edge_app:
+            self.edge_app.stop_system()
+
+        # Wait for threads to finish
+        threads = [self.ble_thread, self.processor_thread, self.uploader_thread]
+        for thread in threads:
+            if thread and thread.is_alive():
+                thread.join(timeout=5.0)
+                if thread.is_alive():
+                    logger.warning(f"Thread {thread.name} did not shutdown gracefully")
+
+        self._log_status("Shutdown complete")
+
+    def get_state(self) -> ApplicationState:
+        """Get current application state."""
+        with self.state_lock:
+            return self.current_state
+
+    def is_running(self) -> bool:
+        """Check if the state machine is running."""
+        return self.running and not self.shutdown_event.is_set()
+
+
+def main():
+    """Main entry point for the Edge Application."""
+    logging.basicConfig(level=logging.INFO)
+
+    def status_callback(state: ApplicationState, message: str):
+        """Status callback for demonstration."""
+        print(f"[{state.value.upper()}] {message}")
+
+    # Create and run the Edge Application
+    app = EdgeApplicationStateMachine(status_callback=status_callback)
+
+    try:
+        app.run()
+    except KeyboardInterrupt:
+        print("\nShutdown requested...")
+    finally:
+        app.shutdown()
+
+
+if __name__ == "__main__":
+    main()
