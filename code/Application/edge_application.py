@@ -26,6 +26,7 @@ from dataclasses import dataclass
 from enum import Enum
 import sys
 import numpy as np
+import cv2
 
 # Add module paths
 MODULE_DIR = Path(__file__).resolve().parents[1] / "modules"
@@ -89,7 +90,8 @@ class EdgeApplication:
     def __init__(self, status_callback: Optional[Callable[[SystemStatus], None]] = None,
                  detection_callback: Optional[Callable[[DetectionResult], None]] = None,
                  ble_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
-                 log_callback: Optional[Callable[[str, str], None]] = None):
+                 log_callback: Optional[Callable[[str, str], None]] = None,
+                 frame_callback: Optional[Callable[[np.ndarray], None]] = None):
         """
         Initialize the Edge Application.
 
@@ -103,11 +105,14 @@ class EdgeApplication:
             Callback function for BLE beacon data
         log_callback : Callable[[str, str], None], optional
             Callback function for log messages (level, message)
+        frame_callback : Callable[[np.ndarray], None], optional
+            Callback function for preview frames
         """
         self.status_callback = status_callback
         self.detection_callback = detection_callback
         self.ble_callback = ble_callback
         self.log_callback = log_callback
+        self.frame_callback = frame_callback
 
         # Core components
         self.gopro_controller: Optional[GoProController] = None
@@ -479,19 +484,86 @@ class EdgeApplication:
 
     def _detection_worker(self) -> None:
         """Detection worker thread that processes preview frames."""
+        cap = None
+        stream_url = None
+
+        # Get the preview stream URL from GoPro controller
+        try:
+            if self.gopro_controller:
+                stream_url = f"udp://172.24.106.51:8554"  # Default GoPro UDP stream
+                cap = cv2.VideoCapture(stream_url)
+                if not cap.isOpened():
+                    self._log("warning", f"Could not open preview stream: {stream_url}")
+                    cap = None
+        except Exception as e:
+            self._log("error", f"Failed to initialize preview capture: {str(e)}")
+            cap = None
+
+        frame_count = 0
         while self.running and self.status.preview_active:
             try:
-                # Simulate getting frame from GoPro preview
-                # In real implementation, this would get actual frames
-                time.sleep(0.1)  # Limit processing rate
+                if cap and cap.isOpened():
+                    ret, frame = cap.read()
+                    if ret and frame is not None:
+                        # Send frame to GUI via callback if available
+                        if hasattr(self, 'frame_callback') and self.frame_callback:
+                            self.frame_callback(frame)
 
-                # Placeholder for actual frame processing
-                # This would integrate with the preview stream
-                self._process_mock_detection()
+                        # Run detection every 5th frame to reduce processing load
+                        frame_count += 1
+                        if frame_count % 5 == 0:
+                            self._process_frame_detection(frame)
+                    else:
+                        # If frame reading fails, wait a bit before retrying
+                        time.sleep(0.05)
+                else:
+                    # If no capture available, process mock detection
+                    self._process_mock_detection()
+                    time.sleep(0.1)  # Limit processing rate
 
             except Exception as e:
                 self._log("error", f"Detection worker error: {str(e)}")
-                break
+                time.sleep(0.1)
+
+        # Cleanup
+        if cap:
+            cap.release()
+
+    def _process_frame_detection(self, frame: np.ndarray) -> None:
+        """Process actual frame for YOLO detection."""
+        try:
+            if self.dnn_handler:
+                # Run YOLO detection on the frame
+                detections = self.dnn_handler.detect_objects(frame)
+                if detections and len(detections) > 0:
+                    # Convert detection format to our DetectionResult
+                    boxes = []
+                    confidences = []
+
+                    for detection in detections:
+                        if hasattr(detection, 'boxes') and detection.boxes is not None:
+                            for box in detection.boxes:
+                                boxes.append(box.xyxy[0].tolist())  # Convert tensor to list
+                                confidences.append(float(box.conf[0]))
+
+                    if boxes:
+                        result = DetectionResult(
+                            boxes=boxes,
+                            confidences=confidences,
+                            timestamp=time.time()
+                        )
+
+                        if self.detection_callback:
+                            self.detection_callback(result)
+
+                        self._update_status(overall_status=EdgeStatus.MOTION_DETECTED)
+                        self._log("info", f"Person detected with {len(boxes)} bounding boxes!")
+
+                        # Trigger hindsight clip
+                        self.trigger_hindsight()
+
+        except Exception as e:
+            self._log("error", f"Frame detection error: {str(e)}")
 
     def _process_mock_detection(self) -> None:
         """Process mock detection for testing."""

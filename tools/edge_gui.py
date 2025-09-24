@@ -115,7 +115,8 @@ class EDGEBackend(QThread):
                 status_callback=self._on_status_update,
                 detection_callback=self._on_detection,
                 ble_callback=self._on_ble_data,
-                log_callback=self._on_log
+                log_callback=self._on_log,
+                frame_callback=self._on_frame_received
             )
 
     def _on_status_update(self, edge_status: SystemStatus):
@@ -165,6 +166,11 @@ class EDGEBackend(QThread):
         }
         event_type = level_map.get(level, EventType.INFO)
         self.log_event.emit(event_type, message)
+
+    def _on_frame_received(self, frame: np.ndarray):
+        """Handle preview frames from EdgeApplication."""
+        # Emit the frame to the GUI
+        self.preview_frame.emit(frame)
 
     def initialize_edge(self):
         """Initialize EDGE system."""
@@ -884,13 +890,7 @@ class EDGEMainWindow(QMainWindow):
         success = self.backend.start_preview()
         if success:
             self.status_bar.update_status("Preview active")
-            # Create demo image with detections for preview
-            demo_image = np.zeros((480, 640, 3), dtype=np.uint8)
-            demo_image[:] = (60, 60, 60)  # Dark gray background
-            cv2.putText(demo_image, "GoPro Preview Feed", (180, 240),
-                       cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
-            self.preview_area.update_image(demo_image)
-            self.preview_area.update_detections(self.demo_detections)
+            # Preview frames will come from the backend via preview_frame signal
         else:
             self.status_bar.update_status("Preview start failed")
 
