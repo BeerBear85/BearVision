@@ -57,12 +57,14 @@ def test_full_integration():
             print("[FAIL] Preview start failed")
             return False, 0
 
-        print(f"5. Preview stream URL: {edge_app.preview_stream_url}")
+        # Get preview stream URL from system coordinator
+        stream_url = None
+        if hasattr(edge_app.system_coordinator, 'stream_processor') and edge_app.system_coordinator.stream_processor:
+            stream_url = edge_app.system_coordinator.stream_processor.preview_stream_url
+        print(f"5. Preview stream URL: {stream_url}")
 
         print("6. Starting detection processing...")
-        if not edge_app._start_detection_processing():
-            print("[FAIL] Detection processing start failed")
-            return False, 0
+        # Detection processing should start automatically with the system coordinator
 
         print("7. Waiting for frames (20 seconds)...")
         start_time = time.time()

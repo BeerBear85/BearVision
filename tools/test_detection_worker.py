@@ -44,18 +44,21 @@ def test_detection_worker_isolation():
         # Initialize basic components (but skip GoPro connection)
         edge_app.initialized = True
         edge_app.running = True
-        edge_app.status.preview_active = True
-        edge_app.preview_stream_url = "udp://172.24.106.51:8554"
+        edge_app.status_manager.update_status(preview_active=True)
 
-        print("1. Starting detection worker thread manually...")
+        # Set up stream processor if available
+        if hasattr(edge_app.system_coordinator, 'stream_processor') and edge_app.system_coordinator.stream_processor:
+            edge_app.system_coordinator.stream_processor.set_preview_stream_url("udp://172.24.106.51:8554")
 
-        # Start detection processing thread
-        edge_app.detection_thread = threading.Thread(
-            target=edge_app._detection_worker,
-            name="detection_worker_test",
-            daemon=True
-        )
-        edge_app.detection_thread.start()
+        print("1. Starting detection/stream processing...")
+
+        # Try to start stream processing
+        if hasattr(edge_app.system_coordinator, 'stream_processor') and edge_app.system_coordinator.stream_processor:
+            success = edge_app.system_coordinator.stream_processor.start_processing()
+            print(f"Stream processor started: {success}")
+        else:
+            print("Stream processor not available - skipping test")
+            return False
 
         print("2. Waiting for frames (15 seconds)...")
         start_time = time.time()
@@ -66,15 +69,13 @@ def test_detection_worker_isolation():
 
         print("3. Stopping worker...")
         edge_app.running = False
+        if hasattr(edge_app.system_coordinator, 'stream_processor') and edge_app.system_coordinator.stream_processor:
+            edge_app.system_coordinator.stream_processor.stop_processing()
 
         print(f"\n[RESULTS]")
         print(f"Frames received: {len(frames_received)}")
         if frames_received:
             print(f"Frame shapes: {set(frames_received)}")
-
-        # Wait for thread to finish
-        if edge_app.detection_thread.is_alive():
-            edge_app.detection_thread.join(timeout=2.0)
 
         return len(frames_received) > 0
 
