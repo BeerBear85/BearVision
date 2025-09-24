@@ -313,22 +313,6 @@ class PreviewArea(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        # Preview header
-        header_frame = QFrame()
-        header_frame.setStyleSheet("""
-            background-color: #252525;
-            border-bottom: 1px solid #404040;
-            padding: 8px 12px;
-        """)
-        header_layout = QHBoxLayout(header_frame)
-        header_layout.setContentsMargins(12, 8, 12, 8)
-
-        header_label = QLabel("Video Preview")
-        header_label.setStyleSheet("color: white; font-weight: 500; font-size: 14px;")
-        header_layout.addWidget(header_label)
-        header_layout.addStretch()
-
-        layout.addWidget(header_frame)
 
         # Main preview area
         self.image_label = QLabel()
@@ -338,7 +322,7 @@ class PreviewArea(QWidget):
             border: 1px solid #404040;
         """)
         self.image_label.setAlignment(Qt.AlignCenter)
-        self.image_label.setText("No preview available")
+        self.image_label.setText("")  # Remove text - will show video when available
         self.image_label.setScaledContents(True)
 
         layout.addWidget(self.image_label)
@@ -351,6 +335,8 @@ class PreviewArea(QWidget):
     def update_image(self, image: np.ndarray):
         """Update the preview image."""
         if image is None:
+            # Clear any placeholder text and show black background
+            self.image_label.setText("")
             return
 
         # Convert BGR to RGB
@@ -642,6 +628,9 @@ class EDGEMainWindow(QMainWindow):
         # Start backend thread
         self.backend.start()
 
+        # Start automatic startup sequence
+        self.start_automatic_startup()
+
     def setup_ui(self):
         """Setup the main window UI."""
         self.setWindowTitle("BearVision EDGE Application")
@@ -652,6 +641,55 @@ class EDGEMainWindow(QMainWindow):
             QMainWindow {
                 background-color: #252525;
                 color: white;
+            }
+            QMenuBar {
+                background-color: #1e40af;
+                color: white;
+                border-bottom: 1px solid #3b82f6;
+                padding: 4px 0px;
+                font-weight: 500;
+            }
+            QMenuBar::item {
+                background-color: transparent;
+                color: white;
+                padding: 6px 12px;
+                margin: 0px 2px;
+                border-radius: 4px;
+            }
+            QMenuBar::item:selected {
+                background-color: #3b82f6;
+                color: white;
+            }
+            QMenuBar::item:pressed {
+                background-color: #2563eb;
+                color: white;
+            }
+            QMenu {
+                background-color: #1e40af;
+                color: white;
+                border: 1px solid #3b82f6;
+                border-radius: 4px;
+                padding: 4px 0px;
+            }
+            QMenu::item {
+                background-color: transparent;
+                color: white;
+                padding: 8px 16px;
+                margin: 1px 4px;
+                border-radius: 3px;
+            }
+            QMenu::item:selected {
+                background-color: #3b82f6;
+                color: white;
+            }
+            QMenu::item:pressed {
+                background-color: #2563eb;
+                color: white;
+            }
+            QMenu::separator {
+                height: 1px;
+                background-color: #3b82f6;
+                margin: 4px 8px;
             }
         """)
 
@@ -938,6 +976,81 @@ class EDGEMainWindow(QMainWindow):
             self.indicators_timer.stop()
 
         event.accept()
+
+    def start_automatic_startup(self):
+        """Start automatic startup sequence: initialize -> connect -> preview -> hindsight."""
+        self.add_log_event(EventType.INFO, "Starting automatic EDGE system startup...")
+
+        # Use QTimer to delay startup to allow GUI to fully initialize
+        startup_timer = QTimer()
+        startup_timer.timeout.connect(self.run_startup_sequence)
+        startup_timer.setSingleShot(True)
+        startup_timer.start(1000)  # 1 second delay
+
+    def run_startup_sequence(self):
+        """Run the automatic startup sequence."""
+        try:
+            # Step 1: Initialize EDGE system
+            self.add_log_event(EventType.INFO, "Initializing EDGE system...")
+            if not self.backend.initialize_edge():
+                self.add_log_event(EventType.ERROR, "EDGE system initialization failed - stopping startup")
+                return
+
+            # Step 2: Connect to GoPro (with delay)
+            connect_timer = QTimer()
+            connect_timer.timeout.connect(self.startup_connect_gopro)
+            connect_timer.setSingleShot(True)
+            connect_timer.start(2000)  # 2 second delay
+
+        except Exception as e:
+            self.add_log_event(EventType.ERROR, f"Startup sequence failed: {e}")
+
+    def startup_connect_gopro(self):
+        """Step 2: Connect to GoPro."""
+        try:
+            self.add_log_event(EventType.INFO, "Attempting to connect to GoPro...")
+            if self.backend.connect_gopro():
+                self.add_log_event(EventType.SUCCESS, "GoPro connected successfully")
+
+                # Step 3: Start preview (with delay)
+                preview_timer = QTimer()
+                preview_timer.timeout.connect(self.startup_start_preview)
+                preview_timer.setSingleShot(True)
+                preview_timer.start(1500)  # 1.5 second delay
+            else:
+                self.add_log_event(EventType.WARNING, "Failed to connect to GoPro - startup incomplete")
+        except Exception as e:
+            self.add_log_event(EventType.ERROR, f"GoPro connection failed: {e}")
+
+    def startup_start_preview(self):
+        """Step 3: Start preview."""
+        try:
+            self.add_log_event(EventType.INFO, "Starting preview stream...")
+            if self.backend.start_preview():
+                self.add_log_event(EventType.SUCCESS, "Preview started successfully")
+
+                # Step 4: Enable hindsight mode (with delay)
+                hindsight_timer = QTimer()
+                hindsight_timer.timeout.connect(self.startup_enable_hindsight)
+                hindsight_timer.setSingleShot(True)
+                hindsight_timer.start(1000)  # 1 second delay
+            else:
+                self.add_log_event(EventType.WARNING, "Failed to start preview - continuing without preview")
+        except Exception as e:
+            self.add_log_event(EventType.ERROR, f"Preview start failed: {e}")
+
+    def startup_enable_hindsight(self):
+        """Step 4: Enable hindsight mode."""
+        try:
+            self.add_log_event(EventType.INFO, "Enabling hindsight mode...")
+            if self.backend.trigger_hindsight():
+                self.add_log_event(EventType.SUCCESS, "Hindsight mode enabled - EDGE system ready")
+                self.status_bar.update_status("EDGE system ready - Looking for wakeboarder")
+            else:
+                self.add_log_event(EventType.WARNING, "Failed to enable hindsight mode - manual activation required")
+                self.status_bar.update_status("EDGE system ready (hindsight manual)")
+        except Exception as e:
+            self.add_log_event(EventType.ERROR, f"Hindsight mode failed: {e}")
 
 
 def main():

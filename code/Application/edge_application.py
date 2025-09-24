@@ -446,9 +446,10 @@ class EdgeApplication:
         This method coordinates the startup of all subsystems:
         1. Connect to GoPro
         2. Start preview
-        3. Start BLE logging
-        4. Start YOLO detection on preview feed
-        5. Update status to "Looking for wakeboarder"
+        3. Enable hindsight mode
+        4. Start BLE logging
+        5. Start YOLO detection on preview feed
+        6. Update status to "Looking for wakeboarder"
 
         Returns
         -------
@@ -470,6 +471,10 @@ class EdgeApplication:
             # Start preview
             if not self.start_preview():
                 return False
+
+            # Enable hindsight mode
+            if not self.trigger_hindsight():
+                self._log("warning", "Failed to enable hindsight mode, continuing without it")
 
             # Start BLE logging
             if not self.start_ble_logging():
@@ -493,6 +498,11 @@ class EdgeApplication:
     def _start_detection_processing(self) -> bool:
         """Start YOLO detection processing on preview feed."""
         try:
+            # Ensure the system is marked as running for the detection worker
+            if not self.running:
+                self.running = True
+                self._log("debug", "Setting running=True for detection processing")
+
             self.detection_thread = threading.Thread(
                 target=self._detection_worker,
                 name="detection_worker",
@@ -543,30 +553,38 @@ class EdgeApplication:
                     self._log("debug", f"Trying preview stream URL: {url}")
                     try:
                         test_cap = cv2.VideoCapture(url, cv2.CAP_FFMPEG)
-                        test_cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-                        test_cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)  # Lower resolution for faster processing
-                        test_cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 
                         if test_cap.isOpened():
-                            # Test if we can actually read a frame (with timeout)
-                            frame_result = [None, None]  # [ret, frame]
+                            # Configure capture properties for better streaming
+                            test_cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+                            test_cap.set(cv2.CAP_PROP_FPS, 30)
+                            # Don't force resolution - let GoPro stream at native resolution
 
-                            def read_frame():
-                                frame_result[0], frame_result[1] = test_cap.read()
+                            # Test if we can actually read a frame (with shorter timeout)
+                            self._log("debug", f"Testing frame read from {url}...")
 
-                            # Try to read frame with 5 second timeout
-                            read_thread = threading.Thread(target=read_frame)
-                            read_thread.daemon = True
-                            read_thread.start()
-                            read_thread.join(timeout=5.0)
+                            # Try multiple frame reads to ensure stream is working
+                            successful_reads = 0
+                            for i in range(3):
+                                ret, test_frame = test_cap.read()
+                                if ret and test_frame is not None:
+                                    successful_reads += 1
+                                    self._log("debug", f"Test read {i+1}: SUCCESS, frame shape: {test_frame.shape}")
+                                else:
+                                    self._log("debug", f"Test read {i+1}: FAILED, ret={ret}")
+                                time.sleep(0.1)  # Brief pause between reads
 
-                            if frame_result[0] and frame_result[1] is not None:
-                                self._log("info", f"Successfully connected to preview stream: {url}")
+                            if successful_reads >= 1:
+                                self._log("info", f"Successfully connected to preview stream: {url} ({successful_reads}/3 test reads)")
                                 stream_url = url
                                 cap = test_cap
+
+                                # Re-configure for optimal performance
+                                cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+                                cap.set(cv2.CAP_PROP_FPS, 30)
                                 break
                             else:
-                                self._log("debug", f"Could not read frame from {url}")
+                                self._log("debug", f"Could not read frames from {url}")
                                 test_cap.release()
                         else:
                             self._log("debug", f"Could not open {url}")
@@ -588,78 +606,167 @@ class EdgeApplication:
         no_frame_count = 0
         last_debug_time = time.time()
 
+        # Main frame processing loop
+        self._log("info", f"Starting frame processing loop with stream: {stream_url}")
+        self._log("debug", f"Loop conditions: running={self.running}, preview_active={self.status.preview_active}")
+
         while self.running and self.status.preview_active:
+            # Debug loop conditions periodically
+            if frame_count % 100 == 0 and frame_count > 0:
+                self._log("debug", f"Loop still active: running={self.running}, preview_active={self.status.preview_active}, frames={frame_count}")
             try:
                 if cap and cap.isOpened():
+                    # Try to read frame
                     ret, frame = cap.read()
 
                     # Debug: Log first few read attempts
-                    if frame_count < 5:
+                    if frame_count < 10:
                         self._log("debug", f"Frame read attempt {frame_count + 1}: ret={ret}, frame={'None' if frame is None else frame.shape if frame is not None else 'Invalid'}")
 
                     if ret and frame is not None:
-                        # Send frame to GUI via callback if available
-                        if hasattr(self, 'frame_callback') and self.frame_callback:
-                            self._log("debug", f"Calling frame callback with frame {frame.shape}")
-                            self.frame_callback(frame)
-                        else:
-                            self._log("warning", "Frame callback not available")
-
-                        # Run detection every 5th frame to reduce processing load
+                        # Successfully read frame
                         frame_count += 1
+                        no_frame_count = 0
+
+                        # Create a copy for GUI to avoid threading issues
+                        frame_copy = frame.copy()
+
+                        # Run YOLO detection on every 5th frame
+                        detection_boxes = []
                         if frame_count % 5 == 0:
-                            self._process_frame_detection(frame)
+                            detection_boxes = self._process_frame_detection_with_boxes(frame_copy)
+
+                        # Draw detection boxes on the frame copy
+                        if detection_boxes:
+                            frame_copy = self._draw_detection_boxes(frame_copy, detection_boxes)
+
+                        # Send frame to GUI via callback
+                        if hasattr(self, 'frame_callback') and self.frame_callback:
+                            try:
+                                self.frame_callback(frame_copy)
+                                if frame_count <= 5 or frame_count % 30 == 0:
+                                    self._log("debug", f"Sent frame {frame_count} to GUI callback")
+                            except Exception as callback_error:
+                                self._log("error", f"Frame callback error: {callback_error}")
+                        else:
+                            if frame_count <= 5:
+                                self._log("warning", "Frame callback not available")
 
                         # Log success periodically
                         if frame_count == 1 or frame_count % 30 == 0:
-                            self._log("info", f"Reading frames successfully, count: {frame_count}")
+                            self._log("info", f"Processing frames successfully, count: {frame_count}")
 
-                        no_frame_count = 0  # Reset no-frame counter
                     else:
                         no_frame_count += 1
 
-                        # Log frame reading issues more frequently for debugging
-                        if no_frame_count <= 10 or no_frame_count % 100 == 0:
-                            self._log("warning", f"Frame read failed: ret={ret}, frame={'None' if frame is None else 'Available'} (attempt {no_frame_count})")
+                        # Log frame reading issues
+                        if no_frame_count <= 5 or no_frame_count % 50 == 0:
+                            self._log("warning", f"Frame read failed: ret={ret} (attempt {no_frame_count})")
 
                         # Log frame reading issues periodically
                         current_time = time.time()
-                        if current_time - last_debug_time > 3.0:  # Every 3 seconds
-                            self._log("warning", f"Still no frames received from stream (failed attempts: {no_frame_count})")
+                        if current_time - last_debug_time > 5.0:  # Every 5 seconds
+                            self._log("warning", f"Still no frames from stream after {no_frame_count} attempts")
                             last_debug_time = current_time
 
-                        # If frame reading fails, wait a bit before retrying
-                        time.sleep(0.05)
+                        # Brief pause before retrying
+                        time.sleep(0.033)  # ~30fps attempt rate
+
                 else:
-                    # If no capture available, process mock detection
-                    self._log("warning", f"Video capture not available: cap={cap}, isOpened={cap.isOpened() if cap else 'N/A'}")
-                    self._process_mock_detection()
-                    time.sleep(0.1)  # Limit processing rate
+                    # If no capture available
+                    self._log("error", f"Video capture not available: cap={cap}, isOpened={cap.isOpened() if cap else 'N/A'}")
+                    time.sleep(1.0)  # Longer pause when no capture
+                    break
 
             except Exception as e:
                 self._log("error", f"Detection worker error: {str(e)}")
                 time.sleep(0.1)
 
+        # Log why the loop ended
+        self._log("info", f"Frame processing loop ended. Total frames processed: {frame_count}")
+        self._log("debug", f"Loop exit conditions: running={self.running}, preview_active={self.status.preview_active}")
+
         # Cleanup
         if cap:
             cap.release()
+
+    def _process_frame_detection_with_boxes(self, frame: np.ndarray) -> list:
+        """Process frame for YOLO detection and return bounding boxes."""
+        boxes = []
+        try:
+            if self.dnn_handler:
+                # Run YOLO detection on the frame
+                detection_result = self.dnn_handler.find_person(frame)
+                if detection_result and len(detection_result) == 2:
+                    detected_boxes, confidences = detection_result
+
+                    if detected_boxes and confidences:
+                        for i, (box, confidence) in enumerate(zip(detected_boxes, confidences)):
+                            if confidence > 0.5:  # Filter low confidence detections
+                                # Convert from [x, y, w, h] to [x1, y1, x2, y2]
+                                x, y, w, h = box
+                                x1, y1, x2, y2 = x, y, x + w, y + h
+
+                                boxes.append({
+                                    'coords': [x1, y1, x2, y2],
+                                    'confidence': confidence,
+                                    'label': 'Person'
+                                })
+
+                    if boxes:
+                        # Trigger hindsight clip for motion detection
+                        self._update_status(overall_status=EdgeStatus.MOTION_DETECTED)
+                        self._log("info", f"Person detected with {len(boxes)} bounding boxes!")
+                        self.trigger_hindsight_clip()
+
+        except Exception as e:
+            self._log("error", f"Frame detection error: {str(e)}")
+
+        return boxes
+
+    def _draw_detection_boxes(self, frame: np.ndarray, boxes: list) -> np.ndarray:
+        """Draw YOLO detection boxes on frame."""
+        try:
+            import cv2
+
+            for box in boxes:
+                coords = box['coords']
+                confidence = box['confidence']
+                label = box['label']
+
+                # Extract coordinates
+                x1, y1, x2, y2 = map(int, coords)
+
+                # Draw green rectangle
+                cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+
+                # Draw label with confidence
+                label_text = f"{label}: {confidence:.2f}"
+                label_size = cv2.getTextSize(label_text, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)[0]
+
+                # Draw label background
+                cv2.rectangle(frame, (x1, y1 - label_size[1] - 10),
+                             (x1 + label_size[0], y1), (0, 255, 0), -1)
+
+                # Draw label text
+                cv2.putText(frame, label_text, (x1, y1 - 5),
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 2)
+
+        except Exception as e:
+            self._log("error", f"Error drawing detection boxes: {str(e)}")
+
+        return frame
 
     def _process_frame_detection(self, frame: np.ndarray) -> None:
         """Process actual frame for YOLO detection."""
         try:
             if self.dnn_handler:
                 # Run YOLO detection on the frame
-                detections = self.dnn_handler.detect_objects(frame)
-                if detections and len(detections) > 0:
-                    # Convert detection format to our DetectionResult
-                    boxes = []
-                    confidences = []
-
-                    for detection in detections:
-                        if hasattr(detection, 'boxes') and detection.boxes is not None:
-                            for box in detection.boxes:
-                                boxes.append(box.xyxy[0].tolist())  # Convert tensor to list
-                                confidences.append(float(box.conf[0]))
+                detection_result = self.dnn_handler.find_person(frame)
+                if detection_result and len(detection_result) == 2:
+                    # DnnHandler returns [boxes, confidences] format
+                    detected_boxes, confidences = detection_result
+                    boxes = detected_boxes  # Already in the right format
 
                     if boxes:
                         result = DetectionResult(
@@ -674,8 +781,8 @@ class EdgeApplication:
                         self._update_status(overall_status=EdgeStatus.MOTION_DETECTED)
                         self._log("info", f"Person detected with {len(boxes)} bounding boxes!")
 
-                        # Trigger hindsight clip
-                        self.trigger_hindsight()
+                        # Trigger hindsight clip recording
+                        self.trigger_hindsight_clip()
 
         except Exception as e:
             self._log("error", f"Frame detection error: {str(e)}")
@@ -701,17 +808,44 @@ class EdgeApplication:
             self._update_status(overall_status=EdgeStatus.MOTION_DETECTED)
             self._log("info", "Wakeboarder detected!")
 
-            # Trigger hindsight clip
-            self.trigger_hindsight()
+            # Trigger hindsight clip recording
+            self.trigger_hindsight_clip()
 
     def trigger_hindsight(self) -> bool:
         """
-        Trigger a hindsight clip recording.
+        Enable hindsight mode on the camera.
 
         Returns
         -------
         bool
-            True if hindsight triggered successfully, False otherwise
+            True if hindsight mode enabled successfully, False otherwise
+        """
+        if not self.gopro_controller:
+            self._log("error", "GoPro not connected")
+            return False
+
+        try:
+            success = self.gopro_controller.startHindsightMode()
+            if success:
+                self._update_status(hindsight_mode=True)
+                self._log("info", "Hindsight mode enabled")
+                return True
+            else:
+                self._log("warning", "Failed to enable hindsight mode - GoPro settings not available")
+                return False
+
+        except Exception as e:
+            self._log("error", f"Failed to enable hindsight mode: {str(e)}")
+            return False
+
+    def trigger_hindsight_clip(self) -> bool:
+        """
+        Trigger a hindsight clip recording (for automatic detection).
+
+        Returns
+        -------
+        bool
+            True if hindsight clip triggered successfully, False otherwise
         """
         if not self.gopro_controller:
             self._log("error", "GoPro not connected")
@@ -719,7 +853,7 @@ class EdgeApplication:
 
         try:
             self.gopro_controller.start_hindsight_clip()
-            self._update_status(hindsight_mode=True, overall_status=EdgeStatus.RECORDING)
+            self._update_status(overall_status=EdgeStatus.RECORDING)
             self._log("info", "Hindsight clip triggered")
 
             # Reset to looking for wakeboarder after a delay
@@ -728,7 +862,7 @@ class EdgeApplication:
             return True
 
         except Exception as e:
-            self._log("error", f"Failed to trigger hindsight: {str(e)}")
+            self._log("error", f"Failed to trigger hindsight clip: {str(e)}")
             return False
 
     def _reset_to_looking(self) -> None:
@@ -1184,7 +1318,7 @@ class EdgeApplicationStateMachine:
 
             # Trigger recording in EdgeApplication
             if self.edge_app:
-                self.edge_app.trigger_hindsight()
+                self.edge_app.trigger_hindsight_clip()
 
     def initialize(self) -> bool:
         """Initialize all subsystems."""

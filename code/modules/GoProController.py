@@ -254,13 +254,26 @@ class GoProController:
         """Stop video recording on the camera."""
         self._run_in_thread(self._gopro.http_command.set_shutter(shutter=constants.Toggle.DISABLE))
 
-    def startHindsightMode(self) -> None:
+    def startHindsightMode(self) -> bool:
         """Enable Hindsight Mode with 15 seconds buffer.
 
         This configures the camera to continuously buffer the last 15 seconds of video,
         which can be saved when recording is triggered.
+
+        Returns:
+            bool: True if hindsight mode was enabled successfully, False otherwise
         """
-        self._run_in_thread(self._gopro.http_settings.hindsight.set(settings.Hindsight.NUM_15_SECONDS))
+        try:
+            if hasattr(self._gopro, 'http_settings'):
+                self._run_in_thread(self._gopro.http_settings.hindsight.set(settings.Hindsight.NUM_15_SECONDS))
+                logger.info("Hindsight mode enabled successfully")
+                return True
+            else:
+                logger.warning("http_settings not available, cannot enable hindsight mode")
+                return False
+        except Exception as e:
+            logger.error(f"Failed to enable hindsight mode: {e}")
+            return False
 
     def disableHindsightMode(self) -> None:
         """Disable Hindsight Mode.
