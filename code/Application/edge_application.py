@@ -697,6 +697,7 @@ class EdgeApplication:
             if self.dnn_handler:
                 # Run YOLO detection on the frame
                 detection_result = self.dnn_handler.find_person(frame)
+
                 if detection_result and len(detection_result) == 2:
                     detected_boxes, confidences = detection_result
 
@@ -713,11 +714,11 @@ class EdgeApplication:
                                     'label': 'Person'
                                 })
 
-                    if boxes:
-                        # Trigger hindsight clip for motion detection
-                        self._update_status(overall_status=EdgeStatus.MOTION_DETECTED)
-                        self._log("info", f"Person detected with {len(boxes)} bounding boxes!")
-                        self.trigger_hindsight_clip()
+            if boxes:
+                # Trigger hindsight clip for motion detection
+                self._update_status(overall_status=EdgeStatus.MOTION_DETECTED)
+                self._log("info", f"Person detected with {len(boxes)} bounding boxes!")
+                self.trigger_hindsight_clip()
 
         except Exception as e:
             self._log("error", f"Frame detection error: {str(e)}")

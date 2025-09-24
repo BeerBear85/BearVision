@@ -314,16 +314,17 @@ class PreviewArea(QWidget):
         layout.setSpacing(0)
 
 
-        # Main preview area
+        # Main preview area - set to half size (GoPro is 1920x1080, half = 960x540)
         self.image_label = QLabel()
-        self.image_label.setMinimumSize(640, 480)
+        self.image_label.setMinimumSize(960, 540)
+        self.image_label.setMaximumSize(960, 540)
         self.image_label.setStyleSheet("""
             background-color: #000000;
             border: 1px solid #404040;
         """)
         self.image_label.setAlignment(Qt.AlignCenter)
         self.image_label.setText("")  # Remove text - will show video when available
-        self.image_label.setScaledContents(True)
+        self.image_label.setScaledContents(False)
 
         layout.addWidget(self.image_label)
         self.setLayout(layout)
@@ -334,30 +335,50 @@ class PreviewArea(QWidget):
 
     def update_image(self, image: np.ndarray):
         """Update the preview image."""
+        print(f"[DEBUG] PreviewArea.update_image called with image: {image.shape if image is not None else 'None'}")
         if image is None:
             # Clear any placeholder text and show black background
             self.image_label.setText("")
             return
 
-        # Convert BGR to RGB
-        rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        height, width, channel = rgb_image.shape
-        bytes_per_line = 3 * width
+        try:
+            # Convert BGR to RGB
+            rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+            height, width, channel = rgb_image.shape
+            bytes_per_line = 3 * width
 
-        q_image = QImage(rgb_image.data, width, height, bytes_per_line, QImage.Format_RGB888)
-        self.current_image = q_image
+            # Ensure the image data is contiguous in memory
+            rgb_image = np.ascontiguousarray(rgb_image)
 
-        # Draw detection boxes
-        self.draw_detections()
+            # Create QImage with proper format
+            q_image = QImage(rgb_image.data.tobytes(), width, height, bytes_per_line, QImage.Format.Format_RGB888)
+
+            # Convert QImage to QPixmap and scale to half size
+            pixmap = QPixmap.fromImage(q_image)
+
+            # Scale to half size (1920x1080 -> 960x540)
+            scaled_pixmap = pixmap.scaled(960, 540, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+
+            # Apply the scaled pixmap to the label
+            self.image_label.setPixmap(scaled_pixmap)
+            self.current_image = q_image
+
+        except Exception as e:
+            print(f"[ERROR] Exception in update_image: {e}")
+            import traceback
+            traceback.print_exc()
 
     def draw_detections(self):
         """Draw YOLO detection boxes on the image."""
+        print(f"[DEBUG] draw_detections called, current_image: {self.current_image is not None}")
         if self.current_image is None:
             return
 
         pixmap = QPixmap.fromImage(self.current_image)
+        print(f"[DEBUG] Created pixmap: {pixmap.width()}x{pixmap.height()}")
 
         if self.detections:
+            print(f"[DEBUG] Drawing {len(self.detections)} detection boxes")
             painter = QPainter(pixmap)
             pen = QPen(QColor(34, 197, 94), 3)  # Green color
             painter.setPen(pen)
@@ -391,8 +412,12 @@ class PreviewArea(QWidget):
                 painter.setPen(pen)
 
             painter.end()
+        else:
+            print(f"[DEBUG] No detections to draw (detections count: {len(self.detections)})")
 
+        print(f"[DEBUG] Setting pixmap to image_label")
         self.image_label.setPixmap(pixmap)
+        print(f"[DEBUG] Pixmap set successfully")
 
     def update_detections(self, detections: List[DetectionBox]):
         """Update detection boxes."""
@@ -744,7 +769,8 @@ class EDGEMainWindow(QMainWindow):
         self.backend.status_message_changed.connect(self.handle_status_message_changed)
         self.backend.motion_detected.connect(self.handle_motion_detected)
         self.backend.hindsight_triggered.connect(self.handle_hindsight_triggered)
-        self.backend.preview_frame.connect(self.handle_preview_frame)
+        self.backend.preview_frame.connect(self.handle_preview_frame, Qt.QueuedConnection)
+        print("[DEBUG] Connected preview_frame signal with QueuedConnection")
 
     def handle_backend_log_event(self, event_type: EventType, message: str):
         """Handle log events from backend."""
@@ -769,6 +795,7 @@ class EDGEMainWindow(QMainWindow):
 
     def handle_preview_frame(self, frame: np.ndarray):
         """Handle preview frame from backend."""
+        print(f"[DEBUG] GUI handle_preview_frame called with frame: {frame.shape if frame is not None else 'None'}")
         self.preview_area.update_image(frame)
 
     def setup_menu_bar(self):
