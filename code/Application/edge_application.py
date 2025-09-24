@@ -134,6 +134,9 @@ class EdgeApplication:
         self.config_loaded = False
         self.yolo_model = "yolov8n"  # Default YOLO model
 
+        # Preview stream URL
+        self.preview_stream_url = None
+
     def _log(self, level: str, message: str) -> None:
         """Internal logging with optional callback."""
         if level == "info":
@@ -236,7 +239,7 @@ class EdgeApplication:
             self._log("error", f"Failed to initialize BLE: {str(e)}")
             return False
 
-    def _wait_for_gopro_ready(self, max_retries: int = 10, initial_delay: float = 0.1) -> bool:
+    def _wait_for_gopro_ready(self, max_retries: int = 15, initial_delay: float = 0.5) -> bool:
         """
         Wait for GoPro connection to be fully established.
 
@@ -257,21 +260,42 @@ class EdgeApplication:
         delay = initial_delay
         for attempt in range(max_retries):
             try:
-                # Check if the GoPro has http_settings attribute
-                if hasattr(self.gopro_controller._gopro, 'http_settings'):
-                    self._log("debug", f"GoPro connection ready (attempt {attempt + 1})")
-                    return True
+                # Multiple checks to verify GoPro is ready
+                gopro = self.gopro_controller._gopro
 
-                self._log("debug", f"GoPro not ready, waiting {delay:.1f}s (attempt {attempt + 1}/{max_retries})")
+                # Check 1: Basic connection attributes
+                if not hasattr(gopro, '_serial') or not gopro._serial:
+                    self._log("debug", f"GoPro serial not available (attempt {attempt + 1})")
+                    time.sleep(delay)
+                    delay = min(delay * 1.5, 3.0)
+                    continue
+
+                # Check 2: Try to get camera status to verify connection is working
+                try:
+                    status = self.gopro_controller._run_in_thread(gopro.http_command.get_camera_state())
+                    if status and hasattr(status, 'data') and status.data:
+                        self._log("info", f"GoPro connection ready (attempt {attempt + 1})")
+                        return True
+                    else:
+                        self._log("debug", f"GoPro status check returned empty data (attempt {attempt + 1})")
+                except Exception as status_error:
+                    self._log("debug", f"GoPro status check failed: {status_error} (attempt {attempt + 1})")
+
+                # Check 3: HTTP settings availability (optional, not required for basic functionality)
+                if hasattr(gopro, 'http_settings'):
+                    self._log("debug", f"GoPro http_settings available (attempt {attempt + 1})")
+                else:
+                    self._log("debug", f"GoPro http_settings not yet available (attempt {attempt + 1})")
+
                 time.sleep(delay)
-                delay = min(delay * 2, 2.0)  # Exponential backoff, max 2 seconds
+                delay = min(delay * 1.5, 3.0)  # Slower exponential backoff
 
             except Exception as e:
                 self._log("debug", f"Error checking GoPro readiness: {e}")
                 time.sleep(delay)
-                delay = min(delay * 2, 2.0)
+                delay = min(delay * 1.5, 3.0)
 
-        self._log("warning", f"GoPro connection not ready after {max_retries} attempts")
+        self._log("error", f"GoPro connection not ready after {max_retries} attempts")
         return False
 
     def connect_gopro(self) -> bool:
@@ -320,9 +344,10 @@ class EdgeApplication:
             return False
 
         try:
-            self.gopro_controller.start_preview()
+            # Start preview and get the stream URL
+            self.preview_stream_url = self.gopro_controller.start_preview()
             self._update_status(preview_active=True)
-            self._log("info", "GoPro preview started")
+            self._log("info", f"GoPro preview started, URL: {self.preview_stream_url}")
             return True
 
         except Exception as e:
@@ -484,40 +509,130 @@ class EdgeApplication:
 
     def _detection_worker(self) -> None:
         """Detection worker thread that processes preview frames."""
+        import time
+        import threading
+
         cap = None
         stream_url = None
 
         # Get the preview stream URL from GoPro controller
         try:
-            if self.gopro_controller:
-                stream_url = f"udp://172.24.106.51:8554"  # Default GoPro UDP stream
-                cap = cv2.VideoCapture(stream_url)
-                if not cap.isOpened():
-                    self._log("warning", f"Could not open preview stream: {stream_url}")
-                    cap = None
+            if self.gopro_controller and self.status.preview_active:
+                urls_to_try = []
+
+                # First, try the actual URL from GoProController if available
+                if self.preview_stream_url:
+                    urls_to_try.append(self.preview_stream_url)
+                    self._log("debug", f"Using GoPro controller URL: {self.preview_stream_url}")
+
+                # Fallback to common GoPro IP addresses
+                fallback_urls = [
+                    "udp://172.24.106.51:8554",  # Common wired IP
+                    "udp://172.20.110.51:8554",  # Alternative wired IP
+                    "udp://172.25.90.51:8554",   # Another alternative
+                    "udp://10.5.5.9:8554"       # WiFi IP
+                ]
+
+                # Add fallbacks (but avoid duplicates)
+                for url in fallback_urls:
+                    if url not in urls_to_try:
+                        urls_to_try.append(url)
+
+                # Try each URL to see which one works
+                for url in urls_to_try:
+                    self._log("debug", f"Trying preview stream URL: {url}")
+                    try:
+                        test_cap = cv2.VideoCapture(url, cv2.CAP_FFMPEG)
+                        test_cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+                        test_cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)  # Lower resolution for faster processing
+                        test_cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+
+                        if test_cap.isOpened():
+                            # Test if we can actually read a frame (with timeout)
+                            frame_result = [None, None]  # [ret, frame]
+
+                            def read_frame():
+                                frame_result[0], frame_result[1] = test_cap.read()
+
+                            # Try to read frame with 5 second timeout
+                            read_thread = threading.Thread(target=read_frame)
+                            read_thread.daemon = True
+                            read_thread.start()
+                            read_thread.join(timeout=5.0)
+
+                            if frame_result[0] and frame_result[1] is not None:
+                                self._log("info", f"Successfully connected to preview stream: {url}")
+                                stream_url = url
+                                cap = test_cap
+                                break
+                            else:
+                                self._log("debug", f"Could not read frame from {url}")
+                                test_cap.release()
+                        else:
+                            self._log("debug", f"Could not open {url}")
+                            test_cap.release()
+
+                    except Exception as url_error:
+                        self._log("debug", f"Error trying {url}: {url_error}")
+                        if 'test_cap' in locals():
+                            test_cap.release()
+
+                if not cap:
+                    self._log("warning", "Could not connect to any GoPro preview stream")
+
         except Exception as e:
             self._log("error", f"Failed to initialize preview capture: {str(e)}")
             cap = None
 
         frame_count = 0
+        no_frame_count = 0
+        last_debug_time = time.time()
+
         while self.running and self.status.preview_active:
             try:
                 if cap and cap.isOpened():
                     ret, frame = cap.read()
+
+                    # Debug: Log first few read attempts
+                    if frame_count < 5:
+                        self._log("debug", f"Frame read attempt {frame_count + 1}: ret={ret}, frame={'None' if frame is None else frame.shape if frame is not None else 'Invalid'}")
+
                     if ret and frame is not None:
                         # Send frame to GUI via callback if available
                         if hasattr(self, 'frame_callback') and self.frame_callback:
+                            self._log("debug", f"Calling frame callback with frame {frame.shape}")
                             self.frame_callback(frame)
+                        else:
+                            self._log("warning", "Frame callback not available")
 
                         # Run detection every 5th frame to reduce processing load
                         frame_count += 1
                         if frame_count % 5 == 0:
                             self._process_frame_detection(frame)
+
+                        # Log success periodically
+                        if frame_count == 1 or frame_count % 30 == 0:
+                            self._log("info", f"Reading frames successfully, count: {frame_count}")
+
+                        no_frame_count = 0  # Reset no-frame counter
                     else:
+                        no_frame_count += 1
+
+                        # Log frame reading issues more frequently for debugging
+                        if no_frame_count <= 10 or no_frame_count % 100 == 0:
+                            self._log("warning", f"Frame read failed: ret={ret}, frame={'None' if frame is None else 'Available'} (attempt {no_frame_count})")
+
+                        # Log frame reading issues periodically
+                        current_time = time.time()
+                        if current_time - last_debug_time > 3.0:  # Every 3 seconds
+                            self._log("warning", f"Still no frames received from stream (failed attempts: {no_frame_count})")
+                            last_debug_time = current_time
+
                         # If frame reading fails, wait a bit before retrying
                         time.sleep(0.05)
                 else:
                     # If no capture available, process mock detection
+                    self._log("warning", f"Video capture not available: cap={cap}, isOpened={cap.isOpened() if cap else 'N/A'}")
                     self._process_mock_detection()
                     time.sleep(0.1)  # Limit processing rate
 

@@ -161,18 +161,41 @@ class GoProController:
         self._run_in_thread(self._configure())
 
     async def _configure(self) -> None:
+        # Load video preset group first
         await self._gopro.http_command.load_preset_group(
             group=models.proto.EnumPresetGroup.PRESET_GROUP_ID_VIDEO
         )
-        await self._gopro.http_settings.video_resolution.set(
-            settings.VideoResolution.NUM_4K
-        )
-        await self._gopro.http_settings.frames_per_second.set(
-            settings.FramesPerSecond.NUM_60_0
-        )
-        await self._gopro.http_settings.hindsight.set(
-            settings.Hindsight.NUM_15_SECONDS
-        )
+
+        # Wait a bit for settings to become available
+        import asyncio
+        await asyncio.sleep(1.0)
+
+        # Check if http_settings is available, if not wait a bit more
+        max_retries = 10
+        for attempt in range(max_retries):
+            if hasattr(self._gopro, 'http_settings'):
+                logger.info(f"http_settings available after {attempt + 1} attempts")
+                break
+            logger.debug(f"Waiting for http_settings (attempt {attempt + 1})")
+            await asyncio.sleep(0.5)
+
+        # Try to configure settings if available
+        if hasattr(self._gopro, 'http_settings'):
+            try:
+                await self._gopro.http_settings.video_resolution.set(
+                    settings.VideoResolution.NUM_4K
+                )
+                await self._gopro.http_settings.frames_per_second.set(
+                    settings.FramesPerSecond.NUM_60_0
+                )
+                await self._gopro.http_settings.hindsight.set(
+                    settings.Hindsight.NUM_15_SECONDS
+                )
+                logger.info("GoPro configured successfully")
+            except Exception as e:
+                logger.warning(f"Failed to configure some GoPro settings: {e}")
+        else:
+            logger.warning("http_settings not available, skipping configuration")
 
     def start_preview(self, port: int = 8554) -> str:
         """Start preview stream and return its URL."""
