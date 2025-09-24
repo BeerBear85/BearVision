@@ -790,18 +790,7 @@ class EDGEMainWindow(QMainWindow):
 
     def setup_demo_data(self):
         """Setup demo data for testing."""
-        # Add some demo events
-        demo_events = [
-            Event("1", "14:32:15", EventType.SUCCESS, "Wakeboarder detected successfully"),
-            Event("2", "14:32:12", EventType.INFO, "YOLO model inference completed"),
-            Event("3", "14:32:10", EventType.INFO, "Processing frame 2847"),
-            Event("4", "14:32:08", EventType.WARNING, "Low confidence detection threshold"),
-            Event("5", "14:32:05", EventType.INFO, "Camera feed initialized"),
-            Event("6", "14:32:03", EventType.SUCCESS, "Application started successfully")
-        ]
-
-        for event in demo_events:
-            self.event_list.add_event(event)
+        # Demo events removed - eventlog will start clean
 
         # Setup demo detections
         self.demo_detections = [
