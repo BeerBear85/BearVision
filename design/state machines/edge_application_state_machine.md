@@ -29,18 +29,4 @@ Error --> Initialize : Restart system
 Error:Display/log error;
 
 
-state BlueToothThread {
-    [*] --> InitializeBT
-    
-    InitializeBT--> Logging :Success
-    InitializeBT :Initialize BLE interface
-
-    Logging --> Stopped :Application shutting down
-    
-    Logging :Start polling loop;
-    Logging :Log sensor data;
-    
-    Stopped:Cleanup BLE interface;
-
-}
 @enduml
