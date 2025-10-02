@@ -105,6 +105,7 @@ class EDGEBackend(QThread):
     status_message_changed = Signal(str)
     log_event = Signal(EventType, str)
     preview_frame = Signal(np.ndarray)
+    state_changed = Signal(object, str)  # ApplicationState, message
 
     def __init__(self):
         super().__init__()
@@ -135,6 +136,9 @@ class EDGEBackend(QThread):
 
     def _on_state_update(self, state: ApplicationState, message: str):
         """Handle state updates from EdgeApplicationStateMachine."""
+        # Emit state change for menu updates
+        self.state_changed.emit(state, message)
+
         # Map ApplicationState to status bar messages
         state_messages = {
             ApplicationState.INITIALIZE: "Initializing EDGE system...",
@@ -745,6 +749,7 @@ class EDGEMainWindow(QMainWindow):
         self.backend.motion_detected.connect(self.handle_motion_detected)
         self.backend.hindsight_triggered.connect(self.handle_hindsight_triggered)
         self.backend.preview_frame.connect(self.handle_preview_frame, Qt.QueuedConnection)
+        self.backend.state_changed.connect(self.handle_state_changed)
         print("[DEBUG] Connected preview_frame signal with QueuedConnection")
 
     def handle_backend_log_event(self, event_type: EventType, message: str):
@@ -773,51 +778,120 @@ class EDGEMainWindow(QMainWindow):
         print(f"[DEBUG] GUI handle_preview_frame called with frame: {frame.shape if frame is not None else 'None'}")
         self.preview_area.update_image(frame)
 
+    def handle_state_changed(self, state, message: str):
+        """Handle state machine state changes and update menu accordingly."""
+        self.current_state = state
+        self.update_menu_for_state(state)
+        self.add_log_event(EventType.INFO, f"State: {state.value} - {message}")
+
+    def update_menu_for_state(self, state):
+        """Update menu items based on current state machine state."""
+        from EdgeStateMachine import ApplicationState
+
+        if state == ApplicationState.INITIALIZE:
+            # System initializing - disable all controls
+            self.preview_action.setEnabled(False)
+            self.capture_action.setEnabled(False)
+            self.restart_action.setEnabled(False)
+            self.auto_capture_action.setEnabled(False)
+
+        elif state == ApplicationState.LOOKING_FOR_WAKEBOARDER:
+            # System ready - enable preview and capture
+            self.preview_action.setEnabled(True)
+            self.capture_action.setEnabled(True)
+            self.restart_action.setEnabled(False)
+            self.auto_capture_action.setEnabled(True)
+            self.auto_capture_action.setText("⏹️ Stop Auto-Capture")
+
+        elif state == ApplicationState.RECORDING:
+            # Recording - disable capture (already recording)
+            self.preview_action.setEnabled(True)
+            self.capture_action.setEnabled(False)  # Can't capture while recording
+            self.restart_action.setEnabled(False)
+            self.auto_capture_action.setEnabled(True)
+            self.auto_capture_action.setText("⏹️ Stop Auto-Capture")
+
+        elif state == ApplicationState.ERROR:
+            # Error - only restart available
+            self.preview_action.setEnabled(False)
+            self.capture_action.setEnabled(False)
+            self.restart_action.setEnabled(True)
+            self.auto_capture_action.setEnabled(False)
+
+        elif state == ApplicationState.STOPPING:
+            # Stopping - disable all
+            self.preview_action.setEnabled(False)
+            self.capture_action.setEnabled(False)
+            self.restart_action.setEnabled(False)
+            self.auto_capture_action.setEnabled(False)
+
+        # Sync preview checkbox with actual status
+        if self.status_indicators:
+            self.preview_action.setChecked(self.status_indicators.preview)
+
     def setup_menu_bar(self):
-        """Setup the menu bar."""
+        """Setup state-aware menu bar with user-friendly controls."""
         menubar = self.menuBar()
 
-        # File menu
+        # ═══════════════════════════════════════════════════════════
+        # FILE MENU
+        # ═══════════════════════════════════════════════════════════
         file_menu = menubar.addMenu("File")
 
         exit_action = QAction("Exit", self)
+        exit_action.setShortcut("Ctrl+W")
         exit_action.triggered.connect(self.close)
         file_menu.addAction(exit_action)
 
-        # Tools menu
-        tools_menu = menubar.addMenu("Tools")
+        # ═══════════════════════════════════════════════════════════
+        # CAMERA MENU - User-facing camera controls
+        # ═══════════════════════════════════════════════════════════
+        camera_menu = menubar.addMenu("Camera")
 
-        init_action = QAction("Initialize EDGE System", self)
-        init_action.triggered.connect(self.initialize_edge_system)
-        tools_menu.addAction(init_action)
+        # Preview toggle (checkable)
+        self.preview_action = QAction("🖥️ Preview", self)
+        self.preview_action.setCheckable(True)
+        self.preview_action.setChecked(False)  # Will sync with actual state
+        self.preview_action.setShortcut("Ctrl+P")
+        self.preview_action.setToolTip("Toggle live camera preview (Ctrl+P)")
+        self.preview_action.triggered.connect(self.toggle_preview)
+        self.preview_action.setEnabled(False)  # Disabled until system ready
+        camera_menu.addAction(self.preview_action)
 
-        connect_action = QAction("Connect to GoPro", self)
-        connect_action.triggered.connect(self.connect_gopro)
-        tools_menu.addAction(connect_action)
+        camera_menu.addSeparator()
 
-        start_preview_action = QAction("Start Preview", self)
-        start_preview_action.triggered.connect(self.start_preview)
-        tools_menu.addAction(start_preview_action)
+        # Manual clip capture
+        self.capture_action = QAction("📹 Capture Clip Now", self)
+        self.capture_action.setShortcut("Ctrl+R")
+        self.capture_action.setToolTip("Manually save the last 30 seconds of video (Ctrl+R)")
+        self.capture_action.triggered.connect(self.capture_clip_now)
+        self.capture_action.setEnabled(False)  # Disabled until ready
+        camera_menu.addAction(self.capture_action)
 
-        stop_preview_action = QAction("Stop Preview", self)
-        stop_preview_action.triggered.connect(self.stop_preview)
-        tools_menu.addAction(stop_preview_action)
+        # ═══════════════════════════════════════════════════════════
+        # SYSTEM MENU - System-level controls
+        # ═══════════════════════════════════════════════════════════
+        system_menu = menubar.addMenu("System")
 
-        tools_menu.addSeparator()
+        # Auto-capture toggle (start/stop system)
+        self.auto_capture_action = QAction("▶️ Start Auto-Capture", self)
+        self.auto_capture_action.setShortcut("Ctrl+Q")
+        self.auto_capture_action.setToolTip("Start or stop the auto-capture system (Ctrl+Q)")
+        self.auto_capture_action.triggered.connect(self.toggle_auto_capture)
+        system_menu.addAction(self.auto_capture_action)
 
-        start_edge_action = QAction("Start EDGE Processing", self)
-        start_edge_action.triggered.connect(self.start_edge_processing)
-        tools_menu.addAction(start_edge_action)
+        system_menu.addSeparator()
 
-        trigger_hindsight_action = QAction("Trigger Hindsight Manually", self)
-        trigger_hindsight_action.triggered.connect(self.trigger_hindsight)
-        tools_menu.addAction(trigger_hindsight_action)
+        # Restart system (only in error state)
+        self.restart_action = QAction("🔄 Restart System", self)
+        self.restart_action.setToolTip("Restart the system from error state")
+        self.restart_action.triggered.connect(self.restart_system)
+        self.restart_action.setEnabled(False)  # Only enabled in ERROR state
+        system_menu.addAction(self.restart_action)
 
-        stop_edge_action = QAction("Stop EDGE Processing", self)
-        stop_edge_action.triggered.connect(self.stop_edge_processing)
-        tools_menu.addAction(stop_edge_action)
-
-        # Demo menu
+        # ═══════════════════════════════════════════════════════════
+        # DEMO MENU - Keep for testing
+        # ═══════════════════════════════════════════════════════════
         demo_menu = menubar.addMenu("Demo")
 
         start_demo_action = QAction("Start Demo Mode", self)
@@ -827,6 +901,10 @@ class EDGEMainWindow(QMainWindow):
         stop_demo_action = QAction("Stop Demo Mode", self)
         stop_demo_action.triggered.connect(self.stop_demo_mode)
         demo_menu.addAction(stop_demo_action)
+
+        # Track current state for menu updates
+        self.current_state = None
+        self.system_running = False
 
     def setup_demo_data(self):
         """Setup demo data for testing."""
@@ -895,41 +973,87 @@ class EDGEMainWindow(QMainWindow):
             self.add_log_event(EventType.INFO, "Demo mode stopped")
             self.status_bar.update_status("Demo mode stopped")
 
-    def initialize_edge_system(self):
-        """Initialize EDGE system (now handled by state machine)."""
-        self.add_log_event(EventType.INFO, "State machine handles initialization automatically")
-        self.status_bar.update_status("Use 'Start EDGE Processing' to begin")
+    # ═══════════════════════════════════════════════════════════════════════
+    # MENU ACTION HANDLERS - Clean implementation with EdgeApplication API
+    # ═══════════════════════════════════════════════════════════════════════
 
-    def connect_gopro(self):
-        """Connect to GoPro camera (now handled by state machine)."""
-        self.add_log_event(EventType.INFO, "GoPro connection is handled automatically by state machine")
-        self.status_bar.update_status("Use 'Start EDGE Processing' to begin")
+    def toggle_preview(self, checked: bool):
+        """Toggle preview on/off."""
+        if not self.backend.state_machine or not self.backend.state_machine.edge_app:
+            self.add_log_event(EventType.ERROR, "System not initialized")
+            self.preview_action.setChecked(not checked)  # Revert
+            return
 
-    def start_preview(self):
-        """Start video preview (now handled by state machine)."""
-        self.add_log_event(EventType.INFO, "Preview is handled automatically by state machine")
-        self.status_bar.update_status("Use 'Start EDGE Processing' to begin")
+        edge_app = self.backend.state_machine.edge_app
 
-    def stop_preview(self):
-        """Stop video preview (now handled by state machine)."""
-        self.add_log_event(EventType.INFO, "Preview control is handled by state machine")
-        self.status_bar.update_status("Use 'Stop EDGE Processing' to shutdown")
+        if checked:
+            if edge_app.start_preview():
+                self.add_log_event(EventType.INFO, "Preview started")
+            else:
+                self.add_log_event(EventType.ERROR, "Failed to start preview")
+                self.preview_action.setChecked(False)  # Revert on failure
+        else:
+            if edge_app.stop_preview():
+                self.add_log_event(EventType.INFO, "Preview stopped")
+            else:
+                self.add_log_event(EventType.ERROR, "Failed to stop preview")
+                self.preview_action.setChecked(True)  # Revert on failure
 
-    def start_edge_processing(self):
-        """Start EDGE processing using state machine."""
-        self.add_log_event(EventType.INFO, "Starting EDGE state machine...")
+    def capture_clip_now(self):
+        """Manually trigger a clip capture."""
+        if not self.backend.state_machine or not self.backend.state_machine.edge_app:
+            self.add_log_event(EventType.ERROR, "System not initialized")
+            return
+
+        edge_app = self.backend.state_machine.edge_app
+
+        if edge_app.trigger_hindsight_clip():
+            self.add_log_event(EventType.SUCCESS, "📹 Clip captured!")
+            self.status_bar.update_status("Capturing clip...")
+        else:
+            self.add_log_event(EventType.ERROR, "Failed to capture clip")
+
+    def toggle_auto_capture(self):
+        """Toggle auto-capture system on/off."""
+        if self.system_running:
+            # Stop system
+            self.stop_auto_capture()
+        else:
+            # Start system
+            self.start_auto_capture()
+
+    def start_auto_capture(self):
+        """Start auto-capture system (state machine)."""
+        self.add_log_event(EventType.INFO, "Starting auto-capture system...")
         self.run_state_machine()
+        self.system_running = True
+        self.auto_capture_action.setText("⏹️ Stop Auto-Capture")
+        self.auto_capture_action.setToolTip("Stop the auto-capture system (Ctrl+Q)")
 
-    def trigger_hindsight(self):
-        """Trigger hindsight clip manually."""
-        self.add_log_event(EventType.INFO, "Manual hindsight trigger not supported in state machine mode")
-        self.add_log_event(EventType.INFO, "State machine automatically triggers recording on wakeboarder detection")
-
-    def stop_edge_processing(self):
-        """Stop EDGE processing."""
-        self.add_log_event(EventType.INFO, "Stopping EDGE state machine...")
+    def stop_auto_capture(self):
+        """Stop auto-capture system."""
+        self.add_log_event(EventType.INFO, "Stopping auto-capture system...")
         self.backend.stop_edge()
-        self.status_bar.update_status("EDGE state machine stopped")
+        self.system_running = False
+        self.auto_capture_action.setText("▶️ Start Auto-Capture")
+        self.auto_capture_action.setToolTip("Start the auto-capture system (Ctrl+Q)")
+        self.status_bar.update_status("Auto-capture stopped")
+
+    def restart_system(self):
+        """Restart the system from error state."""
+        self.add_log_event(EventType.INFO, "Restarting system...")
+
+        # Stop current system
+        self.backend.stop_edge()
+        self.system_running = False
+
+        # Delay restart
+        QTimer.singleShot(2000, self._restart_system_delayed)
+
+    def _restart_system_delayed(self):
+        """Delayed restart helper."""
+        self.add_log_event(EventType.INFO, "Restarting system now...")
+        self.start_auto_capture()
 
     def add_log_event(self, event_type: EventType, message: str):
         """Add a new event to the log."""
@@ -975,6 +1099,7 @@ class EDGEMainWindow(QMainWindow):
                 # Start the backend thread which will run the state machine
                 if not self.backend.isRunning():
                     self.backend.start()
+                self.system_running = True
                 self.add_log_event(EventType.SUCCESS, "State machine started - automatic initialization in progress")
             else:
                 self.add_log_event(EventType.ERROR, "Failed to start state machine")
