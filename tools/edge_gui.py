@@ -47,7 +47,10 @@ try:
     from ConfigurationHandler import ConfigurationHandler
     from GoProController import GoProController
     import edge_main
-    from edge_application import EdgeApplication, EdgeStatus, SystemStatus, DetectionResult
+    from edge_application import EdgeApplicationStateMachine
+    from EdgeStateMachine import ApplicationState
+    from StatusManager import SystemStatus, EdgeStatus, DetectionResult
+    from EdgeApplicationConfig import EdgeApplicationConfig
     EDGE_AVAILABLE = True
 except ImportError as e:
     logging.warning(f"EDGE modules not available: {e}")
@@ -93,7 +96,7 @@ class StatusIndicators:
 
 
 class EDGEBackend(QThread):
-    """Backend thread for EDGE application integration using EdgeApplication."""
+    """Backend thread for EDGE application integration using EdgeApplicationStateMachine."""
 
     # Signals for communicating with GUI
     motion_detected = Signal()
@@ -105,45 +108,55 @@ class EDGEBackend(QThread):
 
     def __init__(self):
         super().__init__()
-        self.edge_app: Optional[EdgeApplication] = None
+        self.state_machine: Optional[EdgeApplicationStateMachine] = None
         self.running = False
         self.status = StatusIndicators()
 
-        # Initialize EdgeApplication with callbacks
+        # Initialize EdgeApplicationStateMachine with state callback
         if EDGE_AVAILABLE:
-            self.edge_app = EdgeApplication(
-                status_callback=self._on_status_update,
-                detection_callback=self._on_detection,
-                ble_callback=self._on_ble_data,
-                log_callback=self._on_log,
-                frame_callback=self._on_frame_received
+            # Load configuration
+            config_path = Path(__file__).resolve().parent.parent / "config.ini"
+            config = EdgeApplicationConfig()
+            if config_path.exists():
+                config.load_from_file(str(config_path))
+
+            # Create state machine with callbacks
+            self.state_machine = EdgeApplicationStateMachine(
+                status_callback=self._on_state_update,
+                config=config
             )
 
-    def _on_status_update(self, edge_status: SystemStatus):
-        """Handle status updates from EdgeApplication."""
-        # Convert EdgeApplication status to GUI status
-        self.status.active = edge_status.gopro_connected
-        self.status.preview = edge_status.preview_active
-        self.status.recording = edge_status.recording
-        self.status.hindsight_mode = edge_status.hindsight_mode
+            # Set up additional callbacks through the edge_app
+            if self.state_machine and self.state_machine.edge_app:
+                self.state_machine.edge_app.status_manager.detection_callback = self._on_detection
+                self.state_machine.edge_app.status_manager.ble_callback = self._on_ble_data
+                self.state_machine.edge_app.status_manager.log_callback = self._on_log
+                self.state_machine.edge_app.status_manager.frame_callback = self._on_frame_received
 
-        # Map EdgeStatus to status bar messages
-        status_messages = {
-            EdgeStatus.INITIALIZING: "Initializing EDGE system...",
-            EdgeStatus.READY: "EDGE system ready",
-            EdgeStatus.ACTIVE: "EDGE system active",
-            EdgeStatus.LOOKING_FOR_WAKEBOARDER: "Looking for wakeboarder",
-            EdgeStatus.MOTION_DETECTED: "Motion detected - analyzing...",
-            EdgeStatus.RECORDING: "Recording highlight clip",
-            EdgeStatus.ERROR: "System error",
-            EdgeStatus.STOPPED: "System stopped"
+    def _on_state_update(self, state: ApplicationState, message: str):
+        """Handle state updates from EdgeApplicationStateMachine."""
+        # Map ApplicationState to status bar messages
+        state_messages = {
+            ApplicationState.INITIALIZE: "Initializing EDGE system...",
+            ApplicationState.LOOKING_FOR_WAKEBOARDER: "Looking for wakeboarder",
+            ApplicationState.RECORDING: "Recording highlight clip",
+            ApplicationState.ERROR: "System error",
+            ApplicationState.STOPPING: "Shutting down..."
         }
 
-        status_message = status_messages.get(edge_status.overall_status, "Unknown status")
-        self.status_message_changed.emit(status_message)
-        self.log_event.emit(EventType.INFO, f"Status: {status_message}")
+        status_message = state_messages.get(state, "Unknown state")
+        self.status_message_changed.emit(f"{status_message}: {message}")
+        self.log_event.emit(EventType.INFO, message)
 
-        self.status_changed.emit(self.status)
+        # Update status indicators from actual system status (not state machine state)
+        # State machine state != System status - they are orthogonal concepts
+        if self.state_machine and self.state_machine.edge_app:
+            sys_status = self.state_machine.edge_app.get_status()
+            self.status.active = sys_status.gopro_connected
+            self.status.preview = sys_status.preview_active
+            self.status.recording = sys_status.recording
+            self.status.hindsight_mode = sys_status.hindsight_mode
+            self.status_changed.emit(self.status)
 
     def _on_detection(self, detection: DetectionResult):
         """Handle detection results from EdgeApplication."""
@@ -172,69 +185,34 @@ class EDGEBackend(QThread):
         # Emit the frame to the GUI
         self.preview_frame.emit(frame)
 
-    def initialize_edge(self):
-        """Initialize EDGE system."""
-        if not EDGE_AVAILABLE or not self.edge_app:
+    def start_state_machine(self):
+        """Start the EDGE state machine (runs in this thread)."""
+        if not EDGE_AVAILABLE or not self.state_machine:
             self.log_event.emit(EventType.ERROR, "EDGE modules not available")
             return False
 
-        return self.edge_app.initialize()
-
-    def connect_gopro(self):
-        """Connect to GoPro camera."""
-        if not self.edge_app:
-            return False
-
-        return self.edge_app.connect_gopro()
-
-    def start_preview(self):
-        """Start GoPro preview."""
-        if not self.edge_app:
-            return False
-
-        return self.edge_app.start_preview()
-
-    def stop_preview(self):
-        """Stop GoPro preview."""
-        if not self.edge_app:
-            return False
-
-        return self.edge_app.stop_preview()
-
-    def start_edge_processing(self):
-        """Start complete EDGE system."""
-        if not self.edge_app:
-            return False
-
-        success = self.edge_app.start_system()
-        if success:
-            self.running = True
-            self.log_event.emit(EventType.SUCCESS, "EDGE system started - Looking for wakeboarder")
-
-        return success
-
-    def trigger_hindsight(self):
-        """Manually trigger hindsight clip."""
-        if not self.edge_app:
-            return False
-
-        success = self.edge_app.trigger_hindsight()
-        if success:
-            self.hindsight_triggered.emit()
-
-        return success
+        self.running = True
+        self.log_event.emit(EventType.INFO, "Starting EDGE state machine...")
+        return True
 
     def stop_edge(self):
         """Stop EDGE processing."""
         self.running = False
-        if self.edge_app:
-            self.edge_app.stop_system()
+        if self.state_machine:
+            self.state_machine.shutdown()
 
     def run(self):
-        """Main backend thread loop."""
-        # Keep the thread alive and handle any background processing
-        while self.running:
-            self.msleep(1000)  # Sleep for 1 second
+        """Main backend thread loop - runs the state machine."""
+        if not self.state_machine or not self.running:
+            return
+
+        try:
+            # Run the state machine (this blocks until shutdown)
+            self.state_machine.run()
+        except Exception as e:
+            self.log_event.emit(EventType.ERROR, f"State machine error: {e}")
+        finally:
+            self.running = False
 
 
 class StatusBar(QWidget):
@@ -650,10 +628,7 @@ class EDGEMainWindow(QMainWindow):
         self.setup_backend_connections()
         self.setup_demo_data()
 
-        # Start backend thread
-        self.backend.start()
-
-        # Start automatic startup sequence
+        # Start automatic startup sequence (which will start the backend thread)
         self.start_automatic_startup()
 
     def setup_ui(self):
@@ -921,61 +896,40 @@ class EDGEMainWindow(QMainWindow):
             self.status_bar.update_status("Demo mode stopped")
 
     def initialize_edge_system(self):
-        """Initialize EDGE system."""
-        self.add_log_event(EventType.INFO, "Initializing EDGE system...")
-        success = self.backend.initialize_edge()
-        if success:
-            self.status_bar.update_status("EDGE system initialized")
-        else:
-            self.status_bar.update_status("EDGE system initialization failed")
+        """Initialize EDGE system (now handled by state machine)."""
+        self.add_log_event(EventType.INFO, "State machine handles initialization automatically")
+        self.status_bar.update_status("Use 'Start EDGE Processing' to begin")
 
     def connect_gopro(self):
-        """Connect to GoPro camera."""
-        self.add_log_event(EventType.INFO, "Connecting to GoPro...")
-        success = self.backend.connect_gopro()
-        if success:
-            self.status_bar.update_status("GoPro connected")
-        else:
-            self.status_bar.update_status("GoPro connection failed")
+        """Connect to GoPro camera (now handled by state machine)."""
+        self.add_log_event(EventType.INFO, "GoPro connection is handled automatically by state machine")
+        self.status_bar.update_status("Use 'Start EDGE Processing' to begin")
 
     def start_preview(self):
-        """Start video preview."""
-        self.add_log_event(EventType.INFO, "Starting preview...")
-        success = self.backend.start_preview()
-        if success:
-            self.status_bar.update_status("Preview active")
-            # Preview frames will come from the backend via preview_frame signal
-        else:
-            self.status_bar.update_status("Preview start failed")
+        """Start video preview (now handled by state machine)."""
+        self.add_log_event(EventType.INFO, "Preview is handled automatically by state machine")
+        self.status_bar.update_status("Use 'Start EDGE Processing' to begin")
 
     def stop_preview(self):
-        """Stop video preview."""
-        self.add_log_event(EventType.INFO, "Stopping preview...")
-        success = self.backend.stop_preview()
-        if success:
-            self.status_bar.update_status("Preview stopped")
-        else:
-            self.status_bar.update_status("Preview stop failed")
+        """Stop video preview (now handled by state machine)."""
+        self.add_log_event(EventType.INFO, "Preview control is handled by state machine")
+        self.status_bar.update_status("Use 'Stop EDGE Processing' to shutdown")
 
     def start_edge_processing(self):
-        """Start EDGE processing."""
-        self.add_log_event(EventType.INFO, "Starting EDGE processing...")
-        success = self.backend.start_edge_processing()
-        if success:
-            self.status_bar.update_status("EDGE processing active")
-        else:
-            self.status_bar.update_status("EDGE processing start failed")
+        """Start EDGE processing using state machine."""
+        self.add_log_event(EventType.INFO, "Starting EDGE state machine...")
+        self.run_state_machine()
 
     def trigger_hindsight(self):
         """Trigger hindsight clip manually."""
-        self.add_log_event(EventType.INFO, "Triggering hindsight clip...")
-        self.backend.trigger_hindsight()
+        self.add_log_event(EventType.INFO, "Manual hindsight trigger not supported in state machine mode")
+        self.add_log_event(EventType.INFO, "State machine automatically triggers recording on wakeboarder detection")
 
     def stop_edge_processing(self):
         """Stop EDGE processing."""
-        self.add_log_event(EventType.INFO, "Stopping EDGE processing...")
+        self.add_log_event(EventType.INFO, "Stopping EDGE state machine...")
         self.backend.stop_edge()
-        self.status_bar.update_status("EDGE processing stopped")
+        self.status_bar.update_status("EDGE state machine stopped")
 
     def add_log_event(self, event_type: EventType, message: str):
         """Add a new event to the log."""
@@ -1005,79 +959,27 @@ class EDGEMainWindow(QMainWindow):
         event.accept()
 
     def start_automatic_startup(self):
-        """Start automatic startup sequence: initialize -> connect -> preview -> hindsight."""
-        self.add_log_event(EventType.INFO, "Starting automatic EDGE system startup...")
+        """Start automatic startup sequence using state machine."""
+        self.add_log_event(EventType.INFO, "Starting EDGE state machine...")
 
         # Use QTimer to delay startup to allow GUI to fully initialize
         startup_timer = QTimer()
-        startup_timer.timeout.connect(self.run_startup_sequence)
+        startup_timer.timeout.connect(self.run_state_machine)
         startup_timer.setSingleShot(True)
         startup_timer.start(1000)  # 1 second delay
 
-    def run_startup_sequence(self):
-        """Run the automatic startup sequence."""
+    def run_state_machine(self):
+        """Start the state machine (which handles all initialization automatically)."""
         try:
-            # Step 1: Initialize EDGE system
-            self.add_log_event(EventType.INFO, "Initializing EDGE system...")
-            if not self.backend.initialize_edge():
-                self.add_log_event(EventType.ERROR, "EDGE system initialization failed - stopping startup")
-                return
-
-            # Step 2: Connect to GoPro (with delay)
-            connect_timer = QTimer()
-            connect_timer.timeout.connect(self.startup_connect_gopro)
-            connect_timer.setSingleShot(True)
-            connect_timer.start(2000)  # 2 second delay
-
-        except Exception as e:
-            self.add_log_event(EventType.ERROR, f"Startup sequence failed: {e}")
-
-    def startup_connect_gopro(self):
-        """Step 2: Connect to GoPro."""
-        try:
-            self.add_log_event(EventType.INFO, "Attempting to connect to GoPro...")
-            if self.backend.connect_gopro():
-                self.add_log_event(EventType.SUCCESS, "GoPro connected successfully")
-
-                # Step 3: Start preview (with delay)
-                preview_timer = QTimer()
-                preview_timer.timeout.connect(self.startup_start_preview)
-                preview_timer.setSingleShot(True)
-                preview_timer.start(1500)  # 1.5 second delay
+            if self.backend.start_state_machine():
+                # Start the backend thread which will run the state machine
+                if not self.backend.isRunning():
+                    self.backend.start()
+                self.add_log_event(EventType.SUCCESS, "State machine started - automatic initialization in progress")
             else:
-                self.add_log_event(EventType.WARNING, "Failed to connect to GoPro - startup incomplete")
+                self.add_log_event(EventType.ERROR, "Failed to start state machine")
         except Exception as e:
-            self.add_log_event(EventType.ERROR, f"GoPro connection failed: {e}")
-
-    def startup_start_preview(self):
-        """Step 3: Start preview."""
-        try:
-            self.add_log_event(EventType.INFO, "Starting preview stream...")
-            if self.backend.start_preview():
-                self.add_log_event(EventType.SUCCESS, "Preview started successfully")
-
-                # Step 4: Enable hindsight mode (with delay)
-                hindsight_timer = QTimer()
-                hindsight_timer.timeout.connect(self.startup_enable_hindsight)
-                hindsight_timer.setSingleShot(True)
-                hindsight_timer.start(1000)  # 1 second delay
-            else:
-                self.add_log_event(EventType.WARNING, "Failed to start preview - continuing without preview")
-        except Exception as e:
-            self.add_log_event(EventType.ERROR, f"Preview start failed: {e}")
-
-    def startup_enable_hindsight(self):
-        """Step 4: Enable hindsight mode."""
-        try:
-            self.add_log_event(EventType.INFO, "Enabling hindsight mode...")
-            if self.backend.trigger_hindsight():
-                self.add_log_event(EventType.SUCCESS, "Hindsight mode enabled - EDGE system ready")
-                self.status_bar.update_status("EDGE system ready - Looking for wakeboarder")
-            else:
-                self.add_log_event(EventType.WARNING, "Failed to enable hindsight mode - manual activation required")
-                self.status_bar.update_status("EDGE system ready (hindsight manual)")
-        except Exception as e:
-            self.add_log_event(EventType.ERROR, f"Hindsight mode failed: {e}")
+            self.add_log_event(EventType.ERROR, f"State machine startup failed: {e}")
 
 
 def main():
