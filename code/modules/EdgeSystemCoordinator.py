@@ -19,6 +19,7 @@ from GoProController import GoProController
 from DnnHandler import DnnHandler
 from ble_beacon_handler import BleBeaconHandler
 from ConfigurationHandler import ConfigurationHandler
+from EdgeApplicationConfig import EdgeApplicationConfig
 
 
 logger = logging.getLogger(__name__)
@@ -41,7 +42,8 @@ class EdgeSystemCoordinator:
 
     def __init__(self,
                  status_manager: Optional[StatusManager] = None,
-                 detection_callback: Optional[Callable[[DetectionResult], None]] = None):
+                 detection_callback: Optional[Callable[[DetectionResult], None]] = None,
+                 config: Optional[EdgeApplicationConfig] = None):
         """
         Initialize the Edge System Coordinator.
 
@@ -51,6 +53,8 @@ class EdgeSystemCoordinator:
             Status manager for logging and status updates
         detection_callback : Callable[[DetectionResult], None], optional
             Callback function for detection results
+        config : EdgeApplicationConfig, optional
+            Configuration object with Edge Application parameters
         """
         # Status management
         if status_manager:
@@ -60,6 +64,9 @@ class EdgeSystemCoordinator:
 
         # Detection callback
         self.detection_callback = detection_callback
+
+        # Configuration
+        self.config = config if config else EdgeApplicationConfig()
 
         # Core system components
         self.gopro_controller: Optional[GoProController] = None
@@ -74,9 +81,8 @@ class EdgeSystemCoordinator:
         self.initialized = False
         self.running = False
 
-        # Configuration
+        # Configuration tracking
         self.config_loaded = False
-        self.yolo_model = "yolov8n"  # Default YOLO model
 
     def set_detection_callback(self, callback: Callable[[DetectionResult], None]) -> None:
         """Set the detection callback function."""
@@ -141,12 +147,18 @@ class EdgeSystemCoordinator:
             return False
 
     def _initialize_yolo(self) -> bool:
-        """Initialize YOLO detection system."""
+        """Initialize YOLO detection system (if enabled in config)."""
+        # Check if YOLO is enabled in configuration
+        if not self.config.get_yolo_enabled():
+            self.status_manager.log("info", "YOLO detection disabled by configuration")
+            return True  # Return true as this is expected behavior
+
         try:
-            self.dnn_handler = DnnHandler(self.yolo_model)
+            yolo_model = self.config.get_yolo_model()
+            self.dnn_handler = DnnHandler(yolo_model)
             self.dnn_handler.init()
             self.status_manager.update_status(yolo_active=True)
-            self.status_manager.log("info", f"YOLO {self.yolo_model} model initialized")
+            self.status_manager.log("info", f"YOLO {yolo_model} model initialized")
             return True
 
         except Exception as e:
@@ -440,7 +452,17 @@ class EdgeSystemCoordinator:
 
     def start_system(self) -> bool:
         """
-        Start the complete Edge system.
+        Start the complete Edge system (basic components only).
+
+        NOTE: This method has been simplified for state machine control.
+        The state machine now controls:
+        - When to enable hindsight mode (in LOOKING_FOR_WAKEBOARDER state)
+        - When to start YOLO detection (in LOOKING_FOR_WAKEBOARDER state)
+
+        This method only handles:
+        - Connecting to GoPro
+        - Starting preview
+        - Starting BLE logging
 
         Returns
         -------
@@ -452,34 +474,12 @@ class EdgeSystemCoordinator:
             return False
 
         try:
-            self.status_manager.log("info", "Starting Edge system...")
+            self.status_manager.log("info", "Starting Edge system coordinator...")
             self.running = True
 
-            # Connect to GoPro
-            if not self.connect_gopro():
-                return False
-
-            # Start preview
-            if not self.start_preview():
-                return False
-
-            # Enable hindsight mode
-            if not self.trigger_hindsight():
-                self.status_manager.log("warning", "Failed to enable hindsight mode, continuing without it")
-
-            # Start BLE logging
-            if not self.start_ble_logging():
-                return False
-
-            # Start stream processing
-            if self.stream_processor:
-                if not self.stream_processor.start_processing():
-                    self.status_manager.log("error", "Failed to start stream processing")
-                    return False
-
-            # Update status to looking for wakeboarder
-            self.status_manager.update_status(overall_status=EdgeStatus.LOOKING_FOR_WAKEBOARDER)
-            self.status_manager.log("info", "All systems active - Looking for wakeboarder")
+            # Note: GoPro connection, preview, and BLE logging are now
+            # handled by the state machine during INITIALIZE state
+            self.status_manager.log("info", "Edge system coordinator ready")
 
             return True
 

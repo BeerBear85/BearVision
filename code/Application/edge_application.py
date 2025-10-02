@@ -31,6 +31,7 @@ from StreamProcessor import StreamProcessor
 from EdgeSystemCoordinator import EdgeSystemCoordinator
 from EdgeStateMachine import EdgeStateMachine, ApplicationState
 from EdgeThreadManager import EdgeThreadManager
+from EdgeApplicationConfig import EdgeApplicationConfig
 
 
 logger = logging.getLogger(__name__)
@@ -51,7 +52,8 @@ class EdgeApplication:
                  detection_callback: Optional[Callable[[DetectionResult], None]] = None,
                  ble_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
                  log_callback: Optional[Callable[[str, str], None]] = None,
-                 frame_callback: Optional[Callable[[np.ndarray], None]] = None):
+                 frame_callback: Optional[Callable[[np.ndarray], None]] = None,
+                 config: Optional[EdgeApplicationConfig] = None):
         """
         Initialize the Edge Application.
 
@@ -67,7 +69,12 @@ class EdgeApplication:
             Callback function for log messages (level, message)
         frame_callback : Callable[[np.ndarray], None], optional
             Callback function for preview frames
+        config : EdgeApplicationConfig, optional
+            Configuration object with Edge Application parameters
         """
+        # Configuration
+        self.config = config if config else EdgeApplicationConfig()
+
         # Initialize status manager with all callbacks
         self.status_manager = StatusManager(
             status_callback=status_callback,
@@ -80,15 +87,13 @@ class EdgeApplication:
         # Initialize system coordinator
         self.system_coordinator = EdgeSystemCoordinator(
             status_manager=self.status_manager,
-            detection_callback=self._handle_detection
+            detection_callback=self._handle_detection,
+            config=self.config
         )
 
         # State tracking
         self.initialized = False
         self.running = False
-
-        # Configuration
-        self.yolo_model = "yolov8n"  # Default YOLO model
 
     def _handle_detection(self, detection: DetectionResult) -> None:
         """Handle detection results from system coordinator."""
@@ -205,7 +210,8 @@ class EdgeApplicationStateMachine:
     """
 
     def __init__(self,
-                 status_callback: Optional[Callable[[ApplicationState, str], None]] = None):
+                 status_callback: Optional[Callable[[ApplicationState, str], None]] = None,
+                 config: Optional[EdgeApplicationConfig] = None):
         """
         Initialize the Edge Application state machine.
 
@@ -213,14 +219,20 @@ class EdgeApplicationStateMachine:
         ----------
         status_callback : Callable[[ApplicationState, str], None], optional
             Callback function for state and status updates
+        config : EdgeApplicationConfig, optional
+            Configuration object with Edge Application parameters
         """
-        # Initialize Edge Application
-        self.edge_app = EdgeApplication()
+        # Configuration
+        self.config = config if config else EdgeApplicationConfig()
 
-        # Initialize state machine with system coordinator
+        # Initialize Edge Application with config
+        self.edge_app = EdgeApplication(config=self.config)
+
+        # Initialize state machine with system coordinator and config
         self.state_machine = EdgeStateMachine(
             status_callback=status_callback,
-            edge_system_coordinator=self.edge_app.system_coordinator
+            edge_system_coordinator=self.edge_app.system_coordinator,
+            config=self.config
         )
 
     def run(self):
