@@ -117,7 +117,14 @@ class DnnHandler:
 
         detections_list = []
         for i in range(len(result_boxes)):
+            # Handle different OpenCV versions: ensure index is an integer
+            # In OpenCV 4.9+, result_boxes[i] may be a nested array/tuple
             index = result_boxes[i]
+            if isinstance(index, (list, np.ndarray, tuple)):
+                index = int(index[0])
+            else:
+                index = int(index)
+
             box = boxes[index]
             detection = {
                 'class_id': class_ids[index],
