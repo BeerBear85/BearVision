@@ -180,7 +180,8 @@ class EdgeSystemCoordinator:
         """Initialize stream processor with detection callback."""
         self.stream_processor = StreamProcessor(
             status_manager=self.status_manager,
-            dnn_handler=self.dnn_handler
+            dnn_handler=self.dnn_handler,
+            config=self.config
         )
 
         # Set up detection callback chain

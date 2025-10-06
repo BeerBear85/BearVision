@@ -39,6 +39,11 @@ class SystemStatus:
     hindsight_mode: bool = False
     recording: bool = False
 
+    # Stream performance metrics
+    stream_fps: float = 0.0
+    stream_lag_ms: float = 0.0
+    frames_dropped: int = 0
+
 
 @dataclass
 class DetectionResult:

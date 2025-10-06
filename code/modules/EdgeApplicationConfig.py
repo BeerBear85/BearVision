@@ -50,6 +50,12 @@ class EdgeApplicationConfig:
         # Detection Settings
         "detection_confidence_threshold": 0.5,
         "detection_cooldown": 2.0,
+
+        # Stream Performance Settings
+        "stream_max_fps": 30,
+        "stream_buffer_drain": True,
+        "stream_max_lag_ms": 500,
+        "stream_callback_queue_size": 2,
     }
 
     # Valid YOLO model names
@@ -147,6 +153,16 @@ class EdgeApplicationConfig:
         self._values["detection_cooldown"] = section.getfloat("detection_cooldown",
                                                               fallback=self.DEFAULTS["detection_cooldown"])
 
+        # Stream Performance Settings
+        self._values["stream_max_fps"] = section.getint("stream_max_fps",
+                                                        fallback=self.DEFAULTS["stream_max_fps"])
+        self._values["stream_buffer_drain"] = section.getboolean("stream_buffer_drain",
+                                                                 fallback=self.DEFAULTS["stream_buffer_drain"])
+        self._values["stream_max_lag_ms"] = section.getint("stream_max_lag_ms",
+                                                           fallback=self.DEFAULTS["stream_max_lag_ms"])
+        self._values["stream_callback_queue_size"] = section.getint("stream_callback_queue_size",
+                                                                    fallback=self.DEFAULTS["stream_callback_queue_size"])
+
     def validate(self) -> bool:
         """
         Validate configuration values.
@@ -187,6 +203,21 @@ class EdgeApplicationConfig:
             # Validate detection cooldown
             if self._values["detection_cooldown"] < 0:
                 logger.error(f"Invalid detection_cooldown: {self._values['detection_cooldown']}, must be >= 0")
+                return False
+
+            # Validate stream max FPS
+            if self._values["stream_max_fps"] <= 0 or self._values["stream_max_fps"] > 120:
+                logger.error(f"Invalid stream_max_fps: {self._values['stream_max_fps']}, must be between 1 and 120")
+                return False
+
+            # Validate stream max lag
+            if self._values["stream_max_lag_ms"] < 0:
+                logger.error(f"Invalid stream_max_lag_ms: {self._values['stream_max_lag_ms']}, must be >= 0")
+                return False
+
+            # Validate stream callback queue size
+            if self._values["stream_callback_queue_size"] < 1 or self._values["stream_callback_queue_size"] > 10:
+                logger.error(f"Invalid stream_callback_queue_size: {self._values['stream_callback_queue_size']}, must be between 1 and 10")
                 return False
 
             return True
@@ -249,6 +280,23 @@ class EdgeApplicationConfig:
         """Get detection cooldown in seconds."""
         return self._values["detection_cooldown"]
 
+    # Stream Performance Settings
+    def get_stream_max_fps(self) -> int:
+        """Get maximum stream processing FPS."""
+        return self._values["stream_max_fps"]
+
+    def get_stream_buffer_drain(self) -> bool:
+        """Get whether stream buffer draining is enabled."""
+        return self._values["stream_buffer_drain"]
+
+    def get_stream_max_lag_ms(self) -> int:
+        """Get maximum acceptable stream lag in milliseconds."""
+        return self._values["stream_max_lag_ms"]
+
+    def get_stream_callback_queue_size(self) -> int:
+        """Get stream callback queue size."""
+        return self._values["stream_callback_queue_size"]
+
     def get_all_values(self) -> dict:
         """
         Get all configuration values as dictionary.
@@ -288,4 +336,10 @@ class EdgeApplicationConfig:
         logger.info("Detection Settings:")
         logger.info(f"  detection_confidence_threshold: {self._values['detection_confidence_threshold']}")
         logger.info(f"  detection_cooldown: {self._values['detection_cooldown']} seconds")
+        logger.info("")
+        logger.info("Stream Performance Settings:")
+        logger.info(f"  stream_max_fps: {self._values['stream_max_fps']}")
+        logger.info(f"  stream_buffer_drain: {self._values['stream_buffer_drain']}")
+        logger.info(f"  stream_max_lag_ms: {self._values['stream_max_lag_ms']} ms")
+        logger.info(f"  stream_callback_queue_size: {self._values['stream_callback_queue_size']}")
         logger.info("=" * 60)
