@@ -8,7 +8,7 @@ import numpy as np
 
 from tests.stubs import ultralytics  # noqa: F401
 
-MODULE_PATH = Path(__file__).resolve().parents[1] / 'pretraining' / 'annotation'
+MODULE_PATH = Path(__file__).resolve().parents[2] / 'pretraining' / 'annotation'
 sys.path.append(str(MODULE_PATH))
 import annotation_pipeline as ap
 

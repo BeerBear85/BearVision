@@ -4,7 +4,7 @@ from unittest import mock
 import tempfile
 import yaml
 
-MODULE_DIR = Path(__file__).resolve().parents[1] / 'code' / 'modules'
+MODULE_DIR = Path(__file__).resolve().parents[2] / 'code' / 'modules'
 sys.path.append(str(MODULE_DIR))
 
 from tests.stubs.gopro import FakeGoPro

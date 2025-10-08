@@ -21,7 +21,7 @@ from tests.stubs.box_sdk import setup_box_modules
 def _import_handler():
     """Import and reload BoxHandler after patching modules."""
     import importlib
-    MODULE_DIR = Path(__file__).resolve().parents[1] / 'code' / 'modules'
+    MODULE_DIR = Path(__file__).resolve().parents[2] / 'code' / 'modules'
     sys.path.append(str(MODULE_DIR))
     module = importlib.import_module('BoxHandler')
     return importlib.reload(module).BoxHandler

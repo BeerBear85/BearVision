@@ -4,7 +4,7 @@ from unittest import mock
 
 import cv2
 
-MODULE_PATH = Path(__file__).resolve().parents[1] / 'code' / 'modules'
+MODULE_PATH = Path(__file__).resolve().parents[2] / 'code' / 'modules'
 sys.path.append(str(MODULE_PATH))
 from DnnHandler import DnnHandler
 

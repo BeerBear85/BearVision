@@ -14,11 +14,11 @@ from unittest import mock
 from unittest.mock import Mock, patch
 import sys
 
-MODULE_DIR = Path(__file__).resolve().parents[1] / 'code' / 'modules'
+MODULE_DIR = Path(__file__).resolve().parents[2] / 'code' / 'modules'
 sys.path.append(str(MODULE_DIR))
 
 # Add tools path for GUI
-TOOLS_DIR = Path(__file__).resolve().parents[1] / 'tools'
+TOOLS_DIR = Path(__file__).resolve().parents[2] / 'tools'
 sys.path.append(str(TOOLS_DIR))
 
 from tests.stubs.gopro import FakeGoPro

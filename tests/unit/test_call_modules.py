@@ -4,7 +4,7 @@ import sys
 import asyncio
 from pathlib import Path
 
-MODULE_DIR = Path(__file__).resolve().parents[1] / 'code' / 'modules'
+MODULE_DIR = Path(__file__).resolve().parents[2] / 'code' / 'modules'
 
 # Ensure modules directory is on the path for imports
 sys.path.append(str(MODULE_DIR))

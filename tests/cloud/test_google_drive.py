@@ -1,12 +1,12 @@
 """
-Integration tests for BoxHandler using the actual Box API.
+Integration tests for GoogleDriveHandler using the actual Google Drive API.
 
-This test file performs real network calls to Box API and is skipped
+This test file performs real network calls to Google Drive API and is skipped
 by default to avoid network usage and API rate limits. These tests verify
-end-to-end functionality with the actual Box service.
+end-to-end functionality with the actual Google Drive service.
 
-For fast unit testing with mocks, see test_box_handler.py
-For authentication-specific testing, see test_box_authenticate.py
+For fast unit testing with mocks, see test_google_drive_handler.py
+For authentication-specific testing, see test_google_drive_authenticate.py
 
 To run these tests, ensure STORAGE_CREDENTIALS_B64 environment variable is set.
 """
@@ -18,33 +18,34 @@ from pathlib import Path
 
 import pytest
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'code'))
 sys.path.insert(0, str(ROOT / 'code' / 'modules'))
 
+
 try:
-    from modules.BoxHandler import BoxHandler
+    from modules.GoogleDriveHandler import GoogleDriveHandler
     from modules.ConfigurationHandler import ConfigurationHandler
 except Exception as e:
     print("Exception occurred while importing modules:", e)
-    BoxHandler = None
+    GoogleDriveHandler = None
 
 try:
-    from boxsdk import Client  # noqa: F401
+    from googleapiclient.http import build_http  # noqa: F401
 except Exception:
-    Client = None
+    build_http = None
 
 
 @pytest.mark.skip(reason="disabled to avoid network usage")
 @pytest.mark.skipif(
-    BoxHandler is None or Client is None,
-    reason="Box dependencies missing or incompatible",
+    GoogleDriveHandler is None or build_http is None,
+    reason="Google Drive dependencies missing or incompatible",
 )
-def test_box_upload_download(tmp_path):
+def test_google_drive_upload_download(tmp_path):
     """
     Purpose:
         Upload and then download a file to verify round-trip behavior against
-        Box. Network interactions are skipped in normal test runs.
+        Google Drive. Network interactions are skipped in normal test runs.
     Inputs:
         tmp_path (Path): Temporary directory fixture provided by pytest.
     Outputs:
@@ -56,7 +57,7 @@ def test_box_upload_download(tmp_path):
 
     cfg_path = ROOT / 'config.ini'
     ConfigurationHandler.read_config_file(str(cfg_path))
-    handler = BoxHandler()
+    handler = GoogleDriveHandler()
 
     text = f"test-{uuid.uuid4().hex}"
     local_file = tmp_path / 'upload.txt'

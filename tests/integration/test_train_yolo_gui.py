@@ -9,7 +9,7 @@ from unittest.mock import patch, MagicMock
 import pytest
 from PySide6.QtWidgets import QApplication
 
-sys.path.insert(0, str(Path(__file__).parent.parent / "pretraining"))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent / "pretraining"))
 from train_yolo_gui import TrainYoloGUI, create_app
 
 

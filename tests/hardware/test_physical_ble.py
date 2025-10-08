@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 
 # Add module path
-MODULE_DIR = Path(__file__).resolve().parents[1] / "code" / "modules"
+MODULE_DIR = Path(__file__).resolve().parents[2] / "code" / "modules"
 sys.path.append(str(MODULE_DIR))
 
 from ble_beacon_handler import BleBeaconHandler

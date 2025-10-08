@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 # Add module paths
-MODULE_DIR = Path(__file__).resolve().parent / "code" / "modules"
+MODULE_DIR = Path(__file__).resolve().parent.parent.parent / "code" / "modules"
 sys.path.append(str(MODULE_DIR))
 
 from EdgeApplicationConfig import EdgeApplicationConfig
@@ -43,7 +43,7 @@ def test_load_from_file():
     print("Test 2: Load Configuration from config.ini")
     print("=" * 70)
 
-    config_path = Path(__file__).resolve().parent / "config.ini"
+    config_path = Path(__file__).resolve().parent.parent.parent / "config.ini"
     config = EdgeApplicationConfig()
 
     success = config.load_from_file(str(config_path))

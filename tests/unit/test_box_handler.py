@@ -1,12 +1,12 @@
 """
-Unit tests for GoogleDriveHandler using mocked Google Drive API.
+Unit tests for BoxHandler using mocked Box SDK.
 
 This test file focuses on testing the core upload/download/delete functionality
-of GoogleDriveHandler using mocks. It does NOT make actual network calls and
+of BoxHandler using mocks. It does NOT make actual network calls and
 runs quickly as part of the standard test suite.
 
-For actual Google Drive API integration testing, see test_google_drive.py
-For authentication-specific testing, see test_google_drive_authenticate.py
+For actual Box API integration testing, see test_box_drive.py
+For authentication-specific testing, see test_box_authenticate.py
 """
 
 import sys
@@ -14,21 +14,18 @@ from pathlib import Path
 from unittest import mock
 import pytest
 
-from tests.stubs.google_api import install_google_stubs, FakeDriveService
+from tests.stubs.box_sdk import FakeBoxClient, install_box_stubs
 
-install_google_stubs()
+install_box_stubs()
 
-# Add module path for imports
-MODULE_DIR = Path(__file__).resolve().parents[1] / 'code' / 'modules'
+MODULE_DIR = Path(__file__).resolve().parents[2] / 'code' / 'modules'
 sys.path.append(str(MODULE_DIR))
-from GoogleDriveHandler import GoogleDriveHandler
+from BoxHandler import BoxHandler
 
 
-
-
-@mock.patch.object(GoogleDriveHandler, '_authenticate', lambda self: setattr(self, 'service', FakeDriveService()))
+@mock.patch.object(BoxHandler, '_authenticate', lambda self: setattr(self, 'client', FakeBoxClient()))
 def test_upload_download_delete(tmp_path):
-    handler = GoogleDriveHandler({'GOOGLE_DRIVE': {'root_folder': 'root'}})
+    handler = BoxHandler({'BOX': {'root_folder': 'root'}})
     handler.connect()
 
     src = tmp_path / 'src.txt'
@@ -45,9 +42,9 @@ def test_upload_download_delete(tmp_path):
         handler.download_file('folder/file.txt', str(tmp_path / 'missing.txt'))
 
 
-@mock.patch.object(GoogleDriveHandler, '_authenticate', lambda self: setattr(self, 'service', FakeDriveService()))
+@mock.patch.object(BoxHandler, '_authenticate', lambda self: setattr(self, 'client', FakeBoxClient()))
 def test_list_files(tmp_path):
-    handler = GoogleDriveHandler({'GOOGLE_DRIVE': {'root_folder': 'root'}})
+    handler = BoxHandler({'BOX': {'root_folder': 'root'}})
     handler.connect()
 
     (tmp_path / 'src1.txt').write_text('a')
@@ -58,4 +55,3 @@ def test_list_files(tmp_path):
 
     files = handler.list_files('folder')
     assert sorted(files) == ['file1.txt', 'file2.txt']
-

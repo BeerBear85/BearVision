@@ -10,8 +10,8 @@ from pathlib import Path
 from unittest import mock
 
 # Add module paths
-MODULE_DIR = Path(__file__).resolve().parents[1] / 'code' / 'modules'
-APP_DIR = Path(__file__).resolve().parents[1] / 'code' / 'Application'
+MODULE_DIR = Path(__file__).resolve().parents[2] / 'code' / 'modules'
+APP_DIR = Path(__file__).resolve().parents[2] / 'code' / 'Application'
 sys.path.append(str(MODULE_DIR))
 sys.path.append(str(APP_DIR))
 
@@ -59,7 +59,7 @@ def test_edge_application_config_loading():
     assert hasattr(config, 'get_yolo_enabled')
 
     # Test config can be loaded from file (if it exists)
-    config_path = Path(__file__).resolve().parents[1] / 'config.ini'
+    config_path = Path(__file__).resolve().parents[2] / 'config.ini'
     if config_path.exists():
         result = config.load_from_file(str(config_path))
         # Should return True if file exists and is valid

@@ -6,7 +6,7 @@ import pytest
 
 
 def test_ble_ringbuffer_loads_simulated_data():
-    data_file = Path(__file__).parent / "data" / "ble_kicker_sim.csv"
+    data_file = Path(__file__).parent.parent / "data" / "ble_kicker_sim.csv"
     ringbuffer = deque(maxlen=300)
 
     with data_file.open() as fh:
