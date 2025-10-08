@@ -98,12 +98,14 @@ class EdgeStateMachine:
         if self.status_callback:
             self.status_callback(self.current_state, message)
 
-    def _change_state(self, new_state: ApplicationState):
-        """Change application state with logging."""
+    def _change_state(self, new_state: ApplicationState, trigger: str = "unknown"):
+        """Change application state with detailed debug logging."""
         with self.state_lock:
             old_state = self.current_state
             self.current_state = new_state
-            self._log_status(f"State transition: {old_state.value} -> {new_state.value}")
+            # Debug logging for state transitions with source, target, and trigger
+            logger.debug(f"STATE TRANSITION: {old_state.value} → {new_state.value} | {trigger}")
+            self._log_status(f"State transition: {old_state.value} -> {new_state.value} ({trigger})")
 
     def _thread_status_callback(self, event_type: str, data: Any):
         """Handle status updates from background threads."""
@@ -139,7 +141,7 @@ class EdgeStateMachine:
 
             self.last_valid_detection_time = current_time
             self._log_status("Wakeboarder detected! Starting recording...")
-            self._change_state(ApplicationState.RECORDING)
+            self._change_state(ApplicationState.RECORDING, "wakeboarder detected")
             self.recording_start_time = current_time
 
             # Trigger recording in EdgeSystemCoordinator
@@ -238,7 +240,7 @@ class EdgeStateMachine:
                     self._log_status("Hindsight mode enabled")
                 else:
                     self.error_message = "Failed to enable hindsight mode"
-                    self._change_state(ApplicationState.ERROR)
+                    self._change_state(ApplicationState.ERROR, "hindsight mode enable failed")
                     return
         else:
             self._log_status("Hindsight mode disabled by configuration")
@@ -253,7 +255,7 @@ class EdgeStateMachine:
                self.edge_system_coordinator.stream_processor:
                 if not self.edge_system_coordinator.stream_processor.start_processing():
                     self.error_message = "Failed to start YOLO detection"
-                    self._change_state(ApplicationState.ERROR)
+                    self._change_state(ApplicationState.ERROR, "YOLO detection start failed")
                     return
             self._log_status("YOLO detection active - Waiting for wakeboarder...")
         else:
@@ -291,7 +293,7 @@ class EdgeStateMachine:
             self._hindsight_enabled = False
 
             # Transition back to looking for wakeboarder
-            self._change_state(ApplicationState.LOOKING_FOR_WAKEBOARDER)
+            self._change_state(ApplicationState.LOOKING_FOR_WAKEBOARDER, "recording duration elapsed")
 
     def _execute_error_state(self) -> None:
         """
@@ -318,11 +320,11 @@ class EdgeStateMachine:
             time.sleep(self.error_restart_delay)
 
             # Transition back to INITIALIZE for restart
-            self._change_state(ApplicationState.INITIALIZE)
+            self._change_state(ApplicationState.INITIALIZE, "error restart attempt")
             self._hindsight_enabled = False  # Reset hindsight flag
         else:
             self._log_status("Max restart attempts reached, shutting down")
-            self._change_state(ApplicationState.STOPPING)
+            self._change_state(ApplicationState.STOPPING, "max restart attempts reached")
 
     def _execute_stopping_state(self) -> None:
         """
@@ -359,10 +361,10 @@ class EdgeStateMachine:
                     # Execute initialization
                     if self._execute_initialize_state():
                         # Initialization successful, transition to looking for wakeboarder
-                        self._change_state(ApplicationState.LOOKING_FOR_WAKEBOARDER)
+                        self._change_state(ApplicationState.LOOKING_FOR_WAKEBOARDER, "initialization successful")
                     else:
                         # Initialization failed, transition to error
-                        self._change_state(ApplicationState.ERROR)
+                        self._change_state(ApplicationState.ERROR, "initialization failed")
 
                 elif self.current_state == ApplicationState.LOOKING_FOR_WAKEBOARDER:
                     # Execute looking for wakeboarder state
@@ -392,18 +394,18 @@ class EdgeStateMachine:
 
         except KeyboardInterrupt:
             self._log_status("Received interrupt signal")
-            self._change_state(ApplicationState.STOPPING)
+            self._change_state(ApplicationState.STOPPING, "keyboard interrupt received")
             self._execute_stopping_state()
         except Exception as e:
             self._log_status(f"State machine error: {e}")
             self.error_message = str(e)
-            self._change_state(ApplicationState.ERROR)
+            self._change_state(ApplicationState.ERROR, "state machine exception")
             self._execute_error_state()
 
     def shutdown(self):
         """Gracefully shutdown all threads and systems."""
         self._log_status("Initiating graceful shutdown...")
-        self._change_state(ApplicationState.STOPPING)
+        self._change_state(ApplicationState.STOPPING, "graceful shutdown requested")
         self.shutdown_event.set()
         # The actual shutdown will be handled by STOPPING state
 
@@ -424,7 +426,7 @@ class EdgeStateMachine:
     def force_state_transition(self, new_state: ApplicationState) -> None:
         """Force a state transition (for testing/debugging)."""
         self._log_status(f"Forcing state transition to {new_state.value}")
-        self._change_state(new_state)
+        self._change_state(new_state, "forced transition")
 
     def get_system_stats(self) -> dict:
         """Get current system statistics."""
