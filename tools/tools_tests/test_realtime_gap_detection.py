@@ -12,7 +12,7 @@ import json
 import numpy as np
 
 # Add the annotation module path
-MODULE_PATH = Path(__file__).resolve().parent / 'pretraining' / 'annotation'
+MODULE_PATH = Path(__file__).resolve().parent.parent.parent / 'pretraining' / 'annotation'
 sys.path.append(str(MODULE_PATH))
 
 import annotation_pipeline as ap

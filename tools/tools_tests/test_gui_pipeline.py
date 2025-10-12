@@ -9,9 +9,9 @@ from pathlib import Path
 from PySide6.QtWidgets import QApplication
 
 # Add module paths
-MODULE_DIR = Path(__file__).resolve().parents[1] / "code" / "modules"
-APP_DIR = Path(__file__).resolve().parents[1] / "code" / "Application"
-TOOLS_DIR = Path(__file__).resolve().parent
+MODULE_DIR = Path(__file__).resolve().parents[2] / "code" / "modules"
+APP_DIR = Path(__file__).resolve().parents[2] / "code" / "Application"
+TOOLS_DIR = Path(__file__).resolve().parent.parent
 sys.path.append(str(MODULE_DIR))
 sys.path.append(str(APP_DIR))
 sys.path.append(str(TOOLS_DIR))

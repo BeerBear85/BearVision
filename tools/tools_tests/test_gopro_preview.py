@@ -12,8 +12,8 @@ import numpy as np
 from pathlib import Path
 
 # Add module paths
-MODULE_DIR = Path(__file__).resolve().parents[1] / "code" / "modules"
-APP_DIR = Path(__file__).resolve().parents[1] / "code" / "Application"
+MODULE_DIR = Path(__file__).resolve().parents[2] / "code" / "modules"
+APP_DIR = Path(__file__).resolve().parents[2] / "code" / "Application"
 sys.path.append(str(MODULE_DIR))
 sys.path.append(str(APP_DIR))
 

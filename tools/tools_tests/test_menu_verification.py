@@ -12,9 +12,9 @@ if sys.platform == 'win32':
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
 # Add module paths
-sys.path.insert(0, str(Path(__file__).parent))
-sys.path.insert(0, str(Path(__file__).parent.parent / "code" / "modules"))
-sys.path.insert(0, str(Path(__file__).parent.parent / "code" / "Application"))
+sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent / "code" / "modules"))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent / "code" / "Application"))
 
 from PySide6.QtWidgets import QApplication
 from edge_gui import EDGEMainWindow, EDGEBackend

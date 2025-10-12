@@ -6,8 +6,8 @@ import sys
 from pathlib import Path
 
 # Add paths
-MODULE_DIR = Path(__file__).resolve().parent.parent / "code" / "modules"
-APP_DIR = Path(__file__).resolve().parent.parent / "code" / "Application"
+MODULE_DIR = Path(__file__).resolve().parent.parent.parent / "code" / "modules"
+APP_DIR = Path(__file__).resolve().parent.parent.parent / "code" / "Application"
 sys.path.append(str(MODULE_DIR))
 sys.path.append(str(APP_DIR))
 
