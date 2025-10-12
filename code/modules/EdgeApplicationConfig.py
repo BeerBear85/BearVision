@@ -2,13 +2,14 @@
 Edge Application Configuration Module
 
 Provides centralized configuration management for the Edge Application system.
-Loads parameters from INI file and provides typed access to configuration values.
+Loads parameters from INI or YAML files and provides typed access to configuration values.
 """
 
 import logging
 from typing import Optional
 from configparser import ConfigParser
 from pathlib import Path
+import yaml
 
 
 logger = logging.getLogger(__name__)
@@ -69,12 +70,12 @@ class EdgeApplicationConfig:
 
     def load_from_file(self, config_path: str) -> bool:
         """
-        Load configuration from INI file.
+        Load configuration from INI or YAML file (auto-detects format).
 
         Parameters
         ----------
         config_path : str
-            Path to configuration INI file
+            Path to configuration file (.ini or .yaml/.yml)
 
         Returns
         -------
@@ -88,6 +89,31 @@ class EdgeApplicationConfig:
                 logger.warning(f"Config file not found: {config_path}, using defaults")
                 return False
 
+            # Auto-detect format based on file extension
+            if self.config_path.suffix.lower() in ['.yaml', '.yml']:
+                return self.load_from_yaml(config_path)
+            else:
+                return self._load_from_ini(config_path)
+
+        except Exception as e:
+            logger.error(f"Failed to load configuration: {e}")
+            return False
+
+    def _load_from_ini(self, config_path: str) -> bool:
+        """
+        Load configuration from INI file.
+
+        Parameters
+        ----------
+        config_path : str
+            Path to configuration INI file
+
+        Returns
+        -------
+        bool
+            True if configuration loaded successfully, False otherwise
+        """
+        try:
             self.config = ConfigParser()
             self.config.read(config_path)
 
@@ -103,12 +129,121 @@ class EdgeApplicationConfig:
                 logger.error("Configuration validation failed")
                 return False
 
-            logger.info(f"Configuration loaded from {config_path}")
+            logger.info(f"Configuration loaded from INI: {config_path}")
             return True
 
         except Exception as e:
-            logger.error(f"Failed to load configuration: {e}")
+            logger.error(f"Failed to load INI configuration: {e}")
             return False
+
+    def load_from_yaml(self, yaml_path: str) -> bool:
+        """
+        Load configuration from YAML file.
+
+        Parameters
+        ----------
+        yaml_path : str
+            Path to configuration YAML file
+
+        Returns
+        -------
+        bool
+            True if configuration loaded successfully, False otherwise
+        """
+        try:
+            yaml_file = Path(yaml_path)
+
+            if not yaml_file.exists():
+                logger.warning(f"YAML config file not found: {yaml_path}, using defaults")
+                return False
+
+            with open(yaml_file, 'r') as f:
+                yaml_data = yaml.safe_load(f)
+
+            if not yaml_data:
+                logger.warning(f"Empty YAML file: {yaml_path}, using defaults")
+                return False
+
+            # Parse YAML structure into config values
+            self._parse_yaml_to_values(yaml_data)
+
+            # Validate configuration
+            if not self.validate():
+                logger.error("Configuration validation failed")
+                return False
+
+            logger.info(f"Configuration loaded from YAML: {yaml_path}")
+            return True
+
+        except yaml.YAMLError as e:
+            logger.error(f"Failed to parse YAML file: {e}")
+            return False
+        except Exception as e:
+            logger.error(f"Failed to load YAML configuration: {e}")
+            return False
+
+    def _parse_yaml_to_values(self, yaml_data: dict) -> None:
+        """
+        Parse YAML data structure into internal values dictionary.
+
+        Parameters
+        ----------
+        yaml_data : dict
+            Parsed YAML data with nested structure
+        """
+        # Recording settings
+        if 'recording' in yaml_data:
+            rec = yaml_data['recording']
+            if 'duration' in rec:
+                self._values['recording_duration'] = float(rec['duration'])
+            if 'hindsight_enabled' in rec:
+                self._values['hindsight_mode_enabled'] = bool(rec['hindsight_enabled'])
+
+        # Detection settings
+        if 'detection' in yaml_data:
+            det = yaml_data['detection']
+            if 'yolo_enabled' in det:
+                self._values['yolo_enabled'] = bool(det['yolo_enabled'])
+            if 'yolo_model' in det:
+                self._values['yolo_model'] = str(det['yolo_model'])
+            if 'confidence_threshold' in det:
+                self._values['detection_confidence_threshold'] = float(det['confidence_threshold'])
+            if 'cooldown' in det:
+                self._values['detection_cooldown'] = float(det['cooldown'])
+
+        # Performance settings
+        if 'performance' in yaml_data:
+            perf = yaml_data['performance']
+            if 'stream_max_fps' in perf:
+                self._values['stream_max_fps'] = int(perf['stream_max_fps'])
+            if 'stream_max_lag_ms' in perf:
+                self._values['stream_max_lag_ms'] = int(perf['stream_max_lag_ms'])
+
+        # Error recovery settings
+        if 'error_recovery' in yaml_data:
+            err = yaml_data['error_recovery']
+            if 'max_restarts' in err:
+                self._values['max_error_restarts'] = int(err['max_restarts'])
+            if 'restart_delay' in err:
+                self._values['error_restart_delay'] = float(err['restart_delay'])
+
+        # Thread settings
+        if 'threads' in yaml_data:
+            threads = yaml_data['threads']
+            if 'enable_ble_logging' in threads:
+                self._values['enable_ble_logging'] = bool(threads['enable_ble_logging'])
+            if 'enable_cloud_upload' in threads:
+                self._values['enable_cloud_upload'] = bool(threads['enable_cloud_upload'])
+
+        # System settings
+        if 'system' in yaml_data:
+            sys = yaml_data['system']
+            if 'log_level' in sys:
+                # Store log level for potential future use
+                log_level = str(sys['log_level']).upper()
+                if log_level in ['DEBUG', 'INFO', 'WARNING', 'ERROR']:
+                    # Could set logging level here if needed
+                    logger.info(f"Log level set to: {log_level}")
 
     def _load_values(self):
         """Load values from ConfigParser into typed dictionary."""

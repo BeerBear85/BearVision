@@ -1,0 +1,36 @@
+# Edge Application Configuration
+# BearVision Edge Device YAML Configuration File
+#
+# This file contains the essential parameters for the edge application.
+# All parameters have sensible defaults that work out-of-the-box.
+
+# Recording Settings
+recording:
+  duration: 30.0              # Clip duration in seconds when wakeboarder detected
+  hindsight_enabled: true     # Enable GoPro Hindsight mode for pre-recording
+
+# YOLO Detection Settings
+detection:
+  yolo_enabled: true                  # Enable/disable person detection
+  yolo_model: "yolov8n"               # Model size: yolov8n (nano), yolov8s (small), yolov8m (medium), yolov8l (large), yolov8x (xlarge)
+  confidence_threshold: 0.5           # Minimum confidence for valid detection (0.0-1.0)
+  cooldown: 2.0                       # Minimum seconds between consecutive detections
+
+# Stream Performance Settings
+performance:
+  stream_max_fps: 30                  # Frame processing rate (1-120 fps)
+  stream_max_lag_ms: 500              # Maximum acceptable lag in milliseconds before dropping frames
+
+# Error Recovery Settings
+error_recovery:
+  max_restarts: 3                     # Maximum number of automatic restart attempts on error
+  restart_delay: 2.0                  # Delay in seconds before attempting restart after error
+
+# Background Thread Settings
+threads:
+  enable_ble_logging: true            # Enable BLE beacon logging thread
+  enable_cloud_upload: true           # Enable cloud upload thread
+
+# System Settings
+system:
+  log_level: "INFO"                   # Logging level: DEBUG, INFO, WARNING, ERROR

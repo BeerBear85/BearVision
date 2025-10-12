@@ -7,6 +7,7 @@ It uses the refactored modular architecture with proper state management.
 
 import logging
 import sys
+import argparse
 from pathlib import Path
 
 # Add module paths
@@ -28,6 +29,30 @@ def main():
     This initializes and runs the Edge Application with the state machine
     architecture as specified in the design document.
     """
+    # Parse command-line arguments
+    parser = argparse.ArgumentParser(
+        description='BearVision Edge Application - Automatic wakeboard clip generation',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog='''
+Examples:
+  # Use default config (tries edge_config.yaml, then config.ini)
+  python edge_main.py
+
+  # Use specific YAML config
+  python edge_main.py --config edge_config.yaml
+
+  # Use specific INI config
+  python edge_main.py --config config.ini
+        '''
+    )
+    parser.add_argument(
+        '--config',
+        type=str,
+        default=None,
+        help='Path to configuration file (.yaml or .ini). If not specified, tries edge_config.yaml then config.ini'
+    )
+    args = parser.parse_args()
+
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -37,8 +62,27 @@ def main():
     logger.info("Starting Edge Application with State Machine")
     logger.info("=" * 70)
 
+    # Determine config file path
+    repo_root = Path(__file__).resolve().parents[2]
+
+    if args.config:
+        # User specified config file
+        config_path = Path(args.config)
+        if not config_path.is_absolute():
+            config_path = repo_root / config_path
+    else:
+        # Try edge_config.yaml first, then fall back to config.ini
+        yaml_config = repo_root / "edge_config.yaml"
+        ini_config = repo_root / "config.ini"
+
+        if yaml_config.exists():
+            config_path = yaml_config
+            logger.info("Using default YAML config: edge_config.yaml")
+        else:
+            config_path = ini_config
+            logger.info("YAML config not found, using INI config: config.ini")
+
     # Load configuration
-    config_path = Path(__file__).resolve().parents[2] / "config.ini"
     config = EdgeApplicationConfig()
 
     if config.load_from_file(str(config_path)):

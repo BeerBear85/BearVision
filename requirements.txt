@@ -3,7 +3,7 @@ opencv-python
 scipy
 matplotlib
 bleak
-pyyaml
+pyyaml>=6.0
 ultralytics
 lxml
 opencv-python-headless
