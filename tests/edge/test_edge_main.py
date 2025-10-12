@@ -53,7 +53,8 @@ def test_edge_application_config_loading():
     config = EdgeApplicationConfig()
 
     # Test default values exist
-    assert hasattr(config, 'get_recording_duration')
+    assert hasattr(config, 'get_post_detection_duration')  # New method
+    assert hasattr(config, 'get_recording_duration')  # Deprecated, backward compatibility
     assert hasattr(config, 'get_detection_cooldown')
     assert hasattr(config, 'get_hindsight_mode_enabled')
     assert hasattr(config, 'get_yolo_enabled')

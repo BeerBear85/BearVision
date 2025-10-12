@@ -75,7 +75,7 @@ class EdgeStateMachine:
         # Detection and recording tracking
         self.last_detection_time = 0
         self.recording_start_time = 0
-        self.recording_duration = self.config.get_recording_duration()
+        self.post_detection_duration = self.config.get_post_detection_duration()
         self.detection_cooldown = self.config.get_detection_cooldown()
         self.last_valid_detection_time = 0
 
@@ -273,9 +273,9 @@ class EdgeStateMachine:
         - Send clip to post-processing thread
         - Transition back to LookingForWakeboarder
         """
-        # Check if recording duration has elapsed
-        if current_time - self.recording_start_time >= self.recording_duration:
-            self._log_status("Recording completed, sending clip to post-processing")
+        # Check if post-detection recording duration has elapsed
+        if current_time - self.recording_start_time >= self.post_detection_duration:
+            self._log_status("Post-detection recording completed, sending clip to post-processing")
 
             # Create video file entry for processing
             video_file = VideoFile(
@@ -293,7 +293,7 @@ class EdgeStateMachine:
             self._hindsight_enabled = False
 
             # Transition back to looking for wakeboarder
-            self._change_state(ApplicationState.LOOKING_FOR_WAKEBOARDER, "recording duration elapsed")
+            self._change_state(ApplicationState.LOOKING_FOR_WAKEBOARDER, "post-detection recording duration elapsed")
 
     def _execute_error_state(self) -> None:
         """
@@ -418,10 +418,15 @@ class EdgeStateMachine:
         """Check if the state machine is running."""
         return self.running and not self.shutdown_event.is_set()
 
+    def set_post_detection_duration(self, duration: float) -> None:
+        """Set the post-detection recording duration in seconds."""
+        self.post_detection_duration = duration
+        self._log_status(f"Post-detection recording duration set to {duration} seconds")
+
     def set_recording_duration(self, duration: float) -> None:
-        """Set the recording duration in seconds."""
-        self.recording_duration = duration
-        self._log_status(f"Recording duration set to {duration} seconds")
+        """DEPRECATED: Use set_post_detection_duration() instead."""
+        logger.warning("set_recording_duration() is deprecated, use set_post_detection_duration() instead")
+        self.set_post_detection_duration(duration)
 
     def force_state_transition(self, new_state: ApplicationState) -> None:
         """Force a state transition (for testing/debugging)."""
@@ -435,7 +440,7 @@ class EdgeStateMachine:
             'running': self.running,
             'last_detection_time': self.last_detection_time,
             'recording_start_time': self.recording_start_time,
-            'recording_duration': self.recording_duration
+            'post_detection_duration': self.post_detection_duration
         }
 
         # Add thread manager stats if available

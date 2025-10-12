@@ -6,8 +6,9 @@
 
 # Recording Settings
 recording:
-  duration: 20.0              # Clip duration in seconds when wakeboarder detected
-  hindsight_enabled: true     # Enable GoPro Hindsight mode for pre-recording
+  post_detection_duration: 5.0    # Active recording duration AFTER wakeboarder detection (in seconds)
+                                   # Total clip length = 15s hindsight + post_detection_duration
+  hindsight_enabled: true          # Enable GoPro Hindsight mode for 15-second pre-recording buffer
 
 # YOLO Detection Settings
 detection:

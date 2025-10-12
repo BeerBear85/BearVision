@@ -430,12 +430,14 @@ class EdgeSystemCoordinator:
             return False
 
         try:
-            self.gopro_controller.start_hindsight_clip()
+            # Get post-detection recording duration from config and pass it to the GoPro controller
+            post_detection_duration = self.config.get_post_detection_duration()
+            self.gopro_controller.start_hindsight_clip(duration=post_detection_duration)
             self.status_manager.update_status(overall_status=EdgeStatus.RECORDING)
-            self.status_manager.log("info", "Hindsight clip triggered")
+            self.status_manager.log("info", f"Hindsight clip triggered (post-detection duration: {post_detection_duration}s, total clip: ~{15 + post_detection_duration}s)")
 
-            # Reset to looking for wakeboarder after a delay
-            threading.Timer(5.0, self._reset_to_looking).start()
+            # Reset to looking for wakeboarder after recording completes
+            threading.Timer(post_detection_duration + 2.0, self._reset_to_looking).start()
 
             return True
 

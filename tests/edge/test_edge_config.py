@@ -24,7 +24,7 @@ def test_default_config():
 
     print(f"YOLO Enabled: {config.get_yolo_enabled()}")
     print(f"YOLO Model: {config.get_yolo_model()}")
-    print(f"Recording Duration: {config.get_recording_duration()}s")
+    print(f"Post-Detection Duration: {config.get_post_detection_duration()}s")
     print(f"Max Error Restarts: {config.get_max_error_restarts()}")
     print(f"Error Restart Delay: {config.get_error_restart_delay()}s")
     print(f"BLE Logging Enabled: {config.get_enable_ble_logging()}")
@@ -33,7 +33,7 @@ def test_default_config():
     print(f"Detection Cooldown: {config.get_detection_cooldown()}s")
 
     assert config.get_yolo_enabled() == True, "Default YOLO should be enabled"
-    assert config.get_recording_duration() == 30.0, "Default recording duration should be 30s"
+    assert config.get_post_detection_duration() == 30.0, "Default post-detection duration should be 30s"
     print("\n[PASS] Default configuration test passed\n")
 
 
@@ -75,13 +75,13 @@ def test_validation():
     # Reset to valid model
     config._values["yolo_model"] = "yolov8n"
 
-    # Test invalid recording duration
-    config._values["recording_duration"] = -1.0
-    assert not config.validate(), "Negative recording duration should fail"
-    print("[PASS] Invalid recording duration correctly rejected")
+    # Test invalid post-detection duration
+    config._values["post_detection_duration"] = -1.0
+    assert not config.validate(), "Negative post-detection duration should fail"
+    print("[PASS] Invalid post-detection duration correctly rejected")
 
     # Reset to valid
-    config._values["recording_duration"] = 30.0
+    config._values["post_detection_duration"] = 30.0
 
     # Test invalid confidence threshold
     config._values["detection_confidence_threshold"] = 1.5
@@ -117,17 +117,17 @@ def test_custom_parameters():
     config = EdgeApplicationConfig()
 
     # Modify parameters
-    config._values["recording_duration"] = 45.0
+    config._values["post_detection_duration"] = 45.0
     config._values["max_error_restarts"] = 5
     config._values["yolo_model"] = "yolov8m"
     config._values["detection_cooldown"] = 5.0
 
-    print(f"Custom Recording Duration: {config.get_recording_duration()}s")
+    print(f"Custom Post-Detection Duration: {config.get_post_detection_duration()}s")
     print(f"Custom Max Restarts: {config.get_max_error_restarts()}")
     print(f"Custom YOLO Model: {config.get_yolo_model()}")
     print(f"Custom Detection Cooldown: {config.get_detection_cooldown()}s")
 
-    assert config.get_recording_duration() == 45.0
+    assert config.get_post_detection_duration() == 45.0
     assert config.get_max_error_restarts() == 5
     assert config.get_yolo_model() == "yolov8m"
     assert config.get_detection_cooldown() == 5.0

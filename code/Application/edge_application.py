@@ -256,8 +256,12 @@ class EdgeApplicationStateMachine:
         """Get current system status."""
         return self.edge_app.get_status()
 
+    def set_post_detection_duration(self, duration: float) -> None:
+        """Set post-detection recording duration."""
+        self.state_machine.set_post_detection_duration(duration)
+
     def set_recording_duration(self, duration: float) -> None:
-        """Set recording duration."""
+        """DEPRECATED: Use set_post_detection_duration() instead."""
         self.state_machine.set_recording_duration(duration)
 
     def get_system_stats(self) -> dict:

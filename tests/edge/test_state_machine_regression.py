@@ -38,7 +38,7 @@ class TestEdgeStateMachineRegression:
         """Set up test fixtures before each test method."""
         # Mock configuration with realistic defaults
         self.mock_config = Mock(spec=EdgeApplicationConfig)
-        self.mock_config.get_recording_duration.return_value = 5.0  # Short for testing
+        self.mock_config.get_post_detection_duration.return_value = 5.0  # Short for testing
         self.mock_config.get_detection_cooldown.return_value = 1.0
         self.mock_config.get_max_error_restarts.return_value = 2
         self.mock_config.get_error_restart_delay.return_value = 0.1  # Fast for testing
@@ -371,7 +371,7 @@ class TestEdgeStateMachineRegression:
         # Verify stats structure
         assert stats['current_state'] == 'looking_for_wakeboarder'
         assert stats['last_detection_time'] == 12345.0
-        assert stats['recording_duration'] == 5.0
+        assert stats['post_detection_duration'] == 5.0
         assert 'queue_sizes' in stats
         assert stats['queue_sizes']['processing'] == 5
 

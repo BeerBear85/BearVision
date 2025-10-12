@@ -33,7 +33,7 @@ class EdgeApplicationConfig:
         "yolo_model": "yolov8n",
 
         # Recording Settings
-        "recording_duration": 30.0,
+        "post_detection_duration": 30.0,  # Active recording duration AFTER detection (seconds)
 
         # Error Recovery Settings
         "max_error_restarts": 3,
@@ -194,8 +194,13 @@ class EdgeApplicationConfig:
         # Recording settings
         if 'recording' in yaml_data:
             rec = yaml_data['recording']
-            if 'duration' in rec:
-                self._values['recording_duration'] = float(rec['duration'])
+            # Support new name (post_detection_duration) with backward compatibility for old name (duration)
+            if 'post_detection_duration' in rec:
+                self._values['post_detection_duration'] = float(rec['post_detection_duration'])
+            elif 'duration' in rec:
+                # Backward compatibility
+                self._values['post_detection_duration'] = float(rec['duration'])
+                logger.warning("'duration' parameter is deprecated, use 'post_detection_duration' instead")
             if 'hindsight_enabled' in rec:
                 self._values['hindsight_mode_enabled'] = bool(rec['hindsight_enabled'])
 
@@ -259,8 +264,14 @@ class EdgeApplicationConfig:
                                                  fallback=self.DEFAULTS["yolo_model"])
 
         # Recording Settings
-        self._values["recording_duration"] = section.getfloat("recording_duration",
-                                                              fallback=self.DEFAULTS["recording_duration"])
+        # Support new name (post_detection_duration) with backward compatibility for old name (recording_duration)
+        if section.get("post_detection_duration"):
+            self._values["post_detection_duration"] = section.getfloat("post_detection_duration")
+        elif section.get("recording_duration"):
+            self._values["post_detection_duration"] = section.getfloat("recording_duration")
+            logger.warning("'recording_duration' parameter is deprecated, use 'post_detection_duration' instead")
+        else:
+            self._values["post_detection_duration"] = self.DEFAULTS["post_detection_duration"]
 
         # Error Recovery Settings
         self._values["max_error_restarts"] = section.getint("max_error_restarts",
@@ -314,9 +325,9 @@ class EdgeApplicationConfig:
                            f"must be one of {self.VALID_YOLO_MODELS}")
                 return False
 
-            # Validate recording duration
-            if self._values["recording_duration"] <= 0:
-                logger.error(f"Invalid recording_duration: {self._values['recording_duration']}, must be > 0")
+            # Validate post-detection recording duration
+            if self._values["post_detection_duration"] <= 0:
+                logger.error(f"Invalid post_detection_duration: {self._values['post_detection_duration']}, must be > 0")
                 return False
 
             # Validate max error restarts
@@ -371,9 +382,22 @@ class EdgeApplicationConfig:
         return self._values["yolo_model"]
 
     # Recording Settings
+    def get_post_detection_duration(self) -> float:
+        """
+        Get post-detection recording duration in seconds.
+
+        This is the active recording time AFTER wakeboarder detection.
+        Total clip length = 15s hindsight buffer + post_detection_duration
+        """
+        return self._values["post_detection_duration"]
+
     def get_recording_duration(self) -> float:
-        """Get recording duration in seconds."""
-        return self._values["recording_duration"]
+        """
+        DEPRECATED: Use get_post_detection_duration() instead.
+        Get post-detection recording duration in seconds.
+        """
+        logger.warning("get_recording_duration() is deprecated, use get_post_detection_duration() instead")
+        return self.get_post_detection_duration()
 
     # Error Recovery Settings
     def get_max_error_restarts(self) -> int:
@@ -453,7 +477,8 @@ class EdgeApplicationConfig:
         logger.info(f"  yolo_model: {self._values['yolo_model']}")
         logger.info("")
         logger.info("Recording Settings:")
-        logger.info(f"  recording_duration: {self._values['recording_duration']} seconds")
+        logger.info(f"  post_detection_duration: {self._values['post_detection_duration']} seconds (recording time AFTER detection)")
+        logger.info(f"  Total clip length: ~{15 + self._values['post_detection_duration']} seconds (15s hindsight + {self._values['post_detection_duration']}s post-detection)")
         logger.info("")
         logger.info("Error Recovery Settings:")
         logger.info(f"  max_error_restarts: {self._values['max_error_restarts']}")
