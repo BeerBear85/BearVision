@@ -24,6 +24,9 @@ python run_train_gui.py
 
 # Box upload testing tool (manual Box cloud storage testing)
 python box_upload_gui.py
+
+# Post-processing pipeline testing GUI (manual testing with video playback and overlay)
+python post_processing_gui.py
 ```
 
 ### Testing
