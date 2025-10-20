@@ -53,17 +53,21 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Basic usage with defaults
+  # Part 1: Generate JSON metadata only
   python run_post_processing.py input.mp4 output.json
 
-  # Custom YOLO model and scaling factor
-  python run_post_processing.py input.mp4 output.json --yolo yolov8m.pt --scaling 1.8
+  # Part 2: Generate JSON metadata AND cropped video
+  python run_post_processing.py input.mp4 output.json --output-video cropped.mp4
+
+  # Custom YOLO model and scaling factor with video output
+  python run_post_processing.py input.mp4 output.json --output-video cropped.mp4 \\
+      --yolo yolov8m.pt --scaling 1.8
 
   # Process every other frame with verbose logging
   python run_post_processing.py input.mp4 output.json --frame-skip 2 --verbose
 
-  # Advanced: custom smoothing and confidence
-  python run_post_processing.py input.mp4 output.json \\
+  # Advanced: custom smoothing and confidence with video rendering
+  python run_post_processing.py input.mp4 output.json --output-video cropped.mp4 \\
       --yolo yolov8l.pt \\
       --scaling 2.0 \\
       --confidence 0.6 \\
@@ -96,6 +100,15 @@ Output:
         'output_json',
         type=str,
         help='Path to output JSON metadata file'
+    )
+
+    # Optional output video
+    parser.add_argument(
+        '--output-video',
+        type=str,
+        default=None,
+        metavar='PATH',
+        help='Path to output cropped video file (optional, Part 2 feature)'
     )
 
     # YOLO detection settings
@@ -191,6 +204,7 @@ Output:
         config = PostProcessingConfig(
             input_video=args.input_video,
             output_json=args.output_json,
+            output_video=args.output_video,
             yolo_model=args.yolo,
             confidence_threshold=args.confidence,
             scaling_factor=args.scaling,
@@ -217,6 +231,8 @@ Output:
         logger.info('='*60)
         logger.info(f"Input video:       {args.input_video}")
         logger.info(f"Output metadata:   {result['output_json']}")
+        if 'output_video' in result:
+            logger.info(f"Output video:      {result['output_video']}")
         logger.info(f"Total frames:      {result['total_frames']}")
         logger.info(f"Detections found:  {result['num_detections']}")
         logger.info(f"Trajectory length: {result['trajectory_length']}")

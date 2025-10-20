@@ -509,6 +509,129 @@ class PostProcessingPipeline:
                 temp_path.unlink()
             raise RuntimeError(f"Failed to export metadata: {e}") from e
 
+    def render_video(
+        self,
+        per_frame_boxes: List[Tuple[int, BoundingBox]],
+        fixed_size: FixedBoxSize
+    ) -> None:
+        """Render cropped output video using per-frame bounding boxes.
+
+        This method implements Part 2 of the Virtual Cameraman feature by
+        cropping the input video according to the computed bounding boxes
+        and writing a new output video.
+
+        Purpose
+        -------
+        Create a "virtual cameraman" video that automatically crops and follows
+        the rider throughout the clip, maintaining consistent framing.
+
+        Parameters
+        ----------
+        per_frame_boxes : list of (int, BoundingBox)
+            Per-frame bounding boxes from Part 1 processing
+        fixed_size : FixedBoxSize
+            Fixed dimensions for output frames
+
+        Raises
+        ------
+        RuntimeError
+            If video rendering fails
+        ValueError
+            If output_video path is not specified in config
+
+        Algorithm
+        ---------
+        1. Open input video with OpenCV
+        2. Create output video writer with fixed dimensions
+        3. For each frame:
+           a. Read frame from input
+           b. Crop frame according to bounding box
+           c. Resize if needed to match fixed size exactly
+           d. Write cropped frame to output
+        4. Release video handles
+
+        Notes
+        -----
+        - Output video uses same FPS as input
+        - Output codec: MP4V for compatibility
+        - Fixed dimensions may differ slightly from bounding box due to integer rounding
+        - Progress logged every 100 frames if verbose enabled
+
+        Examples
+        --------
+        >>> pipeline.render_video(per_frame_boxes, fixed_size)
+        """
+        if not self.config.output_video:
+            raise ValueError("output_video path must be specified for rendering")
+
+        logger.info(f"Rendering cropped video to {self.config.output_video}")
+
+        # Open input video
+        cap = cv2.VideoCapture(str(self.config.input_video))
+        if not cap.isOpened():
+            raise RuntimeError(f"Cannot open input video: {self.config.input_video}")
+
+        # Create lookup dictionary for per-frame boxes
+        box_dict = {frame_idx: box for frame_idx, box in per_frame_boxes}
+
+        # Determine output dimensions (round to nearest integer)
+        out_width = int(round(fixed_size.width))
+        out_height = int(round(fixed_size.height))
+
+        # Setup output video writer
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        out = cv2.VideoWriter(
+            str(self.config.output_video),
+            fourcc,
+            self.video_fps,
+            (out_width, out_height)
+        )
+
+        if not out.isOpened():
+            cap.release()
+            raise RuntimeError(f"Cannot create output video: {self.config.output_video}")
+
+        try:
+            frame_idx = 0
+            frames_written = 0
+
+            while True:
+                ret, frame = cap.read()
+                if not ret:
+                    break
+
+                # Get bounding box for this frame
+                if frame_idx in box_dict:
+                    box = box_dict[frame_idx]
+
+                    # Extract bounding box coordinates (ensure integer and within bounds)
+                    x1 = int(max(0, box.x1))
+                    y1 = int(max(0, box.y1))
+                    x2 = int(min(self.frame_width, box.x2))
+                    y2 = int(min(self.frame_height, box.y2))
+
+                    # Crop frame
+                    cropped = frame[y1:y2, x1:x2]
+
+                    # Resize to exact output dimensions if needed
+                    if cropped.shape[1] != out_width or cropped.shape[0] != out_height:
+                        cropped = cv2.resize(cropped, (out_width, out_height))
+
+                    # Write cropped frame
+                    out.write(cropped)
+                    frames_written += 1
+
+                    if self.config.verbose and frames_written % 100 == 0:
+                        logger.info(f"Rendered {frames_written} frames")
+
+                frame_idx += 1
+
+            logger.info(f"Video rendering complete: {frames_written} frames written")
+
+        finally:
+            cap.release()
+            out.release()
+
     def run(self) -> Dict[str, Any]:
         """Execute the complete post-processing pipeline.
 
@@ -518,10 +641,12 @@ class PostProcessingPipeline:
         3. Determine fixed box size
         4. Generate per-frame boxes
         5. Export JSON metadata
+        6. (Optional) Render cropped output video
 
         Purpose
         -------
-        Provide a simple one-call API to process a raw video into metadata.
+        Provide a simple one-call API to process a raw video into metadata
+        and optionally a cropped output video.
 
         Returns
         -------
@@ -533,6 +658,7 @@ class PostProcessingPipeline:
             - 'trajectory_length': Number of trajectory points
             - 'fixed_box_size': Fixed box dimensions
             - 'output_json': Path to output metadata file
+            - 'output_video': Path to output video file (if rendered)
 
         Raises
         ------
@@ -568,6 +694,10 @@ class PostProcessingPipeline:
         # Stage 3: Export metadata
         self.export_metadata(detections, trajectory, per_frame_boxes, fixed_size)
 
+        # Stage 4 (Optional): Render cropped video
+        if self.config.output_video:
+            self.render_video(per_frame_boxes, fixed_size)
+
         # Build result summary
         result = {
             'total_frames': self.total_frames,
@@ -578,12 +708,18 @@ class PostProcessingPipeline:
             'output_json': str(self.config.output_json),
         }
 
+        # Add output video to result if rendered
+        if self.config.output_video:
+            result['output_video'] = str(self.config.output_video)
+
         logger.info("=" * 60)
         logger.info("Pipeline complete!")
         logger.info(f"  Detections: {result['num_detections']}")
         logger.info(f"  Trajectory points: {result['trajectory_length']}")
         logger.info(f"  Fixed box: {fixed_size.width:.1f}x{fixed_size.height:.1f}")
-        logger.info(f"  Output: {result['output_json']}")
+        logger.info(f"  JSON output: {result['output_json']}")
+        if self.config.output_video:
+            logger.info(f"  Video output: {result['output_video']}")
         logger.info("=" * 60)
 
         return result

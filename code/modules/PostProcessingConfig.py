@@ -46,6 +46,10 @@ class PostProcessingConfig:
         Path to input video file for processing
     output_json : str or Path
         Path to output JSON metadata file
+    output_video : str or Path, optional
+        Path to output cropped video file (Part 2).
+        If None, only JSON metadata is generated (Part 1 mode).
+        If specified, renders a cropped video using the computed bounding boxes.
     yolo_model : str or Path, default 'yolov8n.pt'
         Path to YOLO model weights file. Options:
         - 'yolov8n.pt': Nano (fastest, least accurate)
@@ -112,6 +116,9 @@ class PostProcessingConfig:
     input_video: str
     output_json: str
 
+    # Optional output video (Part 2)
+    output_video: Optional[str] = None
+
     # YOLO detection settings
     yolo_model: str = 'yolov8n.pt'
     confidence_threshold: float = 0.5
@@ -155,6 +162,14 @@ class PostProcessingConfig:
             raise FileNotFoundError(
                 f"Output directory does not exist: {output_path.parent}"
             )
+
+        # Validate output video path if specified
+        if self.output_video:
+            output_video_path = Path(self.output_video)
+            if not output_video_path.parent.exists():
+                raise FileNotFoundError(
+                    f"Output video directory does not exist: {output_video_path.parent}"
+                )
 
         # Validate numeric ranges
         if not 0.0 <= self.confidence_threshold <= 1.0:
@@ -212,6 +227,7 @@ class PostProcessingConfig:
         return {
             'input_video': str(self.input_video),
             'output_json': str(self.output_json),
+            'output_video': str(self.output_video) if self.output_video else None,
             'yolo_model': str(self.yolo_model),
             'confidence_threshold': self.confidence_threshold,
             'scaling_factor': self.scaling_factor,
