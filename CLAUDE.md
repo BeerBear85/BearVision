@@ -21,6 +21,9 @@ python test/run_test.py
 
 # YOLO training GUI for fine-tuning models
 python run_train_gui.py
+
+# Box upload testing tool (manual Box cloud storage testing)
+python box_upload_gui.py
 ```
 
 ### Testing

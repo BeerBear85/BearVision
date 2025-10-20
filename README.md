@@ -71,3 +71,28 @@ Prerequisites:
 - The dataset directory must contain images and matching `.txt` annotation files using YOLO coordinates.
 
 The script automatically creates train/val splits, fine-tunes the base model and exports the best weights as an ONNX file.
+
+## Box Upload Testing Tool
+
+A cross-platform GUI for manually testing Box cloud storage uploads:
+
+```bash
+python box_upload_gui.py
+```
+
+Features:
+
+- **Show Cloud Content**: View files in the Box root folder
+- **File Selection**: Browse and select local files for upload
+- **Destination Folder**: Specify Box folder path (default: `test_upload`)
+- **Upload with Safeguards**:
+  - Preserves original filename
+  - Warns for files > 1 MB
+  - Prompts before overwriting existing files
+- **Comprehensive Logging**: All operations logged to `box_upload_gui.log`
+
+Prerequisites:
+
+- Box credentials must be configured (see `config.ini` under `[BOX]` and `[STORAGE_COMMON]` sections)
+- Set environment variable with base64-encoded Box credentials
+- The tool uses the existing `BoxHandler` module for all Box operations
