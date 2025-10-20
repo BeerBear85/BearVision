@@ -43,6 +43,22 @@
         "program": "${workspaceFolder}/tools/edge_gui.py",
         "console": "integratedTerminal",
         "justMyCode": false
+    },
+    {
+        "name": "Python Debugger: Box Upload Test GUI",
+        "type": "debugpy",
+        "request": "launch",
+        "program": "${workspaceFolder}/box_upload_gui.py",
+        "console": "integratedTerminal",
+        "justMyCode": false
+    },
+    {
+        "name": "Python Debugger: Post-Processing Test GUI",
+        "type": "debugpy",
+        "request": "launch",
+        "program": "${workspaceFolder}/post_processing_gui.py",
+        "console": "integratedTerminal",
+        "justMyCode": false
     }
     ]
 }
