@@ -13,3 +13,4 @@ last_used_config.ini
 temp/*
 code/obsolite_junk_box/GPMD2CSV_extract_gopro_sensor_data/gopro2json.exe
 code/obsolite_junk_box/GPMD2CSV_extract_gopro_sensor_data/gpmdinfo.exe
+simulation/out/

@@ -15,3 +15,5 @@ boxsdk
 PySide6
 pytest-qt
 pydantic
+pyautogui
+Pillow
