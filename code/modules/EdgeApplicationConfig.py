@@ -11,6 +11,8 @@ from configparser import ConfigParser
 from pathlib import Path
 import yaml
 
+from bearvision.config import load_edge_config
+
 
 logger = logging.getLogger(__name__)
 
@@ -157,15 +159,8 @@ class EdgeApplicationConfig:
                 logger.warning(f"YAML config file not found: {yaml_path}, using defaults")
                 return False
 
-            with open(yaml_file, 'r') as f:
-                yaml_data = yaml.safe_load(f)
-
-            if not yaml_data:
-                logger.warning(f"Empty YAML file: {yaml_path}, using defaults")
-                return False
-
-            # Parse YAML structure into config values
-            self._parse_yaml_to_values(yaml_data)
+            versioned = load_edge_config(yaml_file)
+            self._parse_yaml_to_values(versioned.model_dump(mode="python"))
 
             # Validate configuration
             if not self.validate():
@@ -194,8 +189,9 @@ class EdgeApplicationConfig:
         # Recording settings
         if 'recording' in yaml_data:
             rec = yaml_data['recording']
-            # Support new name (post_detection_duration) with backward compatibility for old name (duration)
-            if 'post_detection_duration' in rec:
+            if 'post_detection_duration_s' in rec:
+                self._values['post_detection_duration'] = float(rec['post_detection_duration_s'])
+            elif 'post_detection_duration' in rec:
                 self._values['post_detection_duration'] = float(rec['post_detection_duration'])
             elif 'duration' in rec:
                 # Backward compatibility
@@ -207,29 +203,45 @@ class EdgeApplicationConfig:
         # Detection settings
         if 'detection' in yaml_data:
             det = yaml_data['detection']
-            if 'yolo_enabled' in det:
+            if 'enabled' in det:
+                self._values['yolo_enabled'] = bool(det['enabled'])
+            elif 'yolo_enabled' in det:
                 self._values['yolo_enabled'] = bool(det['yolo_enabled'])
-            if 'yolo_model' in det:
+            if 'model' in det:
+                self._values['yolo_model'] = str(det['model'])
+            elif 'yolo_model' in det:
                 self._values['yolo_model'] = str(det['yolo_model'])
             if 'confidence_threshold' in det:
                 self._values['detection_confidence_threshold'] = float(det['confidence_threshold'])
-            if 'cooldown' in det:
+            if 'cooldown_s' in det:
+                self._values['detection_cooldown'] = float(det['cooldown_s'])
+            elif 'cooldown' in det:
                 self._values['detection_cooldown'] = float(det['cooldown'])
 
         # Performance settings
         if 'performance' in yaml_data:
             perf = yaml_data['performance']
-            if 'stream_max_fps' in perf:
+            if 'max_fps' in perf:
+                self._values['stream_max_fps'] = int(perf['max_fps'])
+            elif 'stream_max_fps' in perf:
                 self._values['stream_max_fps'] = int(perf['stream_max_fps'])
-            if 'stream_max_lag_ms' in perf:
+            if 'max_lag_ms' in perf:
+                self._values['stream_max_lag_ms'] = int(perf['max_lag_ms'])
+            elif 'stream_max_lag_ms' in perf:
                 self._values['stream_max_lag_ms'] = int(perf['stream_max_lag_ms'])
+            if 'buffer_drain' in perf:
+                self._values['stream_buffer_drain'] = bool(perf['buffer_drain'])
+            if 'callback_queue_size' in perf:
+                self._values['stream_callback_queue_size'] = int(perf['callback_queue_size'])
 
         # Error recovery settings
         if 'error_recovery' in yaml_data:
             err = yaml_data['error_recovery']
             if 'max_restarts' in err:
                 self._values['max_error_restarts'] = int(err['max_restarts'])
-            if 'restart_delay' in err:
+            if 'restart_delay_s' in err:
+                self._values['error_restart_delay'] = float(err['restart_delay_s'])
+            elif 'restart_delay' in err:
                 self._values['error_restart_delay'] = float(err['restart_delay'])
 
         # Thread settings
@@ -239,6 +251,18 @@ class EdgeApplicationConfig:
                 self._values['enable_ble_logging'] = bool(threads['enable_ble_logging'])
             if 'enable_cloud_upload' in threads:
                 self._values['enable_cloud_upload'] = bool(threads['enable_cloud_upload'])
+
+        if 'features' in yaml_data:
+            features = yaml_data['features']
+            mapping = {
+                'ble_logging': 'enable_ble_logging',
+                'post_processing': 'enable_post_processing',
+                'cloud_upload': 'enable_cloud_upload',
+                'preview_stream': 'preview_stream_enabled',
+            }
+            for source, target in mapping.items():
+                if source in features:
+                    self._values[target] = bool(features[source])
 
         # System settings
         if 'system' in yaml_data:

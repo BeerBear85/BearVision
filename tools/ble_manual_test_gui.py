@@ -135,7 +135,7 @@ class BleManualTestGUI(QMainWindow):
         
     def load_configuration(self):
         """Load YAML configuration file."""
-        config_file = Path(__file__).parent / "ble_test_gui_config.yaml"
+        config_file = Path(__file__).resolve().parents[1] / "config" / "ble-test.yaml"
         
         try:
             with open(config_file, 'r') as f:

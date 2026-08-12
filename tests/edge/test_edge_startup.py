@@ -69,7 +69,7 @@ def test_config_load():
     logger.info("\nTesting configuration loading...")
     try:
         from EdgeApplicationConfig import EdgeApplicationConfig
-        config_path = Path(__file__).resolve().parent / "config.ini"
+        config_path = Path(__file__).resolve().parents[2] / "config" / "edge.yaml"
         config = EdgeApplicationConfig()
         if config.load_from_file(str(config_path)):
             logger.info(f"✓ Configuration loaded from {config_path}")
@@ -89,7 +89,7 @@ def test_edge_app_creation():
         from EdgeApplicationConfig import EdgeApplicationConfig
         from EdgeStateMachine import ApplicationState
 
-        config_path = Path(__file__).resolve().parent / "config.ini"
+        config_path = Path(__file__).resolve().parents[2] / "config" / "edge.yaml"
         config = EdgeApplicationConfig()
         if config_path.exists():
             config.load_from_file(str(config_path))

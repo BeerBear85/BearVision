@@ -69,7 +69,7 @@ The active application follows the edge capture pipeline:
 - **EdgeApplicationConfig**: Configuration management with typed access and defaults
 
 ### Configuration System
-The application uses `config.ini` and `edge_config.yaml` for edge settings and
+The application uses the versioned `config/edge.yaml` file for edge settings and
 cloud storage credentials.
 
 ### Cloud Storage
@@ -150,7 +150,7 @@ The edge system is built from specialized, testable modules:
 
 ### Configuration
 
-Edge application settings in `config.ini` under `[EDGE_APPLICATION]`:
+Edge application settings are defined in `config/edge.yaml`:
 
 ```ini
 [EDGE_APPLICATION]
@@ -175,7 +175,7 @@ enable_cloud_upload = true             # Cloud upload thread
 python code/Application/edge_main.py
 
 # With custom config
-python code/Application/edge_main.py --config path/to/config.ini
+python code/Application/edge_main.py --config path/to/edge.yaml
 ```
 
 ## Architectural Patterns

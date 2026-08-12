@@ -35,7 +35,7 @@ class TrainYoloGUI(QMainWindow):
         self.data_dir = ""
         self.training_process = None
         self.is_training = False
-        self.config_file = Path(__file__).parent / "train_config.yaml"
+        self.config_file = Path(__file__).resolve().parents[1] / "config" / "training.yaml"
         
         # Create menu bar
         self._create_menu_bar()
@@ -438,7 +438,7 @@ class TrainYoloGUI(QMainWindow):
         file_path, _ = QFileDialog.getSaveFileName(
             self,
             "Save Training Configuration",
-            str(Path.cwd() / "train_config.yaml"),
+            str(Path.cwd() / "training.yaml"),
             "YAML files (*.yaml *.yml);;All files (*.*)"
         )
         

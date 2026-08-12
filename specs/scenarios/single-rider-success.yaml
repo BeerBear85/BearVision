@@ -1,0 +1,20 @@
+scenario_schema_version: "1.0"
+name: single-rider-success
+seed: 42
+duration_s: 60
+timeline:
+  - at_s: 1
+    event: tag_enters_range
+    payload:
+      tag_id: tag-17
+      rider_id: rider-17
+      rssi_dbm: -52
+  - at_s: 4
+    event: person_detected
+    payload:
+      confidence: 0.91
+faults: {}
+expect:
+  rider_id: rider-17
+  capture_triggered: true
+  clip_uploaded: true

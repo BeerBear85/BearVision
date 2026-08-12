@@ -121,7 +121,7 @@ The GUI application provides a user-friendly interface for manual testing of BLE
 - **Signal/Slot Communication**: Thread-safe data transfer using Qt signals
 
 #### Configuration System
-- **YAML-based configuration** (`ble_test_gui_config.yaml`)
+- **Versioned YAML configuration** (`config/ble-test.yaml`)
 - **Fallback to defaults** if configuration file is missing or invalid
 - **Configurable GUI elements**: fonts, colors, display options, logging parameters
 
@@ -283,7 +283,7 @@ python tools/ble_manual_test_gui.py
 ```
 
 ### Configuration Setup
-1. Create `tools/ble_test_gui_config.yaml` with desired settings
+1. Edit `config/ble-test.yaml` with the desired settings
 2. Adjust display options and styling preferences
 3. Configure BLE scanning parameters
 

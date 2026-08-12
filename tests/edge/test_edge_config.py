@@ -40,10 +40,10 @@ def test_default_config():
 def test_load_from_file():
     """Test loading configuration from INI file."""
     print("=" * 70)
-    print("Test 2: Load Configuration from config.ini")
+    print("Test 2: Load versioned configuration")
     print("=" * 70)
 
-    config_path = Path(__file__).resolve().parent.parent.parent / "config.ini"
+    config_path = Path(__file__).resolve().parents[2] / "config" / "edge.yaml"
     config = EdgeApplicationConfig()
 
     success = config.load_from_file(str(config_path))
@@ -152,7 +152,7 @@ if __name__ == "__main__":
         print("=" * 70)
         print("\nEdge Application Configuration System is working correctly!")
         print("\nKey Features:")
-        print("  - Configuration loaded from [EDGE_APPLICATION] section in config.ini")
+        print("  - Configuration loaded from config/edge.yaml")
         print("  - YOLO detection can be enabled/disabled")
         print("  - Recording duration configurable")
         print("  - Error recovery behavior configurable")

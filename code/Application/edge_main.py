@@ -12,7 +12,9 @@ from pathlib import Path
 
 # Add module paths
 MODULE_DIR = Path(__file__).resolve().parents[1] / "modules"
+SRC_DIR = Path(__file__).resolve().parents[2] / "src"
 sys.path.append(str(MODULE_DIR))
+sys.path.append(str(SRC_DIR))
 
 from edge_application import EdgeApplicationStateMachine
 from EdgeStateMachine import ApplicationState
@@ -35,21 +37,18 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog='''
 Examples:
-  # Use default config (tries edge_config.yaml, then config.ini)
+  # Use the versioned default config
   python edge_main.py
 
   # Use specific YAML config
-  python edge_main.py --config edge_config.yaml
-
-  # Use specific INI config
-  python edge_main.py --config config.ini
+  python edge_main.py --config config/edge.yaml
         '''
     )
     parser.add_argument(
         '--config',
         type=str,
         default=None,
-        help='Path to configuration file (.yaml or .ini). If not specified, tries edge_config.yaml then config.ini'
+        help='Path to a versioned edge YAML file. Defaults to config/edge.yaml'
     )
     args = parser.parse_args()
 
@@ -71,16 +70,8 @@ Examples:
         if not config_path.is_absolute():
             config_path = repo_root / config_path
     else:
-        # Try edge_config.yaml first, then fall back to config.ini
-        yaml_config = repo_root / "edge_config.yaml"
-        ini_config = repo_root / "config.ini"
-
-        if yaml_config.exists():
-            config_path = yaml_config
-            logger.info("Using default YAML config: edge_config.yaml")
-        else:
-            config_path = ini_config
-            logger.info("YAML config not found, using INI config: config.ini")
+        config_path = repo_root / "config" / "edge.yaml"
+        logger.info("Using default YAML config: config/edge.yaml")
 
     # Load configuration
     config = EdgeApplicationConfig()

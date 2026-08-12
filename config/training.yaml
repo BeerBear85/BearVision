@@ -1,0 +1,10 @@
+config_schema_version: "1.0"
+config_kind: bearvision-training
+data_dir: ""
+model: yolov8x.pt
+epochs: 50
+batch: 16
+imgsz: 640
+device: auto
+val_ratio: 0.2
+onnx_out: yolov8_finetuned.onnx

@@ -79,7 +79,7 @@ class AnnotationGUI(QMainWindow):
         self.setGeometry(100, 100, 900, 400)
         
         # Load configuration for pipeline parameters
-        cfg_path = Path(__file__).with_name("sample_config.yaml")
+        cfg_path = Path(__file__).resolve().parents[2] / "config" / "annotation-example.yaml"
         self.base_cfg = ap._ensure_cfg(str(cfg_path))
         # Get GUI configuration values
         gui_cfg = self.base_cfg.gui

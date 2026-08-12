@@ -25,7 +25,7 @@ def test_fix():
     logger.info("VERIFICATION TEST: Edge GUI Startup Fix")
     logger.info("=" * 70)
 
-    config_path = Path(__file__).resolve().parent.parent.parent / "config.ini"
+    config_path = Path(__file__).resolve().parents[2] / "config" / "edge.yaml"
     config = EdgeApplicationConfig()
     config.load_from_file(str(config_path))
 

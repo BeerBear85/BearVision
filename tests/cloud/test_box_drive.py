@@ -54,7 +54,7 @@ def test_box_upload_download(tmp_path):
     if not os.getenv('STORAGE_CREDENTIALS_B64'):
         pytest.skip('STORAGE_CREDENTIALS_B64 not set')
 
-    cfg_path = ROOT / 'config.ini'
+    cfg_path = ROOT / 'config' / 'edge.yaml'
     ConfigurationHandler.read_config_file(str(cfg_path))
     handler = BoxHandler()
 

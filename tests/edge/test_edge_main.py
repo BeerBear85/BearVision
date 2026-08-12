@@ -61,7 +61,7 @@ def test_edge_application_config_loading():
     assert hasattr(config, 'get_yolo_enabled')
 
     # Test config can be loaded from file (if it exists)
-    config_path = Path(__file__).resolve().parents[2] / 'config.ini'
+    config_path = Path(__file__).resolve().parents[2] / 'config' / 'edge.yaml'
     if config_path.exists():
         result = config.load_from_file(str(config_path))
         # Should return True if file exists and is valid

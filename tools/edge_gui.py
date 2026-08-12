@@ -39,8 +39,10 @@ from PySide6.QtGui import QPixmap, QImage, QFont, QAction, QIcon, QColor, QPalet
 # Add module paths
 MODULE_DIR = Path(__file__).resolve().parent.parent / "code" / "modules"
 APP_DIR = Path(__file__).resolve().parent.parent / "code" / "Application"
+SRC_DIR = Path(__file__).resolve().parent.parent / "src"
 sys.path.append(str(MODULE_DIR))
 sys.path.append(str(APP_DIR))
+sys.path.append(str(SRC_DIR))
 
 # Import EDGE application modules
 try:
@@ -116,7 +118,7 @@ class EDGEBackend(QThread):
         # Initialize EdgeApplicationStateMachine with state callback
         if EDGE_AVAILABLE:
             # Load configuration
-            config_path = Path(__file__).resolve().parent.parent / "config.ini"
+            config_path = Path(__file__).resolve().parent.parent / "config" / "edge.yaml"
             config = EdgeApplicationConfig()
             if config_path.exists():
                 config.load_from_file(str(config_path))

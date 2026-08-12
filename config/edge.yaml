@@ -1,0 +1,31 @@
+config_schema_version: "1.0"
+config_kind: bearvision-edge
+recording:
+  post_detection_duration_s: 5.0
+  hindsight_enabled: true
+detection:
+  enabled: true
+  model: yolov8n
+  confidence_threshold: 0.5
+  cooldown_s: 2.0
+performance:
+  max_fps: 30
+  max_lag_ms: 250
+  buffer_drain: true
+  callback_queue_size: 5
+error_recovery:
+  max_restarts: 5
+  restart_delay_s: 2.0
+features:
+  ble_logging: true
+  post_processing: true
+  cloud_upload: false
+  preview_stream: true
+storage:
+  provider: box
+  root_folder: bearvision_files
+  credential_env: STORAGE_CREDENTIALS_B64
+  secondary_credential_env: STORAGE_CREDENTIALS_B64_2
+system:
+  log_level: DEBUG
+tag_registry: []

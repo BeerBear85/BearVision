@@ -135,7 +135,7 @@ class EdgeSystemCoordinator:
         """Load configuration file."""
         try:
             if config_path is None:
-                config_path = Path(__file__).resolve().parents[2] / "config.ini"
+                config_path = Path(__file__).resolve().parents[2] / "config" / "edge.yaml"
 
             ConfigurationHandler.read_config_file(str(config_path))
             self.config_loaded = True

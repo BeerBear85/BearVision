@@ -55,7 +55,7 @@ Choose a video and output directory, then press **Run** to watch the video with 
 
 The pipeline automatically splits rider trajectories when no detections are
 seen for `detection_gap_timeout_s` seconds (default 3). Adjust this and other
-options in `pretraining/annotation/sample_config.yaml`.
+options in `config/annotation-example.yaml`.
 
 Tiny person detections can be ignored by tuning
 `min_person_bbox_diagonal_ratio` (default `0.001`). The value represents the
@@ -99,6 +99,6 @@ Features:
 
 Prerequisites:
 
-- Box credentials must be configured (see `config.ini` under `[BOX]` and `[STORAGE_COMMON]` sections)
+- Box credentials must be configured through the environment variable names in `config/edge.yaml`.
 - Set environment variable with base64-encoded Box credentials
 - The tool uses the existing `BoxHandler` module for all Box operations

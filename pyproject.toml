@@ -7,7 +7,10 @@ name = "bearvision"
 version = "3.0.0.dev0"
 description = "Spec-driven BearVision edge system and behavioural simulator"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "pydantic>=2.8,<3",
+    "PyYAML>=6,<7",
+]
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
