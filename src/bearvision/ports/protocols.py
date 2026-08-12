@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator, Iterable
 from datetime import datetime
+from pathlib import Path
 from typing import Protocol, runtime_checkable
 
 from bearvision.contracts import (
@@ -14,7 +15,7 @@ from bearvision.contracts import (
     TagRegistryEntry,
 )
 
-from .models import CapturedMedia, VideoFrame
+from .models import CapturedMedia, ExtractedClip, VideoFrame
 
 
 @runtime_checkable
@@ -37,6 +38,18 @@ class Camera(Protocol):
     async def stop_preview(self) -> None: ...
 
     async def capture(self, request: CaptureRequest) -> CapturedMedia: ...
+
+
+@runtime_checkable
+class VideoClipper(Protocol):
+    async def extract(
+        self,
+        source: Path,
+        destination: Path,
+        *,
+        start_s: float,
+        duration_s: float,
+    ) -> ExtractedClip: ...
 
 
 @runtime_checkable

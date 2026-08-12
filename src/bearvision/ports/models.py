@@ -39,3 +39,23 @@ class CapturedMedia:
     def __post_init__(self) -> None:
         if (self.content is None) == (self.local_path is None):
             raise ValueError("exactly one media source is required")
+
+
+@dataclass(frozen=True, slots=True)
+class ExtractedClip:
+    """Validated local clip produced from a longer source asset."""
+
+    path: Path
+    start_s: float
+    duration_s: float
+    width_px: int
+    height_px: int
+    has_audio: bool
+
+    def __post_init__(self) -> None:
+        if self.start_s < 0:
+            raise ValueError("clip start must not be negative")
+        if self.duration_s <= 0:
+            raise ValueError("clip duration must be positive")
+        if self.width_px <= 0 or self.height_px <= 0:
+            raise ValueError("clip dimensions must be positive")
