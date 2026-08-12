@@ -28,7 +28,7 @@ jobs:
       - name: Type-check active package
         run: uv run mypy
       - name: Run behavioural gate
-        run: uv run pytest --cov=bearvision --cov-report=term-missing
+        run: uv run pytest
       - name: Build package
         run: uv build
 

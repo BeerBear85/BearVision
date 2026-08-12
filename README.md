@@ -36,7 +36,9 @@ uv run mypy
 ```
 
 The CI coverage figure combines the fast behavioural suite with the heavier
-real-video/YOLO suite. Reproduce it after installing the Edge extra:
+real-video/YOLO suite. It measures both executed lines and decision branches;
+CI rejects combined coverage below 85 %. Reproduce it after installing the
+Edge extra:
 
 ```bash
 uv run coverage erase
