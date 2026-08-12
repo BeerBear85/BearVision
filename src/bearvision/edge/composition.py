@@ -18,6 +18,7 @@ from bearvision.ports import Camera, Clock, Detector, Storage, TagRegistry, TagS
 from bearvision.simulation import ClosedLoopScenarioRunner
 from bearvision.contracts import ScenarioDefinition, TagRegistryEntry
 from bearvision.simulation import InMemoryTagRegistry
+from .orchestrator import BearVisionOrchestrator
 
 
 @dataclass(frozen=True, slots=True)
@@ -77,4 +78,30 @@ def build_real_system(
         storage=BoxStorageAdapter(box_type(box_config), clock, scratch_dir),
         registry=registry,
         assignment_policy=config.assignment,
+    )
+
+
+def build_real_orchestrator(
+    config: EdgeConfig,
+    *,
+    capture_dir: str | Path,
+    scratch_dir: str | Path,
+) -> BearVisionOrchestrator:
+    """Build the production orchestrator without exposing legacy SDKs to it."""
+
+    components = build_real_system(
+        config,
+        capture_dir=capture_dir,
+        scratch_dir=scratch_dir,
+    )
+    return BearVisionOrchestrator(
+        clock=components.clock,
+        camera=components.camera,
+        scanner=components.scanner,
+        detector=components.detector,
+        storage=components.storage,
+        registry=components.registry,
+        assignment_policy=components.assignment_policy,
+        recording_duration_s=config.recording.post_detection_duration_s,
+        observation_retention_s=max(30.0, config.recording.post_detection_duration_s),
     )

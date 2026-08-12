@@ -28,8 +28,7 @@ class DetectionConfig(StrictConfigModel):
 class AssignmentConfig(StrictConfigModel):
     """Initial BearTag fusion policy; values require field-data calibration."""
 
-    jump_window_before_s: float = Field(default=1.5, ge=0, le=10)
-    jump_window_after_s: float = Field(default=0.75, ge=0, le=10)
+    minimum_observation_count: int = Field(default=2, ge=1, le=1000)
     minimum_motion_delta_mps2: float = Field(default=2.0, ge=0, le=100)
     motion_full_scale_mps2: float = Field(default=12.0, gt=0, le=100)
     minimum_rssi_dbm: int = Field(default=-85, ge=-127, le=20)

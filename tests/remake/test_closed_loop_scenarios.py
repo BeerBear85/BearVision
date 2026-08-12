@@ -27,6 +27,7 @@ def test_single_rider_scenario_runs_closed_loop_deterministically() -> None:
 
     assert first.trace == second.trace
     assert first.assignments[0].rider_id == "rider-17"
+    assert first.assignments[0].evidence[0].observation_count == 2
     assert len(first.captures) == 1
     assert first.uploads[0].object_key.startswith("rider-17/")
     assert not first.failures
@@ -65,6 +66,26 @@ def test_two_tags_remain_ambiguous() -> None:
                     },
                 },
                 {"at_s": 2, "event": "person_detected", "payload": {"confidence": 0.9}},
+                {
+                    "at_s": 2.1,
+                    "event": "tag_observation",
+                    "payload": {"tag_id": "tag-17", "rssi_dbm": -50, "acceleration_mps2": {"x": 0, "y": 0, "z": 19}},
+                },
+                {
+                    "at_s": 2.2,
+                    "event": "tag_observation",
+                    "payload": {"tag_id": "tag-17", "rssi_dbm": -51, "acceleration_mps2": {"x": 0, "y": 0, "z": 19}},
+                },
+                {
+                    "at_s": 2.1,
+                    "event": "tag_observation",
+                    "payload": {"tag_id": "tag-22", "rssi_dbm": -55, "acceleration_mps2": {"x": 0, "y": 0, "z": 19}},
+                },
+                {
+                    "at_s": 2.2,
+                    "event": "tag_observation",
+                    "payload": {"tag_id": "tag-22", "rssi_dbm": -56, "acceleration_mps2": {"x": 0, "y": 0, "z": 19}},
+                },
             ]
         )
     ).run()
@@ -98,6 +119,26 @@ def test_active_rider_beats_stronger_stationary_nearby_tag_in_closed_loop() -> N
                     },
                 },
                 {"at_s": 3, "event": "person_detected", "payload": {"confidence": 0.9}},
+                {
+                    "at_s": 3.1,
+                    "event": "tag_observation",
+                    "payload": {"tag_id": "active", "rssi_dbm": -65, "acceleration_mps2": {"x": 4, "y": 2, "z": 19}},
+                },
+                {
+                    "at_s": 3.2,
+                    "event": "tag_observation",
+                    "payload": {"tag_id": "active", "rssi_dbm": -66, "acceleration_mps2": {"x": 4, "y": 2, "z": 18}},
+                },
+                {
+                    "at_s": 3.1,
+                    "event": "tag_observation",
+                    "payload": {"tag_id": "nearby", "rssi_dbm": -40, "acceleration_mps2": {"x": 0, "y": 0, "z": 9.81}},
+                },
+                {
+                    "at_s": 3.2,
+                    "event": "tag_observation",
+                    "payload": {"tag_id": "nearby", "rssi_dbm": -41, "acceleration_mps2": {"x": 0, "y": 0, "z": 9.8}},
+                },
             ]
         )
     ).run()
@@ -105,7 +146,7 @@ def test_active_rider_beats_stronger_stationary_nearby_tag_in_closed_loop() -> N
     assert result.uploads[0].object_key.startswith("rider-active/")
 
 
-def test_assignment_waits_for_accelerometer_samples_after_jump_timestamp() -> None:
+def test_assignment_uses_accelerometer_samples_from_entire_clip() -> None:
     result = ClosedLoopScenarioRunner.from_scenario(
         scenario(
             [
@@ -129,12 +170,22 @@ def test_assignment_waits_for_accelerometer_samples_after_jump_timestamp() -> No
                         "acceleration_mps2": {"x": 4, "y": 2, "z": 19},
                     },
                 },
+                {
+                    "at_s": 7.5,
+                    "event": "tag_observation",
+                    "payload": {
+                        "tag_id": "tag-17",
+                        "rssi_dbm": -53,
+                        "acceleration_mps2": {"x": 3, "y": 2, "z": 18},
+                    },
+                },
             ]
         )
     ).run()
     assert result.assignments[0].rider_id == "rider-17"
-    assert result.assignments[0].assigned_at_monotonic_s == 3.75
-    assert any(item.kind == "evaluate_rider_assignment" for item in result.trace)
+    assert result.assignments[0].assigned_at_monotonic_s == 8
+    assert result.assignments[0].evidence[0].observation_count == 2
+    assert any(item.kind == "finalize_clip" for item in result.trace)
 
 
 def test_camera_failure_stops_before_upload() -> None:

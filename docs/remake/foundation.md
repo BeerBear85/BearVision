@@ -43,11 +43,12 @@ flowchart LR
     Real --> Storage
 ```
 
-Vision can trigger capture and establish the jump timestamp but never supplies
-rider identity. The policy evaluates registered BearTag accelerometer samples
-inside the jump window together with median RSSI. Acceleration magnitude makes
-the motion evidence independent of tag orientation. Candidates must pass both
-gates, and close combined scores remain `ambiguous`.
+Vision triggers a fixed-duration person clip but never supplies rider identity.
+The policy evaluates every registered BearTag accelerometer sample recorded
+during that complete clip together with median RSSI from the same interval.
+Mean acceleration activity magnitude makes the motion evidence independent of
+tag orientation without letting signed axes cancel. Candidates must pass the
+sample-count, motion and RSSI gates; close combined scores remain `ambiguous`.
 
 The initial fusion policy is configurable in `config/edge.yaml`. Its 70% motion
 and 30% RSSI weights and thresholds are calibration starting points—not proven

@@ -79,7 +79,7 @@ class TagAssignmentEvidence(ContractModel):
     tag_id: Identifier
     rider_id: Identifier
     observation_count: int = Field(gt=0)
-    peak_motion_delta_mps2: float = Field(ge=0)
+    mean_motion_delta_mps2: float = Field(ge=0)
     median_rssi_dbm: float = Field(ge=-127, le=20)
     motion_score: float = Field(ge=0, le=1)
     rssi_score: float = Field(ge=0, le=1)
@@ -118,7 +118,7 @@ class CaptureRequest(ContractModel):
     requested_at_monotonic_s: float = Field(ge=0)
     pre_roll_s: float = Field(ge=0)
     post_roll_s: float = Field(ge=0)
-    assignment: RiderAssignment
+    assignment: RiderAssignment | None = None
 
 
 class CaptureStatus(StrEnum):

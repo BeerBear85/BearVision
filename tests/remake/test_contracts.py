@@ -4,6 +4,7 @@ import pytest
 from pydantic import ValidationError
 
 from bearvision.contracts import (
+    CaptureRequest,
     RiderAssignment,
     RiderAssignmentStatus,
     TagObservation,
@@ -58,3 +59,13 @@ def test_contracts_generate_json_schema() -> None:
     schema = TagObservation.model_json_schema()
     assert schema["properties"]["contract_schema_version"]["const"] == "1.0"
     assert "rssi_dbm" in schema["properties"]
+
+
+def test_capture_can_start_before_rider_assignment_is_known() -> None:
+    request = CaptureRequest(
+        request_id="capture-frame-1",
+        requested_at_monotonic_s=4,
+        pre_roll_s=0,
+        post_roll_s=5,
+    )
+    assert request.assignment is None

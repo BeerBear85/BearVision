@@ -55,6 +55,7 @@ class ClosedLoopScenarioRunner:
         storage: Storage,
         registry: TagRegistry,
         assignment_policy: AssignmentConfig | None = None,
+        recording_duration_s: float = 5.0,
     ) -> None:
         self.scenario = scenario
         self.clock = clock
@@ -64,6 +65,9 @@ class ClosedLoopScenarioRunner:
         self.storage = storage
         self.registry = registry
         self.assignment_policy = assignment_policy or AssignmentConfig()
+        if recording_duration_s <= 0:
+            raise ValueError("recording_duration_s must be positive")
+        self.recording_duration_s = recording_duration_s
 
     @classmethod
     def from_scenario(
@@ -71,6 +75,7 @@ class ClosedLoopScenarioRunner:
         scenario: ScenarioDefinition,
         *,
         assignment_policy: AssignmentConfig | None = None,
+        recording_duration_s: float = 5.0,
     ) -> "ClosedLoopScenarioRunner":
         clock = VirtualClock()
         observations: list[TagObservation] = []
@@ -116,6 +121,7 @@ class ClosedLoopScenarioRunner:
             storage=InMemoryStorage(clock, fail_upload=bool(scenario.faults.get("storage_upload"))),
             registry=InMemoryTagRegistry(entries.values()),
             assignment_policy=assignment_policy,
+            recording_duration_s=recording_duration_s,
         )
 
     def run(self) -> ScenarioRunResult:
@@ -123,6 +129,7 @@ class ClosedLoopScenarioRunner:
         captures: list[str] = []
         uploads: list[StorageReceipt] = []
         failures: list[dict[str, str]] = []
+        captured_media = {}
         scanned = asyncio.run(self._start_and_scan())
         pending: dict[str, list[TagObservation]] = defaultdict(list)
         for observation in scanned:
@@ -160,24 +167,44 @@ class ClosedLoopScenarioRunner:
             detected = asyncio.run(self.detector.detect(frame))
             if not detected:
                 return (Event(event.at_s, "detection_missed", {"frame_id": frame_id}),)
-
-            decision_at_s = event.at_s + self.assignment_policy.jump_window_after_s
+            request = CaptureRequest(
+                request_id=f"capture-{frame_id}",
+                requested_at_monotonic_s=event.at_s,
+                pre_roll_s=0,
+                post_roll_s=self.recording_duration_s,
+            )
+            try:
+                media = asyncio.run(self.camera.capture(request))
+                captured_media[frame_id] = media
+                captures.append(media.asset.asset_id)
+            except ComponentError as exc:
+                failure = {"component": "camera", "error": str(exc)}
+                failures.append(failure)
+                return (Event(event.at_s, "component_failed", failure),)
+            clip_end_s = event.at_s + self.recording_duration_s
             return (
                 Event(
-                    decision_at_s,
-                    "evaluate_rider_assignment",
-                    {"frame_id": frame_id, "jump_at_s": event.at_s},
+                    event.at_s,
+                    "capture_started",
+                    {"asset_id": media.asset.asset_id, "clip_end_s": clip_end_s},
+                ),
+                Event(
+                    clip_end_s,
+                    "finalize_clip",
+                    {"frame_id": frame_id, "clip_start_s": event.at_s},
                 ),
             )
 
-        def on_assignment(event: Event, _: BehavioralSimulation):
+        def on_finalize(event: Event, _: BehavioralSimulation):
             self.clock.advance_to(event.at_s)
             frame_id = str(event.payload["frame_id"])
+            clip_start_s = float(event.payload["clip_start_s"])
             assignment = assign_rider(
                 scanned,
                 self.registry,
                 assigned_at_monotonic_s=event.at_s,
-                jump_at_monotonic_s=float(event.payload["jump_at_s"]),
+                clip_start_monotonic_s=clip_start_s,
+                clip_end_monotonic_s=event.at_s,
                 **self.assignment_policy.model_dump(),
             )
             assignments.append(assignment)
@@ -188,24 +215,10 @@ class ClosedLoopScenarioRunner:
                     assignment.model_dump(mode="json"),
                 )
             ]
-            request = CaptureRequest(
-                request_id=f"capture-{frame_id}",
-                requested_at_monotonic_s=event.at_s,
-                pre_roll_s=15,
-                post_roll_s=5,
-                assignment=assignment,
+            media = captured_media[frame_id]
+            generated.append(
+                Event(event.at_s, "capture_completed", {"asset_id": media.asset.asset_id})
             )
-            try:
-                media = asyncio.run(self.camera.capture(request))
-                captures.append(media.asset.asset_id)
-                generated.append(
-                    Event(event.at_s, "capture_completed", {"asset_id": media.asset.asset_id})
-                )
-            except ComponentError as exc:
-                failure = {"component": "camera", "error": str(exc)}
-                failures.append(failure)
-                generated.append(Event(event.at_s, "component_failed", failure))
-                return tuple(generated)
 
             owner = assignment.rider_id or assignment.status.value
             object_key = f"{owner}/{media.asset.filename}"
@@ -228,7 +241,7 @@ class ClosedLoopScenarioRunner:
         simulation.subscribe("tag_enters_range", on_tag)
         simulation.subscribe("tag_observation", on_tag)
         simulation.subscribe("person_detected", on_detection)
-        simulation.subscribe("evaluate_rider_assignment", on_assignment)
+        simulation.subscribe("finalize_clip", on_finalize)
         for index, item in enumerate(self.scenario.timeline):
             payload = dict(item.payload)
             if item.event == "person_detected":

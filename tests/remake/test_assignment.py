@@ -22,7 +22,13 @@ def observed(
 
 def test_assignment_uses_ble_registry_only() -> None:
     registry = InMemoryTagRegistry((TagRegistryEntry(tag_id="tag-17", rider_id="rider-17"),))
-    result = assign_rider((observed("tag-17", 3.8),), registry, assigned_at_monotonic_s=4)
+    result = assign_rider(
+        (observed("tag-17", 4), observed("tag-17", 4.1)),
+        registry,
+        assigned_at_monotonic_s=9,
+        clip_start_monotonic_s=4,
+        clip_end_monotonic_s=9,
+    )
     assert result.status is RiderAssignmentStatus.ASSIGNED
     assert result.rider_id == "rider-17"
 
@@ -34,7 +40,13 @@ def test_assignment_rejects_stale_weak_and_unknown_tags() -> None:
         observed("tag-17", 9, -100),
         observed("unknown", 9),
     )
-    result = assign_rider(observations, registry, assigned_at_monotonic_s=10)
+    result = assign_rider(
+        observations,
+        registry,
+        assigned_at_monotonic_s=10,
+        clip_start_monotonic_s=8,
+        clip_end_monotonic_s=10,
+    )
     assert result.status is RiderAssignmentStatus.UNASSIGNED
 
 
@@ -46,9 +58,14 @@ def test_assignment_preserves_multiple_ble_candidates() -> None:
         )
     )
     result = assign_rider(
-        (observed("tag-22", 3), observed("tag-17", 3)),
+        (
+            observed("tag-22", 3), observed("tag-22", 3.1),
+            observed("tag-17", 3), observed("tag-17", 3.1),
+        ),
         registry,
         assigned_at_monotonic_s=4,
+        clip_start_monotonic_s=3,
+        clip_end_monotonic_s=4,
     )
     assert result.status is RiderAssignmentStatus.AMBIGUOUS
     assert result.candidate_tag_ids == ("tag-17", "tag-22")
@@ -65,10 +82,14 @@ def test_stationary_nearby_rider_does_not_beat_active_rider() -> None:
     result = assign_rider(
         (
             observed("active", 4, -65, Vector3(x=5, y=2, z=19)),
+            observed("active", 4.1, -66, Vector3(x=4, y=2, z=18)),
             observed("nearby", 4, -40, Vector3(x=0, y=0, z=9.81)),
+            observed("nearby", 4.1, -41, Vector3(x=0, y=0, z=9.8)),
         ),
         registry,
-        assigned_at_monotonic_s=4,
+        assigned_at_monotonic_s=5,
+        clip_start_monotonic_s=4,
+        clip_end_monotonic_s=5,
     )
     assert result.status is RiderAssignmentStatus.ASSIGNED
     assert result.rider_id == "rider-active"
@@ -76,7 +97,7 @@ def test_stationary_nearby_rider_does_not_beat_active_rider() -> None:
     assert not result.evidence[1].qualifies
 
 
-def test_rssi_disambiguates_two_tags_with_similar_jump_motion() -> None:
+def test_rssi_disambiguates_two_tags_with_similar_clip_motion() -> None:
     registry = InMemoryTagRegistry(
         (
             TagRegistryEntry(tag_id="strong", rider_id="rider-strong"),
@@ -84,10 +105,30 @@ def test_rssi_disambiguates_two_tags_with_similar_jump_motion() -> None:
         )
     )
     result = assign_rider(
-        (observed("strong", 4, -45), observed("weak", 4, -75)),
+        (
+            observed("strong", 4, -45), observed("strong", 4.1, -46),
+            observed("weak", 4, -75), observed("weak", 4.1, -76),
+        ),
         registry,
-        assigned_at_monotonic_s=4,
+        assigned_at_monotonic_s=5,
+        clip_start_monotonic_s=4,
+        clip_end_monotonic_s=5,
     )
     assert result.status is RiderAssignmentStatus.ASSIGNED
     assert result.rider_id == "rider-strong"
     assert len(result.candidate_tag_ids) == 2
+
+
+def test_motion_is_meaned_across_every_sample_in_clip() -> None:
+    registry = InMemoryTagRegistry((TagRegistryEntry(tag_id="tag-17", rider_id="rider-17"),))
+    result = assign_rider(
+        (
+            observed("tag-17", 1, acceleration=Vector3(x=0, y=0, z=19)),
+            observed("tag-17", 2, acceleration=Vector3(x=0, y=0, z=9.80665)),
+        ),
+        registry,
+        assigned_at_monotonic_s=3,
+        clip_start_monotonic_s=1,
+        clip_end_monotonic_s=3,
+    )
+    assert 4.5 < result.evidence[0].mean_motion_delta_mps2 < 4.7

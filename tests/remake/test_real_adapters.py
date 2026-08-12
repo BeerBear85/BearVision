@@ -11,7 +11,7 @@ from bearvision.adapters import (
     YoloDetectorAdapter,
 )
 from bearvision.config import load_edge_config
-from bearvision.edge import build_real_system
+from bearvision.edge import BearVisionOrchestrator, build_real_orchestrator, build_real_system
 from bearvision.contracts import (
     CaptureRequest,
     RiderAssignment,
@@ -169,3 +169,11 @@ def test_real_composition_wraps_existing_implementations(
     assert isinstance(components.detector, YoloDetectorAdapter)
     assert isinstance(components.storage, BoxStorageAdapter)
     assert components.assignment_policy.motion_weight == 0.7
+
+    orchestrator = build_real_orchestrator(
+        config,
+        capture_dir=tmp_path / "captures",
+        scratch_dir=tmp_path / "scratch",
+    )
+    assert isinstance(orchestrator, BearVisionOrchestrator)
+    assert orchestrator.recording_duration_s == config.recording.post_detection_duration_s

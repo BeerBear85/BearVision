@@ -5,8 +5,8 @@ unknown fields and declare units in field names. UTC timestamps must include a
 timezone. Monotonic timestamps are seconds from the current process or virtual
 scenario origin.
 
-Vision can trigger capture and provide the jump timestamp, but rider identity
-is assigned exclusively from synchronized acceleration and RSSI evidence from
-registered BearTags. A tag must pass both evidence gates. When no tag qualifies,
-or competing combined scores are too close, callers retain the uncertainty as
-`unassigned` or `ambiguous`.
+Vision triggers a fixed-duration person clip but does not provide rider identity
+or a jump timestamp. Identity is assigned exclusively from acceleration and RSSI
+evidence recorded by registered BearTags during the complete clip. A tag must
+pass sample-count, mean-motion and RSSI gates. When no tag qualifies, or competing
+combined scores are too close, callers retain `unassigned` or `ambiguous`.

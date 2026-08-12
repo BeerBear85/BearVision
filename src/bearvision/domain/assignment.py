@@ -1,11 +1,11 @@
-"""BearTag acceleration-plus-RSSI rider assignment policy."""
+"""Whole-clip BearTag acceleration-plus-RSSI rider assignment policy."""
 
 from __future__ import annotations
 
 import math
 from collections import defaultdict
 from collections.abc import Iterable
-from statistics import median
+from statistics import fmean, median
 
 from bearvision.contracts import (
     RiderAssignment,
@@ -28,9 +28,9 @@ def assign_rider(
     registry: TagRegistry,
     *,
     assigned_at_monotonic_s: float,
-    jump_at_monotonic_s: float | None = None,
-    jump_window_before_s: float = 1.5,
-    jump_window_after_s: float = 0.75,
+    clip_start_monotonic_s: float,
+    clip_end_monotonic_s: float,
+    minimum_observation_count: int = 2,
     minimum_motion_delta_mps2: float = 2.0,
     motion_full_scale_mps2: float = 12.0,
     minimum_rssi_dbm: int = -85,
@@ -39,15 +39,17 @@ def assign_rider(
     rssi_weight: float = 0.3,
     minimum_score_margin: float = 0.12,
 ) -> RiderAssignment:
-    """Fuse BearTag motion and proximity evidence around the jump timestamp.
+    """Fuse each registered BearTag's evidence over the complete recorded clip.
 
-    Motion is orientation-independent: it uses the acceleration-vector magnitude's
-    deviation from normal gravity. RSSI is aggregated with a median to reduce
-    single-packet spikes. A candidate must pass both gates before scoring.
+    Acceleration is averaged as orientation-independent activity magnitude
+    ``abs(norm(a) - g)``. Averaging signed axes would let movement cancel itself.
+    RSSI uses a median over the identical interval to suppress radio outliers.
     """
 
-    if jump_window_before_s < 0 or jump_window_after_s < 0:
-        raise ValueError("jump observation windows must not be negative")
+    if clip_start_monotonic_s < 0 or clip_end_monotonic_s < clip_start_monotonic_s:
+        raise ValueError("clip interval is invalid")
+    if minimum_observation_count < 1:
+        raise ValueError("minimum_observation_count must be positive")
     if motion_full_scale_mps2 <= minimum_motion_delta_mps2:
         raise ValueError("motion_full_scale_mps2 must exceed the motion threshold")
     if rssi_full_scale_dbm <= minimum_rssi_dbm:
@@ -55,12 +57,9 @@ def assign_rider(
     if not math.isclose(motion_weight + rssi_weight, 1.0, abs_tol=1e-9):
         raise ValueError("motion_weight and rssi_weight must sum to 1.0")
 
-    jump_at = assigned_at_monotonic_s if jump_at_monotonic_s is None else jump_at_monotonic_s
-    window_start = jump_at - jump_window_before_s
-    window_end = jump_at + jump_window_after_s
     grouped: dict[str, list[TagObservation]] = defaultdict(list)
     for observation in observations:
-        if not window_start <= observation.observed_at_monotonic_s <= window_end:
+        if not clip_start_monotonic_s <= observation.observed_at_monotonic_s <= clip_end_monotonic_s:
             continue
         entry = registry.resolve(observation.tag_id)
         if entry is not None and entry.enabled:
@@ -81,23 +80,27 @@ def assign_rider(
             )
             for sample in samples
         ]
-        peak_motion = max(motion_deltas)
+        mean_motion = fmean(motion_deltas)
         median_rssi = float(median(sample.rssi_dbm for sample in samples))
         motion_score = _clamp(
-            (peak_motion - minimum_motion_delta_mps2)
+            (mean_motion - minimum_motion_delta_mps2)
             / (motion_full_scale_mps2 - minimum_motion_delta_mps2)
         )
         rssi_score = _clamp(
             (median_rssi - minimum_rssi_dbm)
             / (rssi_full_scale_dbm - minimum_rssi_dbm)
         )
-        qualifies = peak_motion >= minimum_motion_delta_mps2 and median_rssi >= minimum_rssi_dbm
+        qualifies = (
+            len(samples) >= minimum_observation_count
+            and mean_motion >= minimum_motion_delta_mps2
+            and median_rssi >= minimum_rssi_dbm
+        )
         evidence.append(
             TagAssignmentEvidence(
                 tag_id=tag_id,
                 rider_id=entry.rider_id,
                 observation_count=len(samples),
-                peak_motion_delta_mps2=peak_motion,
+                mean_motion_delta_mps2=mean_motion,
                 median_rssi_dbm=median_rssi,
                 motion_score=motion_score,
                 rssi_score=rssi_score,
@@ -115,23 +118,21 @@ def assign_rider(
             status=RiderAssignmentStatus.UNASSIGNED,
             assigned_at_monotonic_s=assigned_at_monotonic_s,
             evidence=evidence_tuple,
-            reason="no registered BearTag passes both jump-motion and RSSI gates",
+            reason="no registered BearTag passes whole-clip observation, motion and RSSI gates",
         )
 
     winner = qualified[0]
-    if len(qualified) > 1:
-        score_margin = winner.combined_score - qualified[1].combined_score
-        if score_margin < minimum_score_margin:
-            return RiderAssignment(
-                status=RiderAssignmentStatus.AMBIGUOUS,
-                assigned_at_monotonic_s=assigned_at_monotonic_s,
-                candidate_tag_ids=candidate_ids,
-                evidence=evidence_tuple,
-                reason=(
-                    "multiple active BearTags have combined acceleration/RSSI scores "
-                    f"within the {minimum_score_margin:.3f} decision margin"
-                ),
-            )
+    if len(qualified) > 1 and winner.combined_score - qualified[1].combined_score < minimum_score_margin:
+        return RiderAssignment(
+            status=RiderAssignmentStatus.AMBIGUOUS,
+            assigned_at_monotonic_s=assigned_at_monotonic_s,
+            candidate_tag_ids=candidate_ids,
+            evidence=evidence_tuple,
+            reason=(
+                "multiple active BearTags have whole-clip acceleration/RSSI scores "
+                f"within the {minimum_score_margin:.3f} decision margin"
+            ),
+        )
 
     return RiderAssignment(
         status=RiderAssignmentStatus.ASSIGNED,
@@ -140,5 +141,5 @@ def assign_rider(
         tag_id=winner.tag_id,
         candidate_tag_ids=candidate_ids,
         evidence=evidence_tuple,
-        reason="BearTag has the strongest combined jump-motion and RSSI evidence",
+        reason="BearTag has the strongest whole-clip mean-motion and RSSI evidence",
     )

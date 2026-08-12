@@ -9,9 +9,8 @@ detection:
   confidence_threshold: 0.5
   cooldown_s: 2.0
 assignment:
-  # Initial values: calibrate against labelled jump recordings before production use.
-  jump_window_before_s: 1.5
-  jump_window_after_s: 0.75
+  # Initial values: calibrate against labelled rider clips before production use.
+  minimum_observation_count: 2
   minimum_motion_delta_mps2: 2.0
   motion_full_scale_mps2: 12.0
   minimum_rssi_dbm: -85

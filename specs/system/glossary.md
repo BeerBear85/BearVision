@@ -2,8 +2,8 @@
 
 - **Rider:** A registered person who owns one BearTag.
 - **Tag observation:** One decoded BLE advertisement with timestamp, RSSI and acceleration.
-- **Rider assignment:** A BearTag decision combining jump-time acceleration and
-  RSSI evidence to link a capture to one registered rider.
+- **Rider assignment:** A BearTag decision combining whole-clip mean acceleration
+  activity and RSSI evidence to link a capture to one registered rider.
 - **Detection:** A vision result which may trigger capture but cannot determine rider identity.
 - **Capture request:** A request to retain camera media with configured pre- and post-roll.
 - **Media asset:** Provider-neutral metadata for one captured or processed file.

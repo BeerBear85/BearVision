@@ -20,6 +20,18 @@ timeline:
     event: person_detected
     payload:
       confidence: 0.91
+  - at_s: 4.1
+    event: tag_observation
+    payload:
+      tag_id: tag-17
+      rssi_dbm: -50
+      acceleration_mps2: {x: 4.0, y: 2.0, z: 19.0}
+  - at_s: 8.9
+    event: tag_observation
+    payload:
+      tag_id: tag-17
+      rssi_dbm: -53
+      acceleration_mps2: {x: 3.0, y: 2.0, z: 18.0}
 faults: {}
 expect:
   rider_id: rider-17
