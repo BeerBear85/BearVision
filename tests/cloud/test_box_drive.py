@@ -1,75 +1,93 @@
-"""
-Integration tests for BoxHandler using the actual Box API.
+"""Storage integration tests for the simulated and real Box implementations."""
 
-This test file performs real network calls to Box API and is skipped
-by default to avoid network usage and API rate limits. These tests verify
-end-to-end functionality with the actual Box service.
+from __future__ import annotations
 
-For fast unit testing with mocks, see test_box_handler.py
-For authentication-specific testing, see test_box_authenticate.py
-
-To run these tests, ensure STORAGE_CREDENTIALS_B64 environment variable is set.
-"""
-
+import asyncio
+import hashlib
 import os
-import sys
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
 
+from bearvision.adapters import BoxStorageAdapter, SystemClock
+from bearvision.config import load_edge_config
+from bearvision.contracts import MediaAsset
+from bearvision.integrations.box_handler import BoxHandler
+from bearvision.ports import CapturedMedia
+from bearvision.simulation import InMemoryStorage, VirtualClock
+
+
 ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / 'code'))
-sys.path.insert(0, str(ROOT / 'code' / 'modules'))
-
-try:
-    from modules.BoxHandler import BoxHandler
-    from modules.ConfigurationHandler import ConfigurationHandler
-except Exception as e:
-    print("Exception occurred while importing modules:", e)
-    BoxHandler = None
-
-try:
-    from boxsdk import Client  # noqa: F401
-except Exception:
-    Client = None
+PAYLOAD = b"BearVision Box storage integration test\n"
 
 
-@pytest.mark.skip(reason="disabled to avoid network usage")
-@pytest.mark.skipif(
-    BoxHandler is None or Client is None,
-    reason="Box dependencies missing or incompatible",
-)
-def test_box_upload_download(tmp_path):
-    """
-    Purpose:
-        Upload and then download a file to verify round-trip behavior against
-        Box. Network interactions are skipped in normal test runs.
-    Inputs:
-        tmp_path (Path): Temporary directory fixture provided by pytest.
-    Outputs:
-        None; assertions validate that the uploaded content matches the
-        downloaded content.
-    """
-    if not os.getenv('STORAGE_CREDENTIALS_B64'):
-        pytest.skip('STORAGE_CREDENTIALS_B64 not set')
+def _media() -> CapturedMedia:
+    return CapturedMedia(
+        asset=MediaAsset(
+            asset_id=f"box-integration-{uuid.uuid4().hex}",
+            filename="box-integration.txt",
+            content_type="text/plain",
+            size_bytes=len(PAYLOAD),
+            created_at_utc=datetime.now(timezone.utc),
+        ),
+        content=PAYLOAD,
+    )
 
-    cfg_path = ROOT / 'config' / 'edge.yaml'
-    ConfigurationHandler.read_config_file(str(cfg_path))
-    handler = BoxHandler()
 
-    text = f"test-{uuid.uuid4().hex}"
-    local_file = tmp_path / 'upload.txt'
-    local_file.write_text(text)
-
-    remote_path = f"test/{uuid.uuid4().hex}.txt"
+async def _assert_storage_round_trip(storage, object_key: str) -> None:
+    media = _media()
+    uploaded = False
     try:
-        handler.upload_file(str(local_file), remote_path, overwrite=False)
-        download_file = tmp_path / 'download.txt'
-        handler.download_file(remote_path, str(download_file))
-        assert download_file.read_text() == text
+        first_receipt = await storage.upload(media, object_key)
+        uploaded = True
+        second_receipt = await storage.upload(media, object_key)
+
+        assert second_receipt == first_receipt
+        assert first_receipt.asset_id == media.asset.asset_id
+        assert first_receipt.object_key == object_key
+        assert first_receipt.checksum_sha256 == hashlib.sha256(PAYLOAD).hexdigest()
+        assert await storage.download(object_key) == PAYLOAD
     finally:
-        try:
-            handler.delete_file(remote_path)
-        except Exception:
-            pass
+        if uploaded:
+            await storage.delete(object_key)
+
+
+def test_simulated_box_storage_round_trip() -> None:
+    """The cloud_storage=false substitute obeys the storage contract."""
+
+    storage = InMemoryStorage(VirtualClock())
+    object_key = f"box-integration-tests/{uuid.uuid4().hex}.txt"
+
+    asyncio.run(_assert_storage_round_trip(storage, object_key))
+    assert object_key not in storage.objects
+
+
+@pytest.mark.box_integration
+@pytest.mark.skipif(
+    not os.getenv("STORAGE_CREDENTIALS_B64"),
+    reason="STORAGE_CREDENTIALS_B64 is not set",
+)
+def test_real_box_storage_round_trip(tmp_path: Path) -> None:
+    """The cloud_storage=true adapter performs a real Box API round trip."""
+
+    config = load_edge_config(ROOT / "config" / "edge.yaml")
+    handler_config = {
+        "STORAGE_COMMON": {
+            "secret_key_name": config.storage.credential_env,
+            "secret_key_name_2": config.storage.secondary_credential_env or "",
+        },
+        "BOX": {"root_folder": config.storage.root_folder},
+    }
+    storage = BoxStorageAdapter(BoxHandler(handler_config), SystemClock(), tmp_path / "scratch")
+    object_key = f"box-integration-tests/{uuid.uuid4().hex}.txt"
+
+    failure_message = None
+    try:
+        asyncio.run(_assert_storage_round_trip(storage, object_key))
+    except Exception as exc:
+        # Keep credentials and signed JWT request bodies out of pytest tracebacks.
+        failure_message = str(exc)
+    if failure_message is not None:
+        pytest.fail(f"Real Box integration failed: {failure_message}", pytrace=False)

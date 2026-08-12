@@ -6,6 +6,7 @@ from typing import Optional, TYPE_CHECKING
 import logging
 from configparser import ConfigParser
 import importlib
+import sys
 
 if TYPE_CHECKING:  # pragma: no cover - for type checkers only
     from boxsdk import Client
@@ -99,6 +100,18 @@ class BoxHandler:
             raise RuntimeError(
                 f"Box credentials not found. Set the '{secret_env}' environment variable."
             )
+
+        # Requests otherwise uses its bundled CA file, which does not include
+        # certificates installed in the Windows trust store (for example a
+        # corporate TLS inspection CA).
+        if sys.platform == "win32":
+            try:
+                truststore = importlib.import_module("truststore")
+                truststore.inject_into_ssl()
+            except Exception as exc:  # pragma: no cover - dependency missing
+                raise RuntimeError(
+                    "truststore library is required for Box operations on Windows"
+                ) from exc
 
         # Import the Box SDK only when needed so that tests can inject stubs
         # and deployments without the dependency can still import this module.
