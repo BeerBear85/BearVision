@@ -40,6 +40,8 @@ function App() {
   const [events, setEvents] = useState([]);
   const [error, setError] = useState("");
   const [playhead, setPlayhead] = useState(0);
+  const [capturedClip, setCapturedClip] = useState(null);
+  const [displayedMedia, setDisplayedMedia] = useState("scenario");
   const videoRef = useRef(null);
 
   async function request(path, options) {
@@ -74,6 +76,12 @@ function App() {
           if (event.kind === "preview_frame") videoRef.current.play().catch(() => {});
         }
       }
+      if (event.kind === "capture_completed" && event.payload?.filename) {
+        setCapturedClip({
+          ...event.payload,
+          url: `/api/captures/${encodeURIComponent(event.payload.filename)}`,
+        });
+      }
       if (event.kind === "runtime_stopped" || event.kind === "runtime_completed") {
         videoRef.current?.pause();
       }
@@ -104,6 +112,8 @@ function App() {
       }));
       setEvents([]);
       setPlayhead(0);
+      setCapturedClip(null);
+      setDisplayedMedia("scenario");
       if (videoRef.current) {
         videoRef.current.pause();
         videoRef.current.currentTime = 0;
@@ -127,6 +137,16 @@ function App() {
     try { setState(await request("/api/stop", { method: "POST" })); }
     catch (reason) { setError(reason.message); }
   }
+
+  function showMedia(kind) {
+    setDisplayedMedia(kind);
+    if (videoRef.current) {
+      videoRef.current.pause();
+      videoRef.current.currentTime = 0;
+    }
+  }
+
+  const mediaUrl = displayedMedia === "capture" ? capturedClip?.url : selected?.video_url;
 
   return (
     <main>
@@ -155,10 +175,13 @@ function App() {
 
       <section className="dashboard">
         <div className="preview panel">
-          <div className="panel-title"><span>Preview</span><small>{state.mode}</small></div>
+          <div className="panel-title">
+            <span>{displayedMedia === "capture" ? "Extracted clip" : "Preview"}</span>
+            <small>{state.mode}</small>
+          </div>
           <div className="preview-content">
-            {state.mode === "simulation" && selected?.video_url ? (
-              <video ref={videoRef} src={selected.video_url} muted playsInline controls />
+            {state.mode === "simulation" && mediaUrl ? (
+              <video key={mediaUrl} ref={videoRef} src={mediaUrl} muted playsInline controls />
             ) : (
               <>
                 <div className="reticle" />
@@ -171,6 +194,21 @@ function App() {
                 {Object.entries(selected.components).map(([component, source]) => (
                   <span key={component}>{component}: {source}</span>
                 ))}
+              </div>
+            )}
+            {capturedClip && (
+              <div className="media-switcher">
+                <button
+                  className={displayedMedia === "scenario" ? "selected" : ""}
+                  onClick={() => showMedia("scenario")}
+                >Scenario source</button>
+                <button
+                  className={displayedMedia === "capture" ? "selected" : ""}
+                  onClick={() => showMedia("capture")}
+                >Extracted clip</button>
+                <small>
+                  {capturedClip.filename} · {Number(capturedClip.clip_duration_s).toFixed(1)} s · {Math.round(capturedClip.size_bytes / 1024)} KiB
+                </small>
               </div>
             )}
             {(current?.at_s != null || playhead > 0) && <div className="clock">T+ {playhead.toFixed(1)} s</div>}

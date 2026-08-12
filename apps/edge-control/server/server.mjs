@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { createInterface } from "node:readline";
 import { parse as parseYaml } from "yaml";
 import { ControlState } from "./control-state.mjs";
+import { parseByteRange, safeLeafPath } from "./media-files.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const appRoot = resolve(here, "..");
@@ -13,6 +14,7 @@ const repoRoot = resolve(appRoot, "..", "..");
 const distRoot = join(appRoot, "dist");
 const scenarioRoot = join(repoRoot, "specs", "scenarios");
 const configPath = join(repoRoot, "config", "edge.yaml");
+const captureRoot = join(repoRoot, "temp", "captures");
 const port = Number(process.env.BEARVISION_CONTROL_PORT ?? 4310);
 const state = new ControlState();
 const clients = new Set();
@@ -104,8 +106,7 @@ function scenarioVideo(name) {
   return candidate;
 }
 
-function serveVideo(request, response, name) {
-  const filePath = scenarioVideo(name);
+function serveMedia(request, response, filePath) {
   const size = statSync(filePath).size;
   const range = request.headers.range;
   if (!range) {
@@ -117,19 +118,15 @@ function serveVideo(request, response, name) {
     createReadStream(filePath).pipe(response);
     return;
   }
-  const match = /^bytes=(\d+)-(\d*)$/.exec(range);
-  if (!match) {
+  let parsed;
+  try {
+    parsed = parseByteRange(range, size);
+  } catch {
     response.writeHead(416, { "content-range": `bytes */${size}` });
     response.end();
     return;
   }
-  const start = Number(match[1]);
-  const end = match[2] ? Math.min(Number(match[2]), size - 1) : size - 1;
-  if (start > end || start >= size) {
-    response.writeHead(416, { "content-range": `bytes */${size}` });
-    response.end();
-    return;
-  }
+  const { start, end } = parsed;
   response.writeHead(206, {
     "accept-ranges": "bytes",
     "content-length": end - start + 1,
@@ -207,7 +204,17 @@ const server = createServer(async (request, response) => {
       && /^\/api\/scenarios\/[^/]+\/video$/.test(url.pathname)
     ) {
       const name = decodeURIComponent(url.pathname.split("/")[3]);
-      serveVideo(request, response, name);
+      serveMedia(request, response, scenarioVideo(name));
+    } else if (
+      request.method === "GET"
+      && /^\/api\/captures\/[^/]+$/.test(url.pathname)
+    ) {
+      const name = decodeURIComponent(url.pathname.split("/")[3]);
+      const filePath = safeLeafPath(captureRoot, name);
+      if (!existsSync(filePath) || !statSync(filePath).isFile()) {
+        throw new Error("capture does not exist");
+      }
+      serveMedia(request, response, filePath);
     } else if (request.method === "GET" && url.pathname === "/api/events") {
       response.writeHead(200, {
         "content-type": "text/event-stream",

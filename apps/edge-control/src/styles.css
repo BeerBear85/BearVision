@@ -33,6 +33,10 @@ button.danger { color: #ff8e8e; }
 .preview-content video { width: 100%; height: 100%; object-fit: contain; background: #02080d; }
 .sources { position: absolute; top: 12px; left: 12px; display: flex; flex-wrap: wrap; gap: 5px; max-width: calc(100% - 24px); }
 .sources span { padding: 4px 7px; border: 1px solid #315267; border-radius: 4px; background: rgba(5, 20, 33, .88); color: #b8d0dc; font: 650 10px ui-monospace, monospace; }
+.media-switcher { position: absolute; left: 12px; bottom: 12px; display: flex; align-items: center; gap: 6px; padding: 6px; border: 1px solid #315267; border-radius: 7px; background: rgba(5, 20, 33, .92); }
+.media-switcher button { border: 1px solid #315267; border-radius: 5px; padding: 5px 8px; color: #b8d0dc; background: #0b2435; font-size: 11px; }
+.media-switcher button.selected { color: #041a18; background: #19d5aa; border-color: #19d5aa; }
+.media-switcher small { margin: 0 6px; color: #7896a6; }
 .reticle { width: 120px; height: 82px; border: 2px solid #19d5aa; margin-bottom: 28px; position: relative; opacity: .7; }
 .reticle::before, .reticle::after { content: ""; position: absolute; background: #19d5aa; }
 .reticle::before { width: 22px; height: 2px; left: 48px; top: 39px; }
