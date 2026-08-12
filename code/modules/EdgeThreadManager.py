@@ -16,10 +16,7 @@ from typing import Optional, Callable, Dict, Any
 from dataclasses import dataclass
 
 from ble_beacon_handler import BleBeaconHandler
-from GoogleDriveHandler import GoogleDriveHandler
 from BoxHandler import BoxHandler
-from FullClipExtractor import FullClipExtractor
-from TrackerClipExtractor import TrackerClipExtractor
 
 
 logger = logging.getLogger(__name__)
@@ -99,10 +96,6 @@ class PostProcessorThread(threading.Thread):
         self.processed_queue = processed_queue
         self.status_callback = status_callback
         self.running = False
-
-        # Initialize video processors
-        self.full_clip_extractor = FullClipExtractor()
-        self.tracker_clip_extractor = TrackerClipExtractor()
 
     def start_processing(self):
         """Start video processing."""
@@ -192,8 +185,7 @@ class PostProcessorThread(threading.Thread):
         output_dir.mkdir(exist_ok=True)
         output_path = output_dir / f"tracker_{video_file.file_path.name}"
 
-        # TODO: Implement actual tracker processing
-        # self.tracker_clip_extractor.extract_clips_from_list([clip_spec])
+        # TODO: Connect this worker to the replacement post-processing pipeline.
 
         return output_path
 
@@ -205,8 +197,7 @@ class PostProcessorThread(threading.Thread):
         output_dir.mkdir(exist_ok=True)
         output_path = output_dir / f"full_{video_file.file_path.name}"
 
-        # TODO: Implement actual full clip processing
-        # self.full_clip_extractor.extract_clips_from_list([clip_spec])
+        # TODO: Connect this worker to the replacement post-processing pipeline.
 
         return output_path
 
@@ -221,15 +212,7 @@ class UploaderThread(threading.Thread):
         self.status_callback = status_callback
         self.running = False
 
-        # Initialize upload handlers
-        try:
-            self.google_drive_handler = GoogleDriveHandler()
-            self.google_drive_available = True
-        except Exception as e:
-            logger.warning(f"Google Drive handler not available: {e}")
-            self.google_drive_handler = None
-            self.google_drive_available = False
-
+        # Initialize the active upload handler.
         try:
             self.box_handler = BoxHandler()
             self.box_available = True
@@ -289,19 +272,7 @@ class UploaderThread(threading.Thread):
     def _upload_video(self, processed_video: ProcessedVideo) -> bool:
         """Upload a processed video to cloud storage."""
         try:
-            # Try Google Drive first
-            if self.google_drive_available and self.google_drive_handler:
-                try:
-                    self.google_drive_handler.upload_file(
-                        str(processed_video.processed_path),
-                        processed_video.processed_path.name
-                    )
-                    logger.info(f"Uploaded to Google Drive: {processed_video.processed_path}")
-                    return True
-                except Exception as e:
-                    logger.warning(f"Google Drive upload failed: {e}")
-
-            # Try Box as fallback
+            # Upload to Box.
             if self.box_available and self.box_handler:
                 try:
                     self.box_handler.upload_file(

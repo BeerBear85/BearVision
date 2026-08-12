@@ -2,6 +2,12 @@ BearVision
 
 Instant, hands-free wakeboard highlight clips – no cameraman required.
 
+## Version 3 remake
+
+The version 3 foundation uses executable specifications and a deterministic
+behavioural simulator. See [the remake foundation](docs/remake/foundation.md)
+for the current development entry point.
+
 BearTag ─▶ BLE ─▶ Edge Cam ─▶ 4G/Wi-Fi ─▶ Cloud ─▶ Mobile/Web App
 
 How It Works

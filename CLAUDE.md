@@ -10,9 +10,6 @@ BearVision is a computer vision system for automatic wakeboard highlight clip ge
 
 ### Running the Application
 ```bash
-# Main desktop GUI application
-python main.py
-
 # Edge device controller (lightweight detection)
 python code/Application/edge_main.py
 
@@ -53,23 +50,15 @@ python pretraining/train_yolo.py /path/to/dataset --epochs 100 --batch 8 --onnx-
 ## Architecture Overview
 
 ### Core Processing Pipeline
-The application follows a modular pipeline architecture with these main stages:
+The active application follows the edge capture pipeline:
 
-1. **Motion Detection** (`MotionStartDetector`): Identifies potential trick moments in video files
-2. **User Matching** (`MotionTimeUserMatching`): Correlates motion events with GPS track data
-3. **Clip Extraction** (`FullClipExtractor`, `TrackerClipExtractor`): Creates final video clips
-4. **Object Tracking** (`BearTracker`): YOLO-based person detection and tracking
-5. **Cloud Upload** (`GoogleDriveHandler`, `BoxHandler`): Uploads processed clips
+1. **Preview processing** (`StreamProcessor`): Reads GoPro preview frames
+2. **Person detection** (`DnnHandler`): Runs YOLO inference
+3. **Capture control** (`EdgeStateMachine`): Triggers a Hindsight clip
+4. **Post-processing** (`PostProcessingPipeline`): Tracks and crops the rider
+5. **Cloud upload** (`BoxHandler`): Uploads processed clips
 
 ### Key Components
-
-#### Desktop Application Components
-- **Application.py**: Main orchestrator coordinating all processing steps
-- **GUI.py**: Tkinter-based desktop interface
-- **ConfigurationHandler**: Manages INI-based configuration files
-- **GoProController**: Interfaces with GoPro cameras via open_gopro library
-- **DnnHandler**: YOLO model inference wrapper
-- **ble_beacon_handler**: Bluetooth Low Energy beacon detection
 
 #### Edge Application Components (Modular Architecture)
 - **EdgeStateMachine**: State machine orchestrating edge application lifecycle
@@ -80,35 +69,25 @@ The application follows a modular pipeline architecture with these main stages:
 - **EdgeApplicationConfig**: Configuration management with typed access and defaults
 
 ### Configuration System
-The application uses INI configuration files with sections for:
-- GUI paths and settings
-- Motion detection parameters
-- GPS matching criteria
-- Clip extraction settings
-- Cloud storage credentials
-- Edge application settings
-
-Main config: `config.ini`, test config: `test/test_config.ini`
+The application uses `config.ini` and `edge_config.yaml` for edge settings and
+cloud storage credentials.
 
 ### Cloud Storage
-Supports both Google Drive and Box for clip upload:
+The active storage adapter uploads clips to Box:
 
 ```ini
 [WEB_STORIES]
-storage_service = google_drive  # or "box"
+storage_service = box
 
 [STORAGE_COMMON]
 secret_key_name = STORAGE_CREDENTIALS_B64
 secret_key_name_2 = STORAGE_CREDENTIALS_B64_2
 
-[GOOGLE_DRIVE]
-root_folder = bearvisson_files
-
 [BOX]
 root_folder = bearvision_files
 ```
 
-Both `GoogleDriveHandler` and `BoxHandler` provide:
+`BoxHandler` provides:
 - `upload_file()`, `download_file()`, `delete_file()`, `list_files()`
 - Base64-encoded credentials from environment variables
 - Lazy connection initialization for testing
@@ -116,10 +95,11 @@ Both `GoogleDriveHandler` and `BoxHandler` provide:
 ### Directory Structure
 - `code/modules/`: Core processing modules
 - `code/Application/`: Main app and GUI components
-- `code/external_modules/`: Third-party libraries (GPX parser, KBeacon)
+- `code/external_modules/`: Third-party KBeacon library
 - `pretraining/`: ML pipeline for YOLO model training
 - `tests/`: Unit tests with pytest framework
-- `test/`: Integration test data and runner
+- `test/`: Shared integration test data
+- `archived/untracked/`: Local-only archived prototypes and legacy pipelines
 - `tools/`: External utilities (ffmpeg, gopro2json)
 
 ## Edge Device Mode

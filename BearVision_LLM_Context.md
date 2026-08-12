@@ -52,7 +52,7 @@ BearTag/TrickTag ───▶ BLE ───▶ EDGE Unit = BLE + GoPro control +
 - **Trigger sensitivity:** Tunable – optimised to reduce false positives (e.g., ripples or background riders).
 
 ### 2.3 Cloud Platform
-- **Storage:** Google Drive (account: `BearVisionApp@gmail.com`).
+- **Storage:** Box through the current storage adapter; a storage-neutral cloud API is planned for the remake.
 - **Post‑processing:** Stabilisation, slow‑motion, trick classification.
 - **APIs:** REST & WebSocket push notifications.
 - **Scalability:** Kubernetes / serverless functions.
