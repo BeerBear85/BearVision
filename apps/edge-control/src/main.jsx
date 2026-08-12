@@ -162,7 +162,11 @@ function App() {
         </div>
         {state.mode === "simulation" && (
           <select value={selectedScenario} disabled={running} onChange={(event) => setSelectedScenario(event.target.value)}>
-            {scenarios.map((scenario) => <option key={scenario.name}>{scenario.name}</option>)}
+            {scenarios.map((scenario) => (
+              <option key={scenario.name} value={scenario.name}>
+                {scenario.name}{scenario.generated_from ? " · generated from Blender" : ""}
+              </option>
+            ))}
           </select>
         )}
         <button className="primary" disabled={running || (state.mode === "simulation" && !selectedScenario)} onClick={run}>
@@ -194,6 +198,9 @@ function App() {
                 {Object.entries(selected.components).map(([component, source]) => (
                   <span key={component}>{component}: {source}</span>
                 ))}
+                {selected.generated_from && (
+                  <span>synthetic data: {selected.generated_from.generator}</span>
+                )}
               </div>
             )}
             {capturedClip && (

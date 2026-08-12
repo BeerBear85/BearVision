@@ -8,7 +8,7 @@ adapter. It must not implement BearVision domain policy.
 ## HTTP
 
 - `GET /api/health` returns the selected mode and runtime phase.
-- `GET /api/scenarios` lists version 2.0 scenario files.
+- `GET /api/scenarios` lists supported versioned scenario files.
 - `POST /api/mode` selects `simulation` or `hardware` while idle.
 - `POST /api/run` starts the selected runtime.
 - `POST /api/stop` requests termination of the active runtime.

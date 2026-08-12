@@ -61,6 +61,18 @@ uv sync --locked --extra edge --extra dev
 uv run python -m bearvision.control simulate specs/scenarios/wakeboard-video-yolo.yaml
 ```
 
+Generate a scenario from a Blender scene export (MP4, rider-motion JSON and
+camera-info YAML in the same directory):
+
+```bash
+uv run bearvision-generate-blender-scenario \
+  test/blender_scenes/wakeboard_fs360_60fps --force
+```
+
+The generated YAML is written under `specs/scenarios`, where Edge Control
+discovers it automatically. Select Simulation, choose the generated Blender
+scenario and click **Run scenario**.
+
 Run the Edge computer's Node.js/React control GUI:
 
 ```bash

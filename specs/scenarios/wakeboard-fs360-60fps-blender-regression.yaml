@@ -1,0 +1,505 @@
+scenario_schema_version: '3.1'
+name: wakeboard-fs360-60fps-blender-regression
+seed: 0
+duration_s: 5.05
+timeline: []
+faults:
+  camera_capture: false
+  storage_upload: false
+expect:
+  rider_id: rider-wakeboard-fs360-60fps
+  assignment_status: assigned
+  capture_triggered: true
+  clip_uploaded: true
+  minimum_person_detections: 1
+components:
+  frames: video
+  detector: yolo
+  bear_tag: synthetic
+  camera: recorded_video
+  storage: memory
+video:
+  path: test/blender_scenes/wakeboard_fs360_60fps/wakeboard_fs360_60fps.mp4
+  sample_fps: 10.0
+detector:
+  model: yolov8n
+  confidence_threshold: 0.6
+synthetic_bear_tags:
+- tag_id: tag-wakeboard-fs360-60fps
+  rider_id: rider-wakeboard-fs360-60fps
+  start_s: 0.0
+  end_s: 5.05
+  sample_rate_hz: 10.0
+  rssi_dbm: -60
+  baseline_acceleration_mps2:
+    x: 0.0
+    y: 0.0
+    z: 9.80665
+  motion_windows: []
+  samples:
+  - at_s: 0.0
+    rssi_dbm: -81
+    acceleration_mps2:
+      x: 2.109
+      y: 0.0
+      z: 5.59865
+    battery_voltage_mv: 3000
+    source_frame: 1
+    source_distance_m: 33.903526
+  - at_s: 0.1
+    rssi_dbm: -81
+    acceleration_mps2:
+      x: 6.253
+      y: -0.0
+      z: 6.85765
+    battery_voltage_mv: 3000
+    source_frame: 7
+    source_distance_m: 33.589053
+  - at_s: 0.2
+    rssi_dbm: -80
+    acceleration_mps2:
+      x: -2.477
+      y: -0.0
+      z: 13.52765
+    battery_voltage_mv: 3000
+    source_frame: 13
+    source_distance_m: 33.272585
+  - at_s: 0.3
+    rssi_dbm: -80
+    acceleration_mps2:
+      x: -4.321
+      y: -0.0
+      z: 10.99265
+    battery_voltage_mv: 3000
+    source_frame: 19
+    source_distance_m: 32.977317
+  - at_s: 0.4
+    rssi_dbm: -80
+    acceleration_mps2:
+      x: 4.43
+      y: -0.0
+      z: 5.52565
+    battery_voltage_mv: 3000
+    source_frame: 25
+    source_distance_m: 32.709798
+  - at_s: 0.5
+    rssi_dbm: -80
+    acceleration_mps2:
+      x: 2.365
+      y: -0.501
+      z: 10.38265
+    battery_voltage_mv: 3000
+    source_frame: 31
+    source_distance_m: 32.447782
+  - at_s: 0.6
+    rssi_dbm: -80
+    acceleration_mps2:
+      x: -5.155
+      y: -2.542
+      z: 13.46465
+    battery_voltage_mv: 3000
+    source_frame: 37
+    source_distance_m: 32.189859
+  - at_s: 0.7
+    rssi_dbm: -80
+    acceleration_mps2:
+      x: 0.499
+      y: -4.197
+      z: 7.06765
+    battery_voltage_mv: 3000
+    source_frame: 43
+    source_distance_m: 31.935396
+  - at_s: 0.8
+    rssi_dbm: -80
+    acceleration_mps2:
+      x: 5.755
+      y: -5.356
+      z: 6.88265
+    battery_voltage_mv: 3000
+    source_frame: 49
+    source_distance_m: 31.65771
+  - at_s: 0.9
+    rssi_dbm: -80
+    acceleration_mps2:
+      x: -2.051
+      y: -6.018
+      z: 13.58465
+    battery_voltage_mv: 3000
+    source_frame: 55
+    source_distance_m: 31.334887
+  - at_s: 1.0
+    rssi_dbm: -80
+    acceleration_mps2:
+      x: -3.256
+      y: -6.183
+      z: 10.90465
+    battery_voltage_mv: 3000
+    source_frame: 61
+    source_distance_m: 30.972667
+  - at_s: 1.1
+    rssi_dbm: -80
+    acceleration_mps2:
+      x: 6.16
+      y: -5.852
+      z: 5.60765
+    battery_voltage_mv: 3000
+    source_frame: 67
+    source_distance_m: 30.571927
+  - at_s: 1.2
+    rssi_dbm: -80
+    acceleration_mps2:
+      x: 4.474
+      y: -5.025
+      z: 10.78565
+    battery_voltage_mv: 3000
+    source_frame: 73
+    source_distance_m: 30.124336
+  - at_s: 1.3
+    rssi_dbm: -79
+    acceleration_mps2:
+      x: -2.877
+      y: -3.701
+      z: 13.84065
+    battery_voltage_mv: 3000
+    source_frame: 79
+    source_distance_m: 29.639729
+  - at_s: 1.4
+    rssi_dbm: -79
+    acceleration_mps2:
+      x: 3.436
+      y: -1.88
+      z: 7.34565
+    battery_voltage_mv: 3000
+    source_frame: 85
+    source_distance_m: 29.139371
+  - at_s: 1.5
+    rssi_dbm: -79
+    acceleration_mps2:
+      x: 8.729
+      y: -0.106
+      z: 7.22565
+    battery_voltage_mv: 3000
+    source_frame: 91
+    source_distance_m: 28.64107
+  - at_s: 1.6
+    rssi_dbm: -79
+    acceleration_mps2:
+      x: 0.514
+      y: 0.0
+      z: 13.64565
+    battery_voltage_mv: 3000
+    source_frame: 97
+    source_distance_m: 28.162614
+  - at_s: 1.7
+    rssi_dbm: -79
+    acceleration_mps2:
+      x: -0.99
+      y: -0.001
+      z: 10.70865
+    battery_voltage_mv: 3000
+    source_frame: 103
+    source_distance_m: 27.711149
+  - at_s: 1.8
+    rssi_dbm: -79
+    acceleration_mps2:
+      x: 9.634
+      y: 1.403
+      z: 6.04065
+    battery_voltage_mv: 3000
+    source_frame: 109
+    source_distance_m: 27.291639
+  - at_s: 1.9
+    rssi_dbm: -79
+    acceleration_mps2:
+      x: -7.189
+      y: 19.132
+      z: 12.92465
+    battery_voltage_mv: 3000
+    source_frame: 115
+    source_distance_m: 26.940802
+  - at_s: 2.0
+    rssi_dbm: -79
+    acceleration_mps2:
+      x: -23.529
+      y: 19.113
+      z: 12.55565
+    battery_voltage_mv: 3000
+    source_frame: 121
+    source_distance_m: 26.800187
+  - at_s: 2.1
+    rssi_dbm: -79
+    acceleration_mps2:
+      x: 0.075
+      y: 1.368
+      z: 5.23165
+    battery_voltage_mv: 3000
+    source_frame: 127
+    source_distance_m: 26.845131
+  - at_s: 2.2
+    rssi_dbm: -79
+    acceleration_mps2:
+      x: 6.738
+      y: -0.0
+      z: 7.08165
+    battery_voltage_mv: 3000
+    source_frame: 133
+    source_distance_m: 26.940816
+  - at_s: 2.3
+    rssi_dbm: -79
+    acceleration_mps2:
+      x: -1.724
+      y: 0.0
+      z: 19.10065
+    battery_voltage_mv: 3000
+    source_frame: 139
+    source_distance_m: 27.063678
+  - at_s: 2.4
+    rssi_dbm: -79
+    acceleration_mps2:
+      x: -2.275
+      y: -0.0
+      z: 18.13265
+    battery_voltage_mv: 3000
+    source_frame: 145
+    source_distance_m: 27.207754
+  - at_s: 2.5
+    rssi_dbm: -79
+    acceleration_mps2:
+      x: -1.724
+      y: -0.0
+      z: 15.65765
+    battery_voltage_mv: 3000
+    source_frame: 151
+    source_distance_m: 27.361682
+  - at_s: 2.6
+    rssi_dbm: -79
+    acceleration_mps2:
+      x: -0.02
+      y: -0.0
+      z: 14.11065
+    battery_voltage_mv: 3000
+    source_frame: 157
+    source_distance_m: 27.528248
+  - at_s: 2.7
+    rssi_dbm: -79
+    acceleration_mps2:
+      x: -0.0
+      y: -0.0
+      z: 12.30265
+    battery_voltage_mv: 3000
+    source_frame: 163
+    source_distance_m: 27.712724
+  - at_s: 2.8
+    rssi_dbm: -79
+    acceleration_mps2:
+      x: 0.0
+      y: -0.0
+      z: 10.47365
+    battery_voltage_mv: 3000
+    source_frame: 169
+    source_distance_m: 27.917453
+  - at_s: 2.9
+    rssi_dbm: -79
+    acceleration_mps2:
+      x: -0.0
+      y: 0.0
+      z: 9.25665
+    battery_voltage_mv: 3000
+    source_frame: 175
+    source_distance_m: 28.143845
+  - at_s: 3.0
+    rssi_dbm: -79
+    acceleration_mps2:
+      x: -0.0
+      y: -0.0
+      z: -0.00335
+    battery_voltage_mv: 3000
+    source_frame: 181
+    source_distance_m: 28.362763
+  - at_s: 3.1
+    rssi_dbm: -79
+    acceleration_mps2:
+      x: -0.0
+      y: -0.0
+      z: -0.00335
+    battery_voltage_mv: 3000
+    source_frame: 187
+    source_distance_m: 28.634201
+  - at_s: 3.2
+    rssi_dbm: -79
+    acceleration_mps2:
+      x: -0.0
+      y: -0.0
+      z: -0.00335
+    battery_voltage_mv: 3000
+    source_frame: 193
+    source_distance_m: 28.928954
+  - at_s: 3.3
+    rssi_dbm: -79
+    acceleration_mps2:
+      x: 0.0
+      y: -0.0
+      z: -0.00335
+    battery_voltage_mv: 3000
+    source_frame: 199
+    source_distance_m: 29.24562
+  - at_s: 3.4
+    rssi_dbm: -79
+    acceleration_mps2:
+      x: 0.0
+      y: -0.0
+      z: -0.00335
+    battery_voltage_mv: 3000
+    source_frame: 205
+    source_distance_m: 29.583793
+  - at_s: 3.5
+    rssi_dbm: -80
+    acceleration_mps2:
+      x: 0.0
+      y: -0.0
+      z: -0.00335
+    battery_voltage_mv: 3000
+    source_frame: 211
+    source_distance_m: 29.944001
+  - at_s: 3.6
+    rssi_dbm: -80
+    acceleration_mps2:
+      x: -0.0
+      y: -0.0
+      z: -0.00335
+    battery_voltage_mv: 3000
+    source_frame: 217
+    source_distance_m: 30.327649
+  - at_s: 3.7
+    rssi_dbm: -80
+    acceleration_mps2:
+      x: -0.0
+      y: -0.0
+      z: -0.00335
+    battery_voltage_mv: 3000
+    source_frame: 223
+    source_distance_m: 30.736962
+  - at_s: 3.8
+    rssi_dbm: -80
+    acceleration_mps2:
+      x: 0.0
+      y: 0.0
+      z: 36.24965
+    battery_voltage_mv: 3000
+    source_frame: 229
+    source_distance_m: 31.175488
+  - at_s: 3.9
+    rssi_dbm: -80
+    acceleration_mps2:
+      x: -0.0
+      y: -0.0
+      z: 42.77965
+    battery_voltage_mv: 3000
+    source_frame: 235
+    source_distance_m: 31.600241
+  - at_s: 4.0
+    rssi_dbm: -80
+    acceleration_mps2:
+      x: 0.0
+      y: -0.0
+      z: 0.26665
+    battery_voltage_mv: 3000
+    source_frame: 241
+    source_distance_m: 32.008398
+  - at_s: 4.1
+    rssi_dbm: -80
+    acceleration_mps2:
+      x: -0.0
+      y: -0.0
+      z: 15.37265
+    battery_voltage_mv: 3000
+    source_frame: 247
+    source_distance_m: 32.433428
+  - at_s: 4.2
+    rssi_dbm: -80
+    acceleration_mps2:
+      x: 0.0
+      y: -0.0
+      z: 6.72665
+    battery_voltage_mv: 3000
+    source_frame: 253
+    source_distance_m: 32.875536
+  - at_s: 4.3
+    rssi_dbm: -80
+    acceleration_mps2:
+      x: -0.0
+      y: -0.0
+      z: 7.35065
+    battery_voltage_mv: 3000
+    source_frame: 259
+    source_distance_m: 33.331824
+  - at_s: 4.4
+    rssi_dbm: -81
+    acceleration_mps2:
+      x: 0.0
+      y: -0.0
+      z: 15.36665
+    battery_voltage_mv: 3000
+    source_frame: 265
+    source_distance_m: 33.801264
+  - at_s: 4.5
+    rssi_dbm: -81
+    acceleration_mps2:
+      x: -0.0
+      y: -0.0
+      z: 6.64865
+    battery_voltage_mv: 3000
+    source_frame: 271
+    source_distance_m: 34.277621
+  - at_s: 4.6
+    rssi_dbm: -81
+    acceleration_mps2:
+      x: 0.0
+      y: -0.0
+      z: 7.43565
+    battery_voltage_mv: 3000
+    source_frame: 277
+    source_distance_m: 34.766718
+  - at_s: 4.7
+    rssi_dbm: -81
+    acceleration_mps2:
+      x: -0.0
+      y: -0.0
+      z: 15.35865
+    battery_voltage_mv: 3000
+    source_frame: 283
+    source_distance_m: 35.267481
+  - at_s: 4.8
+    rssi_dbm: -81
+    acceleration_mps2:
+      x: 0.0
+      y: -0.0
+      z: 6.57165
+    battery_voltage_mv: 3000
+    source_frame: 289
+    source_distance_m: 35.774039
+  - at_s: 4.9
+    rssi_dbm: -81
+    acceleration_mps2:
+      x: 0.0
+      y: -0.0
+      z: 7.52065
+    battery_voltage_mv: 3000
+    source_frame: 295
+    source_distance_m: 36.292025
+  - at_s: 5.0
+    rssi_dbm: -81
+    acceleration_mps2:
+      x: -0.0
+      y: 0.0
+      z: 14.42865
+    battery_voltage_mv: 3000
+    source_frame: 301
+    source_distance_m: 36.820346
+generated_from:
+  generator: blender-motion-v1
+  motion_path: test/blender_scenes/wakeboard_fs360_60fps/wakeboard_fs360_60fps_rider_motion.json
+  camera_path: test/blender_scenes/wakeboard_fs360_60fps/wakeboard_fs360_60fps_camera_info.yaml
+  reference_rssi_dbm_at_1m: -50
+  path_loss_exponent: 2.0
+  gravity_mps2: 9.80665

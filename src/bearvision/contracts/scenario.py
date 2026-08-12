@@ -79,6 +79,18 @@ class SyntheticMotionWindow(BaseModel):
         return self
 
 
+class SyntheticBearTagSample(BaseModel):
+    """One explicit synthetic BearTag advertisement and its simulation truth."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    at_s: float = Field(ge=0)
+    rssi_dbm: int = Field(ge=-127, le=20)
+    acceleration_mps2: Vector3
+    battery_voltage_mv: int | None = Field(default=None, ge=0, le=10_000)
+    source_frame: int | None = Field(default=None, ge=0)
+    source_distance_m: float | None = Field(default=None, gt=0)
+
+
 class SyntheticBearTagSeries(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
     tag_id: str = Field(min_length=1)
@@ -91,6 +103,7 @@ class SyntheticBearTagSeries(BaseModel):
         default_factory=lambda: Vector3(x=0, y=0, z=9.80665)
     )
     motion_windows: tuple[SyntheticMotionWindow, ...] = ()
+    samples: tuple[SyntheticBearTagSample, ...] = ()
 
     @model_validator(mode="after")
     def validate_series(self) -> "SyntheticBearTagSeries":
@@ -99,12 +112,33 @@ class SyntheticBearTagSeries(BaseModel):
         for window in self.motion_windows:
             if window.start_s < self.start_s or window.end_s > self.end_s:
                 raise ValueError("motion windows must stay inside the BearTag series")
+        if self.samples and self.motion_windows:
+            raise ValueError("explicit BearTag samples cannot be combined with motion windows")
+        previous_at_s: float | None = None
+        for sample in self.samples:
+            if sample.at_s < self.start_s or sample.at_s > self.end_s:
+                raise ValueError("explicit samples must stay inside the BearTag series")
+            if previous_at_s is not None and sample.at_s <= previous_at_s:
+                raise ValueError("explicit BearTag samples must be strictly time ordered")
+            previous_at_s = sample.at_s
         return self
+
+
+class GeneratedScenarioSource(BaseModel):
+    """Inputs and physical assumptions used to generate a scenario."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    generator: Literal["blender-motion-v1"]
+    motion_path: str = Field(min_length=1)
+    camera_path: str = Field(min_length=1)
+    reference_rssi_dbm_at_1m: int = Field(ge=-127, le=20)
+    path_loss_exponent: float = Field(gt=0)
+    gravity_mps2: float = Field(gt=0)
 
 
 class ScenarioDefinition(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
-    scenario_schema_version: Literal["2.0", "3.0"]
+    scenario_schema_version: Literal["2.0", "3.0", "3.1"]
     name: str = Field(min_length=1, max_length=150)
     seed: int = 0
     duration_s: float = Field(gt=0)
@@ -115,13 +149,23 @@ class ScenarioDefinition(BaseModel):
     video: ScenarioVideo | None = None
     detector: ScenarioDetector = Field(default_factory=ScenarioDetector)
     synthetic_bear_tags: tuple[SyntheticBearTagSeries, ...] = ()
+    generated_from: GeneratedScenarioSource | None = None
 
     @model_validator(mode="after")
     def validate_component_composition(self) -> "ScenarioDefinition":
         if self.scenario_schema_version == "2.0":
-            if self.video is not None or self.synthetic_bear_tags:
-                raise ValueError("video and generated BearTag series require scenario schema 3.0")
+            if (
+                self.video is not None
+                or self.synthetic_bear_tags
+                or self.generated_from is not None
+            ):
+                raise ValueError("video and generated BearTag series require scenario schema 3.x")
             return self
+        if self.scenario_schema_version == "3.0" and (
+            self.generated_from is not None
+            or any(series.samples for series in self.synthetic_bear_tags)
+        ):
+            raise ValueError("generated provenance and explicit BearTag samples require schema 3.1")
         if self.components.frames == "video" and self.video is None:
             raise ValueError("video frame source requires a video configuration")
         if self.components.frames != "video" and self.video is not None:

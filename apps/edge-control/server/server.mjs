@@ -90,6 +90,7 @@ function scenarioDetails(name) {
       storage: "memory",
     },
     video_url: videoPath ? `/api/scenarios/${encodeURIComponent(name)}/video` : null,
+    generated_from: document.generated_from ?? null,
   };
 }
 

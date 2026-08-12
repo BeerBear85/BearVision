@@ -58,7 +58,7 @@ video on the same media timestamps as Python's frame-analysis trace. This is
 sufficient for repeatable UI behaviour testing, but it is not a physical
 real-time simulation.
 
-## Scenario schema 3.0 sources
+## Scenario schema 3.x sources
 
 Each scenario explicitly selects the adapter behind each port:
 
@@ -94,6 +94,22 @@ scenario source and extracted clip.
 
 Node only serves scenario metadata/media and supervises Python. Python remains
 the owner of synchronization, YOLO, capture and rider assignment.
+
+Schema 3.1 additionally supports explicit synthetic BearTag samples. The
+Blender generator samples rider motion at the configured BearTag rate, converts
+world kinematic acceleration to accelerometer specific force (`a - gravity`),
+and calculates camera-side RSSI with a declared log-distance path-loss model.
+The generated source paths and radio assumptions are retained in the YAML.
+The defaults (`-50 dBm` at one metre and path-loss exponent `2.0`) are test
+assumptions, not measured BearTag calibration values.
+
+```powershell
+uv run bearvision-generate-blender-scenario `
+  test/blender_scenes/wakeboard_fs360_60fps --force
+```
+
+Generated files under `specs/scenarios` appear in Edge Control's Simulation
+scenario selector and can be replayed manually like any other video scenario.
 
 ## Known gaps
 

@@ -23,6 +23,19 @@ def generate_bear_tag_series(
         registry.append(
             TagRegistryEntry(tag_id=definition.tag_id, rider_id=definition.rider_id)
         )
+        if definition.samples:
+            observations.extend(
+                TagObservation(
+                    tag_id=definition.tag_id,
+                    observed_at_utc=clock.start_utc + timedelta(seconds=sample.at_s),
+                    observed_at_monotonic_s=sample.at_s,
+                    rssi_dbm=sample.rssi_dbm,
+                    acceleration_mps2=sample.acceleration_mps2,
+                    battery_voltage_mv=sample.battery_voltage_mv,
+                )
+                for sample in definition.samples
+            )
+            continue
         count = int(round((definition.end_s - definition.start_s) * definition.sample_rate_hz))
         for index in range(count + 1):
             at_s = round(

@@ -2,6 +2,7 @@
 *.pkl
 .idea
 test/debug.log
+test/blender_scenes/**/*.mp4
 __pycache__
 .venv/
 node_modules/

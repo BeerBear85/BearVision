@@ -50,9 +50,6 @@ class FfmpegVideoClipper:
         candidate = str(configured) if configured is not None else os.getenv(environment_name)
         if candidate:
             return candidate
-        system_path = shutil.which(default_name)
-        if system_path:
-            return system_path
         try:
             import ffmpeg_binaries
 
@@ -66,6 +63,9 @@ class FfmpegVideoClipper:
                 return str(packaged)
         except (ImportError, OSError):
             pass
+        system_path = shutil.which(default_name)
+        if system_path:
+            return system_path
         return default_name
 
     @staticmethod

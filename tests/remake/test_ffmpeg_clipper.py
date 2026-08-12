@@ -222,7 +222,7 @@ def test_negative_duration_tolerance_is_rejected() -> None:
         FfmpegVideoClipper(ClipExtractionConfig(), duration_tolerance_s=-0.1)
 
 
-def test_executable_resolution_prefers_system_path(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_executable_resolution_prefers_packaged_runtime(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("BEARVISION_TEST_MEDIA", raising=False)
     monkeypatch.setattr("bearvision.adapters.ffmpeg.shutil.which", lambda _: "managed-tool.exe")
 
@@ -232,14 +232,22 @@ def test_executable_resolution_prefers_system_path(monkeypatch: pytest.MonkeyPat
         "ffmpeg",
     )
 
-    assert resolved == "managed-tool.exe"
+    assert Path(resolved).name == "ffmpeg.exe"
 
 
-def test_executable_resolution_falls_back_to_packaged_runtime(
+def test_executable_resolution_falls_back_to_system_path_without_package(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    real_import = __import__
+
+    def import_without_media_package(name, *args, **kwargs):
+        if name == "ffmpeg_binaries":
+            raise ImportError("simulated missing optional package")
+        return real_import(name, *args, **kwargs)
+
     monkeypatch.delenv("BEARVISION_TEST_MEDIA", raising=False)
-    monkeypatch.setattr("bearvision.adapters.ffmpeg.shutil.which", lambda _: None)
+    monkeypatch.setattr("builtins.__import__", import_without_media_package)
+    monkeypatch.setattr("bearvision.adapters.ffmpeg.shutil.which", lambda _: "managed-tool.exe")
 
     resolved = FfmpegVideoClipper._resolve_executable(
         None,
@@ -247,4 +255,4 @@ def test_executable_resolution_falls_back_to_packaged_runtime(
         "ffprobe",
     )
 
-    assert Path(resolved).name == "ffprobe.exe"
+    assert resolved == "managed-tool.exe"
