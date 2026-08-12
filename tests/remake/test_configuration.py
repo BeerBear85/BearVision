@@ -5,6 +5,7 @@ from pydantic import ValidationError
 import yaml
 
 from bearvision.config import load_edge_config
+from bearvision.config.models import AssignmentConfig
 from bearvision.config.migrate import add_version_header, migrate_edge_data, write_yaml
 from ConfigurationHandler import ConfigurationHandler
 
@@ -16,6 +17,12 @@ def test_active_edge_config_is_versioned_and_valid() -> None:
     config = load_edge_config(REPO_ROOT / "config" / "edge.yaml")
     assert config.config_schema_version == "1.0"
     assert config.storage.provider == "box"
+    assert config.assignment.motion_weight == 0.7
+
+
+def test_assignment_fusion_weights_must_sum_to_one() -> None:
+    with pytest.raises(ValidationError):
+        AssignmentConfig(motion_weight=0.8, rssi_weight=0.3)
 
 
 def test_all_active_configs_start_with_independent_version_header() -> None:

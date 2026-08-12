@@ -17,6 +17,7 @@ from bearvision.contracts import (
     TagRegistryEntry,
     Vector3,
 )
+from bearvision.config import AssignmentConfig
 from bearvision.domain import assign_rider
 from bearvision.ports import Camera, ComponentError, Detector, Storage, TagRegistry, TagScanner, VideoFrame
 
@@ -53,6 +54,7 @@ class ClosedLoopScenarioRunner:
         detector: Detector,
         storage: Storage,
         registry: TagRegistry,
+        assignment_policy: AssignmentConfig | None = None,
     ) -> None:
         self.scenario = scenario
         self.clock = clock
@@ -61,26 +63,38 @@ class ClosedLoopScenarioRunner:
         self.detector = detector
         self.storage = storage
         self.registry = registry
+        self.assignment_policy = assignment_policy or AssignmentConfig()
 
     @classmethod
-    def from_scenario(cls, scenario: ScenarioDefinition) -> "ClosedLoopScenarioRunner":
+    def from_scenario(
+        cls,
+        scenario: ScenarioDefinition,
+        *,
+        assignment_policy: AssignmentConfig | None = None,
+    ) -> "ClosedLoopScenarioRunner":
         clock = VirtualClock()
         observations: list[TagObservation] = []
         entries: dict[str, TagRegistryEntry] = {}
         detections: dict[str, tuple[PersonDetection, ...]] = {}
         for index, item in enumerate(scenario.timeline):
-            if item.event == "tag_enters_range":
+            if item.event in {"tag_enters_range", "tag_observation"}:
                 tag_id = str(item.payload["tag_id"])
                 rider_id = item.payload.get("rider_id")
                 if rider_id is not None:
                     entries[tag_id] = TagRegistryEntry(tag_id=tag_id, rider_id=str(rider_id))
+                acceleration = item.payload.get("acceleration_mps2", {})
                 observations.append(
                     TagObservation(
                         tag_id=tag_id,
                         observed_at_utc=clock.start_utc + timedelta(seconds=item.at_s),
                         observed_at_monotonic_s=item.at_s,
                         rssi_dbm=int(item.payload.get("rssi_dbm", -60)),
-                        acceleration_mps2=Vector3(x=0, y=0, z=9.80665),
+                        acceleration_mps2=Vector3(
+                            x=float(acceleration.get("x", 0)),
+                            y=float(acceleration.get("y", 0)),
+                            z=float(acceleration.get("z", 9.80665)),
+                        ),
+                        battery_percent=item.payload.get("battery_percent"),
                     )
                 )
             elif item.event == "person_detected":
@@ -101,6 +115,7 @@ class ClosedLoopScenarioRunner:
             detector=SimulatedDetector(detections),
             storage=InMemoryStorage(clock, fail_upload=bool(scenario.faults.get("storage_upload"))),
             registry=InMemoryTagRegistry(entries.values()),
+            assignment_policy=assignment_policy,
         )
 
     def run(self) -> ScenarioRunResult:
@@ -108,7 +123,6 @@ class ClosedLoopScenarioRunner:
         captures: list[str] = []
         uploads: list[StorageReceipt] = []
         failures: list[dict[str, str]] = []
-        active_observations: list[TagObservation] = []
         scanned = asyncio.run(self._start_and_scan())
         pending: dict[str, list[TagObservation]] = defaultdict(list)
         for observation in scanned:
@@ -127,12 +141,15 @@ class ClosedLoopScenarioRunner:
                 failures.append(failure)
                 return (Event(event.at_s, "component_failed", failure),)
             observation = available.pop(0)
-            active_observations.append(observation)
             return (
                 Event(
                     event.at_s,
                     "tag_observed",
-                    {"tag_id": observation.tag_id, "rssi_dbm": observation.rssi_dbm},
+                    {
+                        "tag_id": observation.tag_id,
+                        "rssi_dbm": observation.rssi_dbm,
+                        "acceleration_mps2": observation.acceleration_mps2.model_dump(),
+                    },
                 ),
             )
 
@@ -144,10 +161,24 @@ class ClosedLoopScenarioRunner:
             if not detected:
                 return (Event(event.at_s, "detection_missed", {"frame_id": frame_id}),)
 
+            decision_at_s = event.at_s + self.assignment_policy.jump_window_after_s
+            return (
+                Event(
+                    decision_at_s,
+                    "evaluate_rider_assignment",
+                    {"frame_id": frame_id, "jump_at_s": event.at_s},
+                ),
+            )
+
+        def on_assignment(event: Event, _: BehavioralSimulation):
+            self.clock.advance_to(event.at_s)
+            frame_id = str(event.payload["frame_id"])
             assignment = assign_rider(
-                active_observations,
+                scanned,
                 self.registry,
                 assigned_at_monotonic_s=event.at_s,
+                jump_at_monotonic_s=float(event.payload["jump_at_s"]),
+                **self.assignment_policy.model_dump(),
             )
             assignments.append(assignment)
             generated = [
@@ -195,7 +226,9 @@ class ClosedLoopScenarioRunner:
             return tuple(generated)
 
         simulation.subscribe("tag_enters_range", on_tag)
+        simulation.subscribe("tag_observation", on_tag)
         simulation.subscribe("person_detected", on_detection)
+        simulation.subscribe("evaluate_rider_assignment", on_assignment)
         for index, item in enumerate(self.scenario.timeline):
             payload = dict(item.payload)
             if item.event == "person_detected":

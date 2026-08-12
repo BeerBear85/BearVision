@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 import yaml
 
 
@@ -23,6 +23,30 @@ class DetectionConfig(StrictConfigModel):
     model: str = Field(default="yolov8n", min_length=1)
     confidence_threshold: float = Field(default=0.5, ge=0, le=1)
     cooldown_s: float = Field(default=2.0, ge=0, le=300)
+
+
+class AssignmentConfig(StrictConfigModel):
+    """Initial BearTag fusion policy; values require field-data calibration."""
+
+    jump_window_before_s: float = Field(default=1.5, ge=0, le=10)
+    jump_window_after_s: float = Field(default=0.75, ge=0, le=10)
+    minimum_motion_delta_mps2: float = Field(default=2.0, ge=0, le=100)
+    motion_full_scale_mps2: float = Field(default=12.0, gt=0, le=100)
+    minimum_rssi_dbm: int = Field(default=-85, ge=-127, le=20)
+    rssi_full_scale_dbm: int = Field(default=-40, ge=-127, le=20)
+    motion_weight: float = Field(default=0.7, ge=0, le=1)
+    rssi_weight: float = Field(default=0.3, ge=0, le=1)
+    minimum_score_margin: float = Field(default=0.12, ge=0, le=1)
+
+    @model_validator(mode="after")
+    def validate_scales_and_weights(self) -> "AssignmentConfig":
+        if self.motion_full_scale_mps2 <= self.minimum_motion_delta_mps2:
+            raise ValueError("motion_full_scale_mps2 must exceed minimum_motion_delta_mps2")
+        if self.rssi_full_scale_dbm <= self.minimum_rssi_dbm:
+            raise ValueError("rssi_full_scale_dbm must exceed minimum_rssi_dbm")
+        if abs(self.motion_weight + self.rssi_weight - 1.0) > 1e-9:
+            raise ValueError("motion_weight and rssi_weight must sum to 1.0")
+        return self
 
 
 class PerformanceConfig(StrictConfigModel):
@@ -68,6 +92,7 @@ class EdgeConfig(StrictConfigModel):
     config_kind: Literal["bearvision-edge"]
     recording: RecordingConfig = RecordingConfig()
     detection: DetectionConfig = DetectionConfig()
+    assignment: AssignmentConfig = AssignmentConfig()
     performance: PerformanceConfig = PerformanceConfig()
     error_recovery: ErrorRecoveryConfig = ErrorRecoveryConfig()
     features: FeatureConfig = FeatureConfig()

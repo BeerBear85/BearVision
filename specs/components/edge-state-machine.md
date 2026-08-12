@@ -10,7 +10,8 @@ Any active state may enter `recovering` after a retryable component failure or
 ## Rules
 
 - Capture requires a person detection but never derives identity from it.
-- A BLE assignment may be assigned, unassigned or ambiguous.
+- BearTag assignment fuses accelerometer activity around the jump with RSSI;
+  it may be assigned, unassigned or ambiguous.
 - Repeated commands use stable request identifiers and must be idempotent.
 - All timeouts use monotonic time supplied by the configured clock.
 - Uploaded media remains provider-neutral outside the storage adapter.

@@ -8,6 +8,17 @@ detection:
   model: yolov8n
   confidence_threshold: 0.5
   cooldown_s: 2.0
+assignment:
+  # Initial values: calibrate against labelled jump recordings before production use.
+  jump_window_before_s: 1.5
+  jump_window_after_s: 0.75
+  minimum_motion_delta_mps2: 2.0
+  motion_full_scale_mps2: 12.0
+  minimum_rssi_dbm: -85
+  rssi_full_scale_dbm: -40
+  motion_weight: 0.7
+  rssi_weight: 0.3
+  minimum_score_margin: 0.12
 performance:
   max_fps: 30
   max_lag_ms: 250

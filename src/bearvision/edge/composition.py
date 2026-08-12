@@ -13,7 +13,7 @@ from bearvision.adapters import (
     SystemClock,
     YoloDetectorAdapter,
 )
-from bearvision.config import EdgeConfig
+from bearvision.config import AssignmentConfig, EdgeConfig
 from bearvision.ports import Camera, Clock, Detector, Storage, TagRegistry, TagScanner
 from bearvision.simulation import ClosedLoopScenarioRunner
 from bearvision.contracts import ScenarioDefinition, TagRegistryEntry
@@ -28,10 +28,17 @@ class RealEdgeComponents:
     detector: Detector
     storage: Storage
     registry: TagRegistry
+    assignment_policy: AssignmentConfig
 
 
-def build_behavioral_system(scenario: ScenarioDefinition) -> ClosedLoopScenarioRunner:
-    return ClosedLoopScenarioRunner.from_scenario(scenario)
+def build_behavioral_system(
+    scenario: ScenarioDefinition,
+    assignment_policy: AssignmentConfig | None = None,
+) -> ClosedLoopScenarioRunner:
+    return ClosedLoopScenarioRunner.from_scenario(
+        scenario,
+        assignment_policy=assignment_policy,
+    )
 
 
 def build_real_system(
@@ -69,4 +76,5 @@ def build_real_system(
         detector=YoloDetectorAdapter(legacy_detector),
         storage=BoxStorageAdapter(box_type(box_config), clock, scratch_dir),
         registry=registry,
+        assignment_policy=config.assignment,
     )

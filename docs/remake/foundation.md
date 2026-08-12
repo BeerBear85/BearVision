@@ -43,6 +43,12 @@ flowchart LR
     Real --> Storage
 ```
 
-Vision can trigger capture but never supplies rider identity. Only recent,
-registered BLE observations enter the assignment policy. Zero candidates are
-`unassigned`; multiple candidates are `ambiguous`.
+Vision can trigger capture and establish the jump timestamp but never supplies
+rider identity. The policy evaluates registered BearTag accelerometer samples
+inside the jump window together with median RSSI. Acceleration magnitude makes
+the motion evidence independent of tag orientation. Candidates must pass both
+gates, and close combined scores remain `ambiguous`.
+
+The initial fusion policy is configurable in `config/edge.yaml`. Its 70% motion
+and 30% RSSI weights and thresholds are calibration starting points—not proven
+physical constants.

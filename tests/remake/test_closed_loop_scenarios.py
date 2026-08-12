@@ -47,12 +47,22 @@ def test_two_tags_remain_ambiguous() -> None:
                 {
                     "at_s": 1,
                     "event": "tag_enters_range",
-                    "payload": {"tag_id": "tag-17", "rider_id": "rider-17", "rssi_dbm": -50},
+                    "payload": {
+                        "tag_id": "tag-17",
+                        "rider_id": "rider-17",
+                        "rssi_dbm": -50,
+                        "acceleration_mps2": {"x": 0, "y": 0, "z": 19},
+                    },
                 },
                 {
                     "at_s": 1.5,
                     "event": "tag_enters_range",
-                    "payload": {"tag_id": "tag-22", "rider_id": "rider-22", "rssi_dbm": -55},
+                    "payload": {
+                        "tag_id": "tag-22",
+                        "rider_id": "rider-22",
+                        "rssi_dbm": -55,
+                        "acceleration_mps2": {"x": 0, "y": 0, "z": 19},
+                    },
                 },
                 {"at_s": 2, "event": "person_detected", "payload": {"confidence": 0.9}},
             ]
@@ -61,6 +71,70 @@ def test_two_tags_remain_ambiguous() -> None:
     assert result.assignments[0].status is RiderAssignmentStatus.AMBIGUOUS
     assert result.assignments[0].rider_id is None
     assert result.uploads[0].object_key.startswith("ambiguous/")
+
+
+def test_active_rider_beats_stronger_stationary_nearby_tag_in_closed_loop() -> None:
+    result = ClosedLoopScenarioRunner.from_scenario(
+        scenario(
+            [
+                {
+                    "at_s": 2.5,
+                    "event": "tag_observation",
+                    "payload": {
+                        "tag_id": "active",
+                        "rider_id": "rider-active",
+                        "rssi_dbm": -65,
+                        "acceleration_mps2": {"x": 4, "y": 2, "z": 19},
+                    },
+                },
+                {
+                    "at_s": 2.6,
+                    "event": "tag_observation",
+                    "payload": {
+                        "tag_id": "nearby",
+                        "rider_id": "rider-nearby",
+                        "rssi_dbm": -40,
+                        "acceleration_mps2": {"x": 0, "y": 0, "z": 9.81},
+                    },
+                },
+                {"at_s": 3, "event": "person_detected", "payload": {"confidence": 0.9}},
+            ]
+        )
+    ).run()
+    assert result.assignments[0].rider_id == "rider-active"
+    assert result.uploads[0].object_key.startswith("rider-active/")
+
+
+def test_assignment_waits_for_accelerometer_samples_after_jump_timestamp() -> None:
+    result = ClosedLoopScenarioRunner.from_scenario(
+        scenario(
+            [
+                {
+                    "at_s": 1,
+                    "event": "tag_enters_range",
+                    "payload": {
+                        "tag_id": "tag-17",
+                        "rider_id": "rider-17",
+                        "rssi_dbm": -50,
+                        "acceleration_mps2": {"x": 0, "y": 0, "z": 9.81},
+                    },
+                },
+                {"at_s": 3, "event": "person_detected", "payload": {"confidence": 0.9}},
+                {
+                    "at_s": 3.5,
+                    "event": "tag_observation",
+                    "payload": {
+                        "tag_id": "tag-17",
+                        "rssi_dbm": -52,
+                        "acceleration_mps2": {"x": 4, "y": 2, "z": 19},
+                    },
+                },
+            ]
+        )
+    ).run()
+    assert result.assignments[0].rider_id == "rider-17"
+    assert result.assignments[0].assigned_at_monotonic_s == 3.75
+    assert any(item.kind == "evaluate_rider_assignment" for item in result.trace)
 
 
 def test_camera_failure_stops_before_upload() -> None:

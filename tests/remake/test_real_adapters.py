@@ -168,3 +168,4 @@ def test_real_composition_wraps_existing_implementations(
     assert isinstance(components.scanner, KBeaconTagScannerAdapter)
     assert isinstance(components.detector, YoloDetectorAdapter)
     assert isinstance(components.storage, BoxStorageAdapter)
+    assert components.assignment_policy.motion_weight == 0.7

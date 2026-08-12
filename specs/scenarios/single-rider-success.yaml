@@ -9,6 +9,13 @@ timeline:
       tag_id: tag-17
       rider_id: rider-17
       rssi_dbm: -52
+      acceleration_mps2: {x: 0, y: 0, z: 9.81}
+  - at_s: 3.8
+    event: tag_observation
+    payload:
+      tag_id: tag-17
+      rssi_dbm: -50
+      acceleration_mps2: {x: 4.0, y: 2.0, z: 19.0}
   - at_s: 4
     event: person_detected
     payload:
