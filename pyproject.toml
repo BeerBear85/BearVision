@@ -16,6 +16,7 @@ dependencies = [
 edge = [
     "numpy>=2,<3",
     "opencv-python-headless>=4.10,<5",
+    "ffmpeg-binaries-compat>=1.1,<2",
     "bleak>=0.22,<2",
     "open-gopro>=0.18,<1",
     "boxsdk[jwt]>=3.9,<4",

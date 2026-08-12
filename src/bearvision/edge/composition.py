@@ -54,6 +54,8 @@ class RealEdgeComponents:
 def build_behavioral_system(
     scenario: ScenarioDefinition,
     assignment_policy: AssignmentConfig | None = None,
+    *,
+    capture_dir: Path | None = None,
 ) -> "ClosedLoopScenarioRunner | VideoScenarioRunner":
     if scenario.components.frames == "video":
         from bearvision.simulation.video_runner import VideoScenarioRunner
@@ -61,6 +63,7 @@ def build_behavioral_system(
         return VideoScenarioRunner.from_scenario(
             scenario,
             assignment_policy=assignment_policy,
+            capture_dir=capture_dir,
         )
     supported_synthetic = (
         scenario.components.frames == "synthetic"

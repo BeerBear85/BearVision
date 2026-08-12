@@ -55,6 +55,7 @@ dev = [
 edge = [
     { name = "bleak" },
     { name = "boxsdk", extra = ["jwt"] },
+    { name = "ffmpeg-binaries-compat" },
     { name = "numpy" },
     { name = "open-gopro" },
     { name = "opencv-python-headless" },
@@ -73,6 +74,7 @@ training = [
 requires-dist = [
     { name = "bleak", marker = "extra == 'edge'", specifier = ">=0.22,<2" },
     { name = "boxsdk", extras = ["jwt"], marker = "extra == 'edge'", specifier = ">=3.9,<4" },
+    { name = "ffmpeg-binaries-compat", marker = "extra == 'edge'", specifier = ">=1.1,<2" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.17,<2" },
     { name = "numpy", marker = "extra == 'edge'", specifier = ">=2,<3" },
     { name = "numpy", marker = "extra == 'training'", specifier = ">=2,<3" },
@@ -631,6 +633,22 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/8a/29/59d318053734a8ec33e169687005e3c296b866d5be5bc678cb49e296b941/dbus_fast-2.46.4-cp314-cp314t-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:bb209ac6aa69715383b84e720119173f5b4450cf47214a38aea4007c9461c1e9", size = 1561564, upload-time = "2025-11-16T18:59:10.067Z" },
     { url = "https://files.pythonhosted.org/packages/98/be/0b3f683abf5f2f985b1aba6cd302c7b874773ad314db896d168a06ac65e6/dbus_fast-2.46.4-cp314-cp314t-musllinux_1_2_aarch64.whl", hash = "sha256:52094d593d40c4ddc1e23db839caa088bf9c16f1960325a524244263e1bda2d5", size = 1502476, upload-time = "2025-11-16T18:59:11.591Z" },
     { url = "https://files.pythonhosted.org/packages/dd/26/7e44a0fb5c2c22a448e3d9011997c87bacea970ba83240f3a21686912da6/dbus_fast-2.46.4-cp314-cp314t-musllinux_1_2_x86_64.whl", hash = "sha256:c7c247915211c1aa0698dd2ecbef8e4b4d8429dffe29333bf9c6e1899783bfc7", size = 1579321, upload-time = "2025-11-16T18:59:13.201Z" },
+]
+
+[[package]]
+name = "ffmpeg-binaries-compat"
+version = "1.1.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "patool" },
+    { name = "requests" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/32/69/6ed8091a3b0a120fe078c0fc3ae06954a308067cfbf3450e57be847e3fd1/ffmpeg_binaries_compat-1.1.0.tar.gz", hash = "sha256:552b2809e9c37f03985539e0be4e6c211964eff74803a27ec4a443ab05079011", size = 8058, upload-time = "2026-01-04T00:25:04.409Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c7/ac/2cff7293ae643afcef7bdae748d18b7ad9faf1b8a67e2291222815306cf3/ffmpeg_binaries_compat-1.1.0-py3-none-any.whl", hash = "sha256:9e44fe9ab87218c8ee62eff0bf6486cba96cc8f070d4bbb9a2272ccd0aa3afe7", size = 10770, upload-time = "2026-01-04T00:24:48.983Z" },
+    { url = "https://files.pythonhosted.org/packages/75/ea/bfd7532fc7793fcb018fc8aaf15c1daaebfcb096c7e7bf49837451098a94/ffmpeg_binaries_compat-1.1.0-py3-none-macosx_10_15_universal2.whl", hash = "sha256:e25e79fd87e0908d1d859fba977f457dbfeda9d1e31a8059976ef17ce06ac643", size = 50290281, upload-time = "2026-01-04T00:24:51.621Z" },
+    { url = "https://files.pythonhosted.org/packages/af/5a/07b97828d625de84a61457596e54e7aa160d0ff5df059bcae71e2385d286/ffmpeg_binaries_compat-1.1.0-py3-none-manylinux1_x86_64.whl", hash = "sha256:bfaa5e0a593a1604e404f91bafb41811b7e68e985bd5756f91246794bf95e895", size = 60258242, upload-time = "2026-01-04T00:24:55.551Z" },
+    { url = "https://files.pythonhosted.org/packages/3c/8c/fd4ce27c9675872dfba87b80f34c1e4f9aab4273f1ad485f28b4271302de/ffmpeg_binaries_compat-1.1.0-py3-none-win_amd64.whl", hash = "sha256:07829e67ea484bb0eedf759c9c3a8de84aa132d9c8011aa272c7d7fa451dee3a", size = 91170670, upload-time = "2026-01-04T00:25:00.199Z" },
 ]
 
 [[package]]
@@ -1440,6 +1458,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/5a/82/42f767fc1c1143d6fd36efb827202a2d997a375e160a71eb2888a925aac1/pathspec-1.1.1.tar.gz", hash = "sha256:17db5ecd524104a120e173814c90367a96a98d07c45b2e10c2f3919fff91bf5a", size = 135180, upload-time = "2026-04-27T01:46:08.907Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/f1/d9/7fb5aa316bc299258e68c73ba3bddbc499654a07f151cba08f6153988714/pathspec-1.1.1-py3-none-any.whl", hash = "sha256:a00ce642f577bf7f473932318056212bc4f8bfdf53128c78bbd5af0b9b20b189", size = 57328, upload-time = "2026-04-27T01:46:07.06Z" },
+]
+
+[[package]]
+name = "patool"
+version = "4.0.5"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/2c/e2/215c7d5efd40cf9b33b4943055b47c22cb0851383facdaedd919e30de90a/patool-4.0.5.tar.gz", hash = "sha256:1c8bbbbe1f421181bf7055ada975befb024c1677449e9d36f42bb45ac69f8b4c", size = 2011328, upload-time = "2026-05-18T08:56:14.929Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/61/50/cb792aaf25a8f42f5738dafb3030a1243d484ab366ff321ebcd45dfcfc12/patool-4.0.5-py2.py3-none-any.whl", hash = "sha256:9413a114c7aedf2263f151a56798055a593de671ef0a9ef94870284ad21818fb", size = 101399, upload-time = "2026-05-18T08:56:16.465Z" },
 ]
 
 [[package]]

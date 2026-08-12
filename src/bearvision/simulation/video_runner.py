@@ -5,8 +5,9 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 
-from bearvision.adapters import YoloDetectorAdapter
+from bearvision.adapters import FfmpegVideoClipper, YoloDetectorAdapter
 from bearvision.config import AssignmentConfig
+from bearvision.config.models import ClipExtractionConfig
 from bearvision.contracts import ScenarioDefinition
 from bearvision.edge.orchestrator import BearVisionOrchestrator, OrchestrationResult
 
@@ -45,6 +46,7 @@ class VideoScenarioRunner:
         assignment_policy: AssignmentConfig | None = None,
         recording_duration_s: float = 5.0,
         repository_root: Path | None = None,
+        capture_dir: Path | None = None,
     ) -> "VideoScenarioRunner":
         if scenario.video is None:
             raise ValueError("video scenario requires video configuration")
@@ -69,7 +71,12 @@ class VideoScenarioRunner:
         handler = DnnHandler(scenario.detector.model)
         handler.confidence_threshold = scenario.detector.confidence_threshold
         handler.init()
-        camera = RecordedVideoCamera(video_path, clock)
+        camera = RecordedVideoCamera(
+            video_path,
+            clock,
+            clipper=FfmpegVideoClipper(ClipExtractionConfig()),
+            capture_dir=capture_dir or root / "temp/captures",
+        )
         frame_source = RecordedVideoFrameSource(sample_fps=scenario.video.sample_fps)
         storage = InMemoryStorage(clock)
         orchestrator = BearVisionOrchestrator(
@@ -157,7 +164,16 @@ class VideoScenarioRunner:
                     (
                         result.clip_end_monotonic_s,
                         "capture_completed",
-                        {"asset_id": result.media.asset.asset_id},
+                        {
+                            "asset_id": result.media.asset.asset_id,
+                            "filename": result.media.asset.filename,
+                            "size_bytes": result.media.asset.size_bytes,
+                            "clip_start_s": result.clip_start_monotonic_s,
+                            "clip_duration_s": (
+                                result.clip_end_monotonic_s
+                                - result.clip_start_monotonic_s
+                            ),
+                        },
                     ),
                 ]
             )

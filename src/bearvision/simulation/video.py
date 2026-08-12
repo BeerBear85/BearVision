@@ -3,11 +3,19 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 from pathlib import Path
+import re
 from typing import Any
 
 from bearvision.contracts import CaptureRequest, MediaAsset
-from bearvision.ports import CapturedMedia, ComponentUnavailable, VideoFrame
+from bearvision.ports import (
+    CapturedMedia,
+    ComponentUnavailable,
+    InvalidComponentData,
+    VideoClipper,
+    VideoFrame,
+)
 
 from .adapters import VirtualClock
 
@@ -15,9 +23,18 @@ from .adapters import VirtualClock
 class RecordedVideoCamera:
     """Treat a checked-in video as both preview and deterministic captured media."""
 
-    def __init__(self, path: Path, clock: VirtualClock) -> None:
+    def __init__(
+        self,
+        path: Path,
+        clock: VirtualClock,
+        *,
+        clipper: VideoClipper,
+        capture_dir: Path,
+    ) -> None:
         self.path = path.resolve()
         self.clock = clock
+        self.clipper = clipper
+        self.capture_dir = capture_dir.resolve()
         self.connected = False
         self.previewing = False
         self.captures: dict[str, CapturedMedia] = {}
@@ -44,17 +61,36 @@ class RecordedVideoCamera:
         if not self.connected:
             raise ComponentUnavailable("recorded video camera is disconnected")
         if request.request_id not in self.captures:
+            filename = self._capture_filename(request.request_id)
+            start_s = max(0.0, request.requested_at_monotonic_s - request.pre_roll_s)
+            duration_s = request.pre_roll_s + request.post_roll_s
+            clip = await self.clipper.extract(
+                self.path,
+                self.capture_dir / filename,
+                start_s=start_s,
+                duration_s=duration_s,
+            )
             self.captures[request.request_id] = CapturedMedia(
                 asset=MediaAsset(
                     asset_id=f"asset-{request.request_id}",
-                    filename=self.path.name,
+                    filename=clip.path.name,
                     content_type="video/mp4",
-                    size_bytes=self.path.stat().st_size,
+                    size_bytes=clip.path.stat().st_size,
                     created_at_utc=self.clock.utc_now(),
                 ),
-                local_path=self.path,
+                local_path=clip.path,
             )
         return self.captures[request.request_id]
+
+    @staticmethod
+    def _capture_filename(request_id: str) -> str:
+        safe = re.sub(r"[^A-Za-z0-9_.-]+", "-", request_id).strip(".-")
+        if not safe:
+            raise InvalidComponentData("capture request ID cannot form a safe file name")
+        if safe != request_id or len(safe) > 100:
+            digest = hashlib.sha256(request_id.encode()).hexdigest()[:8]
+            safe = f"{safe[:80]}-{digest}"
+        return f"{safe}.mp4"
 
 
 class RecordedVideoFrameSource:

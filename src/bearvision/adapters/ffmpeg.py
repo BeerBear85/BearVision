@@ -50,7 +50,23 @@ class FfmpegVideoClipper:
         candidate = str(configured) if configured is not None else os.getenv(environment_name)
         if candidate:
             return candidate
-        return shutil.which(default_name) or default_name
+        system_path = shutil.which(default_name)
+        if system_path:
+            return system_path
+        try:
+            import ffmpeg_binaries
+
+            ffmpeg_binaries.init()
+            packaged = (
+                ffmpeg_binaries.FFMPEG_PATH
+                if default_name == "ffmpeg"
+                else ffmpeg_binaries.FFPROBE_PATH
+            )
+            if packaged:
+                return str(packaged)
+        except (ImportError, OSError):
+            pass
+        return default_name
 
     @staticmethod
     def _run_command(command: list[str]) -> subprocess.CompletedProcess[str]:
