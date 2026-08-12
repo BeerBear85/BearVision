@@ -22,3 +22,9 @@ BearVision_archived_*.zip
 htmlcov/
 dist/
 build/
+
+# Locally generated presentations and their rendering helpers
+deliverables/
+tools/create_bearvision_status_presentation.ps1
+tools/generate_danish_tts.py
+tools/render_bearvision_video.ps1
