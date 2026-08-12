@@ -20,6 +20,8 @@ function eventMessage(event) {
     stop_requested: "Stop requested",
     runtime_stopped: "Runtime stopped",
     preview_frame: "Preview frame analysed",
+    virtual_cameraman_completed: "Virtual cameraman completed",
+    tracking_observation: "Rider position estimated",
   };
   return labels[event.kind] ?? event.kind?.replaceAll("_", " ") ?? "Event";
 }
@@ -42,6 +44,8 @@ function App() {
   const [playhead, setPlayhead] = useState(0);
   const [capturedClip, setCapturedClip] = useState(null);
   const [displayedMedia, setDisplayedMedia] = useState("scenario");
+  const [trackingFrame, setTrackingFrame] = useState(null);
+  const [trackingData, setTrackingData] = useState(null);
   const videoRef = useRef(null);
 
   async function request(path, options) {
@@ -82,10 +86,34 @@ function App() {
           url: `/api/captures/${encodeURIComponent(event.payload.filename)}`,
         });
       }
+      if (event.kind === "person_detected" && event.payload?.bounding_box) {
+        setTrackingFrame({
+          detection: {
+            bounding_box: event.payload.bounding_box,
+            confidence: event.payload.confidence,
+          },
+          coordinate_space: event.payload.coordinate_space,
+        });
+      }
+      if (event.kind === "tracking_observation") {
+        setTrackingFrame(event.payload);
+      }
+      if (event.kind === "virtual_cameraman_completed") {
+        setCapturedClip((current) => ({
+          ...current,
+          ...event.payload,
+          processed_url: `/api/captures/${encodeURIComponent(event.payload.processed_filename)}`,
+          debug_url: `/api/captures/${encodeURIComponent(event.payload.debug_video_filename)}`,
+          tracking_url: `/api/captures/${encodeURIComponent(event.payload.tracking_filename)}`,
+        }));
+        request(`/api/captures/${encodeURIComponent(event.payload.tracking_filename)}`)
+          .then(setTrackingData)
+          .catch((reason) => setError(reason.message));
+      }
       if (event.kind === "runtime_stopped" || event.kind === "runtime_completed") {
         videoRef.current?.pause();
       }
-      if (event.kind !== "preview_frame") {
+      if (event.kind !== "preview_frame" && event.kind !== "tracking_observation") {
         setEvents((current) => [event, ...current].slice(0, 200));
       }
       request("/api/health").then(setState).catch(() => {});
@@ -113,6 +141,8 @@ function App() {
       setEvents([]);
       setPlayhead(0);
       setCapturedClip(null);
+      setTrackingFrame(null);
+      setTrackingData(null);
       setDisplayedMedia("scenario");
       if (videoRef.current) {
         videoRef.current.pause();
@@ -125,6 +155,8 @@ function App() {
     try {
       setError("");
       setEvents([]);
+      setTrackingFrame(null);
+      setTrackingData(null);
       setState(await request("/api/run", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -146,7 +178,36 @@ function App() {
     }
   }
 
-  const mediaUrl = displayedMedia === "capture" ? capturedClip?.url : selected?.video_url;
+  function updateTrackingFromVideo() {
+    if (displayedMedia !== "capture" || !trackingData?.frames?.length || !videoRef.current) return;
+    const frame = Math.round(videoRef.current.currentTime * trackingData.coordinate_space.fps);
+    const nearest = trackingData.frames.reduce(
+      (best, item) => Math.abs(item.frame_idx - frame) < Math.abs(best.frame_idx - frame) ? item : best,
+      trackingData.frames[0],
+    );
+    setTrackingFrame({ ...nearest, coordinate_space: trackingData.coordinate_space });
+  }
+
+  const mediaUrl = displayedMedia === "capture"
+    ? capturedClip?.url
+    : displayedMedia === "processed"
+      ? capturedClip?.processed_url
+      : displayedMedia === "debug"
+        ? capturedClip?.debug_url
+        : selected?.video_url;
+  const mediaTitle = {
+    scenario: "Preview",
+    capture: "Extracted clip + live overlay",
+    processed: "Virtual cameraman output",
+    debug: "Tracking engineering view",
+  }[displayedMedia];
+  const overlaySpace = trackingFrame?.coordinate_space;
+  const detectorBox = trackingFrame?.detection?.bounding_box;
+  const estimate = trackingFrame?.estimate;
+  const cropBox = trackingFrame?.crop_box;
+  const showOverlay = Boolean(
+    overlaySpace && (detectorBox || estimate) && ["scenario", "capture"].includes(displayedMedia),
+  );
 
   return (
     <main>
@@ -180,12 +241,71 @@ function App() {
       <section className="dashboard">
         <div className="preview panel">
           <div className="panel-title">
-            <span>{displayedMedia === "capture" ? "Extracted clip" : "Preview"}</span>
+            <span>{mediaTitle}</span>
             <small>{state.mode}</small>
           </div>
           <div className="preview-content">
             {state.mode === "simulation" && mediaUrl ? (
-              <video key={mediaUrl} ref={videoRef} src={mediaUrl} muted playsInline controls />
+              <div className="video-stage">
+                <video
+                  key={mediaUrl}
+                  ref={videoRef}
+                  src={mediaUrl}
+                  muted
+                  playsInline
+                  controls
+                  onTimeUpdate={updateTrackingFromVideo}
+                />
+                {showOverlay && (
+                  <svg
+                    className="tracking-overlay"
+                    viewBox={`0 0 ${overlaySpace.width_px} ${overlaySpace.height_px}`}
+                    preserveAspectRatio="xMidYMid meet"
+                    aria-label="Detection and rider position overlay"
+                  >
+                    {detectorBox && (
+                      <g className="detector-measurement">
+                        <rect
+                          x={detectorBox.x_px}
+                          y={detectorBox.y_px}
+                          width={detectorBox.width_px}
+                          height={detectorBox.height_px}
+                        />
+                        <text x={detectorBox.x_px} y={Math.max(8, detectorBox.y_px - 3)}>
+                          YOLO person
+                        </text>
+                      </g>
+                    )}
+                    {cropBox && (
+                      <rect
+                        className="crop-window"
+                        x={cropBox.x_px}
+                        y={cropBox.y_px}
+                        width={cropBox.width_px}
+                        height={cropBox.height_px}
+                      />
+                    )}
+                    {estimate && (
+                      <g className="kalman-estimate">
+                        <circle
+                          cx={estimate.x_px}
+                          cy={estimate.y_px}
+                          r={trackingFrame.confidence_radius_95_px}
+                        />
+                        <line x1={estimate.x_px - 6} y1={estimate.y_px} x2={estimate.x_px + 6} y2={estimate.y_px} />
+                        <line x1={estimate.x_px} y1={estimate.y_px - 6} x2={estimate.x_px} y2={estimate.y_px + 6} />
+                      </g>
+                    )}
+                  </svg>
+                )}
+                {showOverlay && (
+                  <div className="overlay-legend">
+                    <span className="green">YOLO person</span>
+                    <span className="red">Kalman + 95 %</span>
+                    <span className="cyan">crop</span>
+                  </div>
+                )}
+              </div>
             ) : (
               <>
                 <div className="reticle" />
@@ -213,8 +333,22 @@ function App() {
                   className={displayedMedia === "capture" ? "selected" : ""}
                   onClick={() => showMedia("capture")}
                 >Extracted clip</button>
+                {capturedClip.processed_url && (
+                  <button
+                    className={displayedMedia === "processed" ? "selected" : ""}
+                    onClick={() => showMedia("processed")}
+                  >Upload clip</button>
+                )}
+                {capturedClip.debug_url && (
+                  <button
+                    className={displayedMedia === "debug" ? "selected" : ""}
+                    onClick={() => showMedia("debug")}
+                  >Tracking view</button>
+                )}
                 <small>
-                  {capturedClip.filename} · {Number(capturedClip.clip_duration_s).toFixed(1)} s · {Math.round(capturedClip.size_bytes / 1024)} KiB
+                  {displayedMedia === "processed" && capturedClip.processed_filename
+                    ? `${capturedClip.processed_filename} · ${Math.round(capturedClip.processed_size_bytes / 1024)} KiB`
+                    : `${capturedClip.filename} · ${Number(capturedClip.clip_duration_s).toFixed(1)} s · ${Math.round(capturedClip.size_bytes / 1024)} KiB`}
                 </small>
               </div>
             )}

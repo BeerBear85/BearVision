@@ -1,5 +1,5 @@
 {
-  "schema_version": "1.0",
+  "schema_version": "1.1",
   "source": {
     "blend_file": "D:/Blender/wakeboard_scene.blend",
     "clip": "wakeboard_fs360_60fps.mp4",
@@ -10,6 +10,7 @@
     "velocity": "m/s",
     "acceleration": "m/s^2",
     "time": "s",
+    "angle": "deg",
     "felt_g": "multiples of 9.81 m/s^2 (specific force)"
   },
   "coordinate_system": {
@@ -181,6 +182,36 @@
       "Depth of field is off, so the whole depth of the scene is sharp."
     ]
   },
+  "cable_system": {
+    "span_m": 75.0,
+    "x_range_m": [
+      -37.5,
+      37.5
+    ],
+    "height_at_towers_m": 10.0,
+    "height_at_midspan_m": 9.438,
+    "sag_m": 0.562,
+    "sag_note": "scales with the square of the span at constant tension",
+    "tower_x_m": [
+      -38.4,
+      36.6
+    ],
+    "carriage_speed_ms": 7.7,
+    "rope": {
+      "nominal_length_m": 18.5,
+      "measured_length_range_m": [
+        17.5,
+        18.92
+      ],
+      "angle_to_water_deg": {
+        "min": 23.9,
+        "max": 28.9,
+        "mean": 27.1
+      },
+      "angle_note": "measured on the water; shallower during the jump as the rider rises",
+      "horizontal_trail_m": 16.42
+    }
+  },
   "timing": {
     "fps": 60,
     "frame_start": 1,
@@ -209,7 +240,8 @@
     "air_mean_az_ms2": -9.81,
     "air_mean_felt_g": 0.0,
     "air_horizontal_velocity_ms": 7.7,
-    "apex_height_m": 1.657
+    "apex_height_m": 1.657,
+    "mean_rope_angle_on_water_deg": 27.1
   },
   "frames": [
     {
@@ -230,6 +262,8 @@
       "felt_g": 0.61,
       "accel_raw_ms2": 0.0,
       "felt_g_raw": 1.0,
+      "rope_length_m": 18.878,
+      "rope_angle_deg": 26.18,
       "phase": "cruise",
       "impulsive": false
     },
@@ -251,6 +285,8 @@
       "felt_g": 0.61,
       "accel_raw_ms2": 281.386,
       "felt_g_raw": 28.707,
+      "rope_length_m": 18.917,
+      "rope_angle_deg": 26.12,
       "phase": "cruise",
       "impulsive": false
     },
@@ -272,6 +308,8 @@
       "felt_g": 0.61,
       "accel_raw_ms2": 99.117,
       "felt_g_raw": 10.064,
+      "rope_length_m": 18.885,
+      "rope_angle_deg": 26.15,
       "phase": "cruise",
       "impulsive": false
     },
@@ -293,6 +331,8 @@
       "felt_g": 0.61,
       "accel_raw_ms2": 70.038,
       "felt_g_raw": 7.185,
+      "rope_length_m": 18.879,
+      "rope_angle_deg": 26.16,
       "phase": "cruise",
       "impulsive": false
     },
@@ -314,6 +354,8 @@
       "felt_g": 0.61,
       "accel_raw_ms2": 33.685,
       "felt_g_raw": 3.428,
+      "rope_length_m": 18.891,
+      "rope_angle_deg": 26.14,
       "phase": "cruise",
       "impulsive": false
     },
@@ -335,6 +377,8 @@
       "felt_g": 0.688,
       "accel_raw_ms2": 27.048,
       "felt_g_raw": 2.699,
+      "rope_length_m": 18.894,
+      "rope_angle_deg": 26.13,
       "phase": "cruise",
       "impulsive": false
     },
@@ -356,6 +400,8 @@
       "felt_g": 0.946,
       "accel_raw_ms2": 2.72,
       "felt_g_raw": 0.762,
+      "rope_length_m": 18.892,
+      "rope_angle_deg": 26.15,
       "phase": "cruise",
       "impulsive": false
     },
@@ -377,6 +423,8 @@
       "felt_g": 1.085,
       "accel_raw_ms2": 1.403,
       "felt_g_raw": 0.857,
+      "rope_length_m": 18.891,
+      "rope_angle_deg": 26.16,
       "phase": "cruise",
       "impulsive": false
     },
@@ -398,6 +446,8 @@
       "felt_g": 1.008,
       "accel_raw_ms2": 6.325,
       "felt_g_raw": 1.111,
+      "rope_length_m": 18.89,
+      "rope_angle_deg": 26.17,
       "phase": "cruise",
       "impulsive": false
     },
@@ -419,6 +469,8 @@
       "felt_g": 1.094,
       "accel_raw_ms2": 4.133,
       "felt_g_raw": 1.133,
+      "rope_length_m": 18.887,
+      "rope_angle_deg": 26.19,
       "phase": "cruise",
       "impulsive": false
     },
@@ -440,6 +492,8 @@
       "felt_g": 1.197,
       "accel_raw_ms2": 2.162,
       "felt_g_raw": 1.217,
+      "rope_length_m": 18.883,
+      "rope_angle_deg": 26.21,
       "phase": "cruise",
       "impulsive": false
     },
@@ -461,6 +515,8 @@
       "felt_g": 1.297,
       "accel_raw_ms2": 3.815,
       "felt_g_raw": 1.371,
+      "rope_length_m": 18.878,
+      "rope_angle_deg": 26.23,
       "phase": "cruise",
       "impulsive": false
     },
@@ -482,6 +538,8 @@
       "felt_g": 1.402,
       "accel_raw_ms2": 5.261,
       "felt_g_raw": 1.488,
+      "rope_length_m": 18.874,
+      "rope_angle_deg": 26.24,
       "phase": "cruise",
       "impulsive": false
     },
@@ -503,6 +561,8 @@
       "felt_g": 1.482,
       "accel_raw_ms2": 5.63,
       "felt_g_raw": 1.448,
+      "rope_length_m": 18.869,
+      "rope_angle_deg": 26.25,
       "phase": "cruise",
       "impulsive": false
     },
@@ -524,6 +584,8 @@
       "felt_g": 1.519,
       "accel_raw_ms2": 7.389,
       "felt_g_raw": 1.599,
+      "rope_length_m": 18.865,
+      "rope_angle_deg": 26.26,
       "phase": "cruise",
       "impulsive": false
     },
@@ -545,6 +607,8 @@
       "felt_g": 1.511,
       "accel_raw_ms2": 8.137,
       "felt_g_raw": 1.665,
+      "rope_length_m": 18.862,
+      "rope_angle_deg": 26.26,
       "phase": "cruise",
       "impulsive": false
     },
@@ -566,6 +630,8 @@
       "felt_g": 1.456,
       "accel_raw_ms2": 7.198,
       "felt_g_raw": 1.495,
+      "rope_length_m": 18.86,
+      "rope_angle_deg": 26.25,
       "phase": "cruise",
       "impulsive": false
     },
@@ -587,6 +653,8 @@
       "felt_g": 1.351,
       "accel_raw_ms2": 6.262,
       "felt_g_raw": 1.378,
+      "rope_length_m": 18.859,
+      "rope_angle_deg": 26.24,
       "phase": "cruise",
       "impulsive": false
     },
@@ -608,6 +676,8 @@
       "felt_g": 1.204,
       "accel_raw_ms2": 5.129,
       "felt_g_raw": 1.253,
+      "rope_length_m": 18.859,
+      "rope_angle_deg": 26.23,
       "phase": "cruise",
       "impulsive": false
     },
@@ -629,6 +699,8 @@
       "felt_g": 1.04,
       "accel_raw_ms2": 3.406,
       "felt_g_raw": 1.053,
+      "rope_length_m": 18.86,
+      "rope_angle_deg": 26.21,
       "phase": "cruise",
       "impulsive": false
     },
@@ -650,6 +722,8 @@
       "felt_g": 0.879,
       "accel_raw_ms2": 2.367,
       "felt_g_raw": 0.856,
+      "rope_length_m": 18.861,
+      "rope_angle_deg": 26.19,
       "phase": "cruise",
       "impulsive": false
     },
@@ -671,6 +745,8 @@
       "felt_g": 0.746,
       "accel_raw_ms2": 2.639,
       "felt_g_raw": 0.731,
+      "rope_length_m": 18.864,
+      "rope_angle_deg": 26.17,
       "phase": "cruise",
       "impulsive": false
     },
@@ -692,6 +768,8 @@
       "felt_g": 0.676,
       "accel_raw_ms2": 4.164,
       "felt_g_raw": 0.66,
+      "rope_length_m": 18.866,
+      "rope_angle_deg": 26.16,
       "phase": "cruise",
       "impulsive": false
     },
@@ -713,6 +791,8 @@
       "felt_g": 0.676,
       "accel_raw_ms2": 6.199,
       "felt_g_raw": 0.61,
+      "rope_length_m": 18.869,
+      "rope_angle_deg": 26.15,
       "phase": "cruise",
       "impulsive": false
     },
@@ -734,6 +814,8 @@
       "felt_g": 0.722,
       "accel_raw_ms2": 6.992,
       "felt_g_raw": 0.719,
+      "rope_length_m": 18.871,
+      "rope_angle_deg": 26.14,
       "phase": "cruise",
       "impulsive": false
     },
@@ -755,6 +837,8 @@
       "felt_g": 0.785,
       "accel_raw_ms2": 7.104,
       "felt_g_raw": 0.832,
+      "rope_length_m": 18.873,
+      "rope_angle_deg": 26.14,
       "phase": "cruise",
       "impulsive": false
     },
@@ -776,6 +860,8 @@
       "felt_g": 0.846,
       "accel_raw_ms2": 7.649,
       "felt_g_raw": 0.85,
+      "rope_length_m": 18.873,
+      "rope_angle_deg": 26.14,
       "phase": "cruise",
       "impulsive": false
     },
@@ -797,6 +883,8 @@
       "felt_g": 0.901,
       "accel_raw_ms2": 6.9,
       "felt_g_raw": 0.9,
+      "rope_length_m": 18.873,
+      "rope_angle_deg": 26.15,
       "phase": "cruise",
       "impulsive": false
     },
@@ -818,6 +906,8 @@
       "felt_g": 0.95,
       "accel_raw_ms2": 5.769,
       "felt_g_raw": 0.968,
+      "rope_length_m": 18.871,
+      "rope_angle_deg": 26.17,
       "phase": "cruise",
       "impulsive": false
     },
@@ -839,6 +929,8 @@
       "felt_g": 1.001,
       "accel_raw_ms2": 4.127,
       "felt_g_raw": 1.045,
+      "rope_length_m": 18.869,
+      "rope_angle_deg": 26.18,
       "phase": "cruise",
       "impulsive": false
     },
@@ -860,6 +952,8 @@
       "felt_g": 1.087,
       "accel_raw_ms2": 2.807,
       "felt_g_raw": 1.129,
+      "rope_length_m": 18.865,
+      "rope_angle_deg": 26.2,
       "phase": "edge_build",
       "impulsive": false
     },
@@ -881,6 +975,8 @@
       "felt_g": 1.2,
       "accel_raw_ms2": 1.734,
       "felt_g_raw": 1.131,
+      "rope_length_m": 18.861,
+      "rope_angle_deg": 26.22,
       "phase": "edge_build",
       "impulsive": false
     },
@@ -902,6 +998,8 @@
       "felt_g": 1.296,
       "accel_raw_ms2": 2.561,
       "felt_g_raw": 1.224,
+      "rope_length_m": 18.856,
+      "rope_angle_deg": 26.24,
       "phase": "edge_build",
       "impulsive": false
     },
@@ -923,6 +1021,8 @@
       "felt_g": 1.38,
       "accel_raw_ms2": 7.258,
       "felt_g_raw": 1.703,
+      "rope_length_m": 18.851,
+      "rope_angle_deg": 26.26,
       "phase": "edge_build",
       "impulsive": false
     },
@@ -944,6 +1044,8 @@
       "felt_g": 1.458,
       "accel_raw_ms2": 6.856,
       "felt_g_raw": 1.596,
+      "rope_length_m": 18.846,
+      "rope_angle_deg": 26.27,
       "phase": "edge_build",
       "impulsive": false
     },
@@ -965,6 +1067,8 @@
       "felt_g": 1.502,
       "accel_raw_ms2": 5.614,
       "felt_g_raw": 1.19,
+      "rope_length_m": 18.842,
+      "rope_angle_deg": 26.28,
       "phase": "edge_build",
       "impulsive": false
     },
@@ -986,6 +1090,8 @@
       "felt_g": 1.493,
       "accel_raw_ms2": 8.166,
       "felt_g_raw": 1.649,
+      "rope_length_m": 18.838,
+      "rope_angle_deg": 26.28,
       "phase": "edge_build",
       "impulsive": false
     },
@@ -1007,6 +1113,8 @@
       "felt_g": 1.436,
       "accel_raw_ms2": 8.822,
       "felt_g_raw": 1.735,
+      "rope_length_m": 18.836,
+      "rope_angle_deg": 26.28,
       "phase": "edge_build",
       "impulsive": false
     },
@@ -1028,6 +1136,8 @@
       "felt_g": 1.353,
       "accel_raw_ms2": 6.551,
       "felt_g_raw": 1.326,
+      "rope_length_m": 18.835,
+      "rope_angle_deg": 26.27,
       "phase": "edge_build",
       "impulsive": false
     },
@@ -1049,6 +1159,8 @@
       "felt_g": 1.233,
       "accel_raw_ms2": 5.637,
       "felt_g_raw": 1.179,
+      "rope_length_m": 18.834,
+      "rope_angle_deg": 26.26,
       "phase": "edge_build",
       "impulsive": false
     },
@@ -1070,6 +1182,8 @@
       "felt_g": 1.071,
       "accel_raw_ms2": 4.846,
       "felt_g_raw": 1.092,
+      "rope_length_m": 18.835,
+      "rope_angle_deg": 26.25,
       "phase": "edge_build",
       "impulsive": false
     },
@@ -1091,6 +1205,8 @@
       "felt_g": 0.926,
       "accel_raw_ms2": 4.36,
       "felt_g_raw": 0.974,
+      "rope_length_m": 18.837,
+      "rope_angle_deg": 26.23,
       "phase": "edge_build",
       "impulsive": false
     },
@@ -1112,6 +1228,8 @@
       "felt_g": 0.84,
       "accel_raw_ms2": 4.998,
       "felt_g_raw": 0.85,
+      "rope_length_m": 18.84,
+      "rope_angle_deg": 26.22,
       "phase": "edge_build",
       "impulsive": false
     },
@@ -1133,6 +1251,8 @@
       "felt_g": 0.808,
       "accel_raw_ms2": 7.378,
       "felt_g_raw": 0.681,
+      "rope_length_m": 18.843,
+      "rope_angle_deg": 26.21,
       "phase": "edge_build",
       "impulsive": false
     },
@@ -1154,6 +1274,8 @@
       "felt_g": 0.828,
       "accel_raw_ms2": 7.784,
       "felt_g_raw": 0.816,
+      "rope_length_m": 18.846,
+      "rope_angle_deg": 26.2,
       "phase": "edge_build",
       "impulsive": false
     },
@@ -1175,6 +1297,8 @@
       "felt_g": 0.885,
       "accel_raw_ms2": 8.03,
       "felt_g_raw": 0.97,
+      "rope_length_m": 18.849,
+      "rope_angle_deg": 26.2,
       "phase": "edge_build",
       "impulsive": false
     },
@@ -1196,6 +1320,8 @@
       "felt_g": 0.953,
       "accel_raw_ms2": 9.662,
       "felt_g_raw": 0.94,
+      "rope_length_m": 18.851,
+      "rope_angle_deg": 26.2,
       "phase": "edge_build",
       "impulsive": false
     },
@@ -1217,6 +1343,8 @@
       "felt_g": 1.015,
       "accel_raw_ms2": 9.52,
       "felt_g_raw": 1.009,
+      "rope_length_m": 18.853,
+      "rope_angle_deg": 26.21,
       "phase": "edge_build",
       "impulsive": false
     },
@@ -1238,6 +1366,8 @@
       "felt_g": 1.065,
       "accel_raw_ms2": 8.971,
       "felt_g_raw": 1.094,
+      "rope_length_m": 18.853,
+      "rope_angle_deg": 26.22,
       "phase": "edge_build",
       "impulsive": false
     },
@@ -1259,6 +1389,8 @@
       "felt_g": 1.117,
       "accel_raw_ms2": 8.137,
       "felt_g_raw": 1.137,
+      "rope_length_m": 18.853,
+      "rope_angle_deg": 26.24,
       "phase": "edge_build",
       "impulsive": false
     },
@@ -1280,6 +1412,8 @@
       "felt_g": 1.18,
       "accel_raw_ms2": 7.292,
       "felt_g_raw": 1.187,
+      "rope_length_m": 18.852,
+      "rope_angle_deg": 26.27,
       "phase": "edge_build",
       "impulsive": false
     },
@@ -1301,6 +1435,8 @@
       "felt_g": 1.251,
       "accel_raw_ms2": 6.543,
       "felt_g_raw": 1.277,
+      "rope_length_m": 18.85,
+      "rope_angle_deg": 26.29,
       "phase": "edge_build",
       "impulsive": false
     },
@@ -1322,6 +1458,8 @@
       "felt_g": 1.342,
       "accel_raw_ms2": 6.45,
       "felt_g_raw": 1.385,
+      "rope_length_m": 18.847,
+      "rope_angle_deg": 26.32,
       "phase": "edge_build",
       "impulsive": false
     },
@@ -1343,6 +1481,8 @@
       "felt_g": 1.443,
       "accel_raw_ms2": 6.667,
       "felt_g_raw": 1.435,
+      "rope_length_m": 18.845,
+      "rope_angle_deg": 26.34,
       "phase": "edge_build",
       "impulsive": false
     },
@@ -1364,6 +1504,8 @@
       "felt_g": 1.529,
       "accel_raw_ms2": 7.467,
       "felt_g_raw": 1.526,
+      "rope_length_m": 18.842,
+      "rope_angle_deg": 26.36,
       "phase": "edge_build",
       "impulsive": false
     },
@@ -1385,6 +1527,8 @@
       "felt_g": 1.592,
       "accel_raw_ms2": 9.509,
       "felt_g_raw": 1.791,
+      "rope_length_m": 18.84,
+      "rope_angle_deg": 26.38,
       "phase": "edge_build",
       "impulsive": false
     },
@@ -1406,6 +1550,8 @@
       "felt_g": 1.621,
       "accel_raw_ms2": 9.237,
       "felt_g_raw": 1.691,
+      "rope_length_m": 18.838,
+      "rope_angle_deg": 26.4,
       "phase": "edge_build",
       "impulsive": false
     },
@@ -1427,6 +1573,8 @@
       "felt_g": 1.605,
       "accel_raw_ms2": 8.697,
       "felt_g_raw": 1.535,
+      "rope_length_m": 18.838,
+      "rope_angle_deg": 26.4,
       "phase": "edge_build",
       "impulsive": false
     },
@@ -1448,6 +1596,8 @@
       "felt_g": 1.544,
       "accel_raw_ms2": 9.345,
       "felt_g_raw": 1.666,
+      "rope_length_m": 18.839,
+      "rope_angle_deg": 26.41,
       "phase": "edge_build",
       "impulsive": false
     },
@@ -1469,6 +1619,8 @@
       "felt_g": 1.447,
       "accel_raw_ms2": 8.353,
       "felt_g_raw": 1.513,
+      "rope_length_m": 18.841,
+      "rope_angle_deg": 26.4,
       "phase": "edge_build",
       "impulsive": false
     },
@@ -1490,6 +1642,8 @@
       "felt_g": 1.321,
       "accel_raw_ms2": 7.342,
       "felt_g_raw": 1.317,
+      "rope_length_m": 18.844,
+      "rope_angle_deg": 26.4,
       "phase": "edge_build",
       "impulsive": false
     },
@@ -1511,6 +1665,8 @@
       "felt_g": 1.173,
       "accel_raw_ms2": 6.569,
       "felt_g_raw": 1.218,
+      "rope_length_m": 18.849,
+      "rope_angle_deg": 26.39,
       "phase": "edge_build",
       "impulsive": false
     },
@@ -1532,6 +1688,8 @@
       "felt_g": 1.052,
       "accel_raw_ms2": 6.226,
       "felt_g_raw": 1.104,
+      "rope_length_m": 18.855,
+      "rope_angle_deg": 26.38,
       "phase": "edge_build",
       "impulsive": false
     },
@@ -1553,6 +1711,8 @@
       "felt_g": 0.981,
       "accel_raw_ms2": 7.9,
       "felt_g_raw": 0.822,
+      "rope_length_m": 18.861,
+      "rope_angle_deg": 26.37,
       "phase": "edge_build",
       "impulsive": false
     },
@@ -1574,6 +1734,8 @@
       "felt_g": 0.957,
       "accel_raw_ms2": 8.446,
       "felt_g_raw": 0.882,
+      "rope_length_m": 18.867,
+      "rope_angle_deg": 26.36,
       "phase": "edge_build",
       "impulsive": false
     },
@@ -1595,6 +1757,8 @@
       "felt_g": 0.981,
       "accel_raw_ms2": 8.01,
       "felt_g_raw": 1.211,
+      "rope_length_m": 18.873,
+      "rope_angle_deg": 26.36,
       "phase": "edge_build",
       "impulsive": false
     },
@@ -1616,6 +1780,8 @@
       "felt_g": 1.038,
       "accel_raw_ms2": 10.405,
       "felt_g_raw": 1.022,
+      "rope_length_m": 18.879,
+      "rope_angle_deg": 26.37,
       "phase": "edge_build",
       "impulsive": false
     },
@@ -1637,6 +1803,8 @@
       "felt_g": 1.099,
       "accel_raw_ms2": 11.893,
       "felt_g_raw": 1.016,
+      "rope_length_m": 18.883,
+      "rope_angle_deg": 26.38,
       "phase": "edge_build",
       "impulsive": false
     },
@@ -1658,6 +1826,8 @@
       "felt_g": 1.145,
       "accel_raw_ms2": 10.407,
       "felt_g_raw": 1.227,
+      "rope_length_m": 18.886,
+      "rope_angle_deg": 26.39,
       "phase": "edge_build",
       "impulsive": false
     },
@@ -1679,6 +1849,8 @@
       "felt_g": 1.182,
       "accel_raw_ms2": 9.98,
       "felt_g_raw": 1.25,
+      "rope_length_m": 18.888,
+      "rope_angle_deg": 26.42,
       "phase": "edge_build",
       "impulsive": false
     },
@@ -1700,6 +1872,8 @@
       "felt_g": 1.223,
       "accel_raw_ms2": 9.398,
       "felt_g_raw": 1.224,
+      "rope_length_m": 18.889,
+      "rope_angle_deg": 26.44,
       "phase": "edge_build",
       "impulsive": false
     },
@@ -1721,6 +1895,8 @@
       "felt_g": 1.256,
       "accel_raw_ms2": 8.132,
       "felt_g_raw": 1.27,
+      "rope_length_m": 18.888,
+      "rope_angle_deg": 26.47,
       "phase": "edge_build",
       "impulsive": false
     },
@@ -1742,6 +1918,8 @@
       "felt_g": 1.296,
       "accel_raw_ms2": 7.097,
       "felt_g_raw": 1.345,
+      "rope_length_m": 18.886,
+      "rope_angle_deg": 26.51,
       "phase": "edge_build",
       "impulsive": false
     },
@@ -1763,6 +1941,8 @@
       "felt_g": 1.364,
       "accel_raw_ms2": 6.043,
       "felt_g_raw": 1.333,
+      "rope_length_m": 18.883,
+      "rope_angle_deg": 26.54,
       "phase": "edge_build",
       "impulsive": false
     },
@@ -1784,6 +1964,8 @@
       "felt_g": 1.424,
       "accel_raw_ms2": 5.611,
       "felt_g_raw": 1.384,
+      "rope_length_m": 18.879,
+      "rope_angle_deg": 26.57,
       "phase": "edge_build",
       "impulsive": false
     },
@@ -1805,6 +1987,8 @@
       "felt_g": 1.471,
       "accel_raw_ms2": 7.877,
       "felt_g_raw": 1.723,
+      "rope_length_m": 18.875,
+      "rope_angle_deg": 26.6,
       "phase": "edge_build",
       "impulsive": false
     },
@@ -1826,6 +2010,8 @@
       "felt_g": 1.513,
       "accel_raw_ms2": 7.397,
       "felt_g_raw": 1.655,
+      "rope_length_m": 18.871,
+      "rope_angle_deg": 26.62,
       "phase": "edge_build",
       "impulsive": false
     },
@@ -1847,6 +2033,8 @@
       "felt_g": 1.525,
       "accel_raw_ms2": 5.127,
       "felt_g_raw": 1.239,
+      "rope_length_m": 18.868,
+      "rope_angle_deg": 26.64,
       "phase": "edge_build",
       "impulsive": false
     },
@@ -1868,6 +2056,8 @@
       "felt_g": 1.49,
       "accel_raw_ms2": 7.293,
       "felt_g_raw": 1.611,
+      "rope_length_m": 18.865,
+      "rope_angle_deg": 26.66,
       "phase": "edge_build",
       "impulsive": false
     },
@@ -1889,6 +2079,8 @@
       "felt_g": 1.411,
       "accel_raw_ms2": 7.989,
       "felt_g_raw": 1.716,
+      "rope_length_m": 18.862,
+      "rope_angle_deg": 26.67,
       "phase": "edge_build",
       "impulsive": false
     },
@@ -1910,6 +2102,8 @@
       "felt_g": 1.31,
       "accel_raw_ms2": 4.746,
       "felt_g_raw": 1.266,
+      "rope_length_m": 18.86,
+      "rope_angle_deg": 26.67,
       "phase": "edge_build",
       "impulsive": false
     },
@@ -1931,6 +2125,8 @@
       "felt_g": 1.186,
       "accel_raw_ms2": 3.436,
       "felt_g_raw": 1.104,
+      "rope_length_m": 18.859,
+      "rope_angle_deg": 26.67,
       "phase": "edge_build",
       "impulsive": false
     },
@@ -1952,6 +2148,8 @@
       "felt_g": 1.026,
       "accel_raw_ms2": 2.587,
       "felt_g_raw": 1.025,
+      "rope_length_m": 18.857,
+      "rope_angle_deg": 26.67,
       "phase": "edge_build",
       "impulsive": false
     },
@@ -1973,6 +2171,8 @@
       "felt_g": 0.893,
       "accel_raw_ms2": 2.787,
       "felt_g_raw": 0.971,
+      "rope_length_m": 18.856,
+      "rope_angle_deg": 26.66,
       "phase": "edge_build",
       "impulsive": false
     },
@@ -1994,6 +2194,8 @@
       "felt_g": 0.849,
       "accel_raw_ms2": 4.44,
       "felt_g_raw": 0.895,
+      "rope_length_m": 18.855,
+      "rope_angle_deg": 26.66,
       "phase": "edge_build",
       "impulsive": false
     },
@@ -2015,6 +2217,8 @@
       "felt_g": 0.868,
       "accel_raw_ms2": 8.278,
       "felt_g_raw": 0.687,
+      "rope_length_m": 18.852,
+      "rope_angle_deg": 26.66,
       "phase": "edge_build",
       "impulsive": false
     },
@@ -2036,6 +2240,8 @@
       "felt_g": 0.924,
       "accel_raw_ms2": 8.73,
       "felt_g_raw": 0.897,
+      "rope_length_m": 18.848,
+      "rope_angle_deg": 26.67,
       "phase": "edge_build",
       "impulsive": false
     },
@@ -2057,6 +2263,8 @@
       "felt_g": 1.0,
       "accel_raw_ms2": 8.581,
       "felt_g_raw": 1.233,
+      "rope_length_m": 18.843,
+      "rope_angle_deg": 26.68,
       "phase": "edge_build",
       "impulsive": false
     },
@@ -2078,6 +2286,8 @@
       "felt_g": 1.074,
       "accel_raw_ms2": 10.71,
       "felt_g_raw": 1.075,
+      "rope_length_m": 18.836,
+      "rope_angle_deg": 26.7,
       "phase": "edge_build",
       "impulsive": false
     },
@@ -2099,6 +2309,8 @@
       "felt_g": 1.129,
       "accel_raw_ms2": 11.078,
       "felt_g_raw": 1.068,
+      "rope_length_m": 18.826,
+      "rope_angle_deg": 26.73,
       "phase": "edge_build",
       "impulsive": false
     },
@@ -2120,6 +2332,8 @@
       "felt_g": 1.155,
       "accel_raw_ms2": 9.634,
       "felt_g_raw": 1.229,
+      "rope_length_m": 18.815,
+      "rope_angle_deg": 26.76,
       "phase": "edge_hard",
       "impulsive": false
     },
@@ -2141,6 +2355,8 @@
       "felt_g": 1.172,
       "accel_raw_ms2": 8.632,
       "felt_g_raw": 1.239,
+      "rope_length_m": 18.802,
+      "rope_angle_deg": 26.79,
       "phase": "edge_hard",
       "impulsive": false
     },
@@ -2162,6 +2378,8 @@
       "felt_g": 1.205,
       "accel_raw_ms2": 7.454,
       "felt_g_raw": 1.213,
+      "rope_length_m": 18.788,
+      "rope_angle_deg": 26.83,
       "phase": "edge_hard",
       "impulsive": false
     },
@@ -2183,6 +2401,8 @@
       "felt_g": 1.246,
       "accel_raw_ms2": 5.933,
       "felt_g_raw": 1.237,
+      "rope_length_m": 18.772,
+      "rope_angle_deg": 26.87,
       "phase": "edge_hard",
       "impulsive": false
     },
@@ -2204,6 +2424,8 @@
       "felt_g": 1.284,
       "accel_raw_ms2": 4.734,
       "felt_g_raw": 1.308,
+      "rope_length_m": 18.755,
+      "rope_angle_deg": 26.91,
       "phase": "edge_hard",
       "impulsive": false
     },
@@ -2225,6 +2447,8 @@
       "felt_g": 1.333,
       "accel_raw_ms2": 4.506,
       "felt_g_raw": 1.422,
+      "rope_length_m": 18.737,
+      "rope_angle_deg": 26.95,
       "phase": "edge_hard",
       "impulsive": false
     },
@@ -2246,6 +2470,8 @@
       "felt_g": 1.392,
       "accel_raw_ms2": 4.954,
       "felt_g_raw": 1.505,
+      "rope_length_m": 18.719,
+      "rope_angle_deg": 26.99,
       "phase": "edge_hard",
       "impulsive": false
     },
@@ -2267,6 +2493,8 @@
       "felt_g": 1.436,
       "accel_raw_ms2": 3.454,
       "felt_g_raw": 1.328,
+      "rope_length_m": 18.701,
+      "rope_angle_deg": 27.03,
       "phase": "edge_hard",
       "impulsive": false
     },
@@ -2288,6 +2516,8 @@
       "felt_g": 1.446,
       "accel_raw_ms2": 5.519,
       "felt_g_raw": 1.515,
+      "rope_length_m": 18.683,
+      "rope_angle_deg": 27.06,
       "phase": "edge_hard",
       "impulsive": false
     },
@@ -2309,6 +2539,8 @@
       "felt_g": 1.417,
       "accel_raw_ms2": 6.736,
       "felt_g_raw": 1.634,
+      "rope_length_m": 18.666,
+      "rope_angle_deg": 27.08,
       "phase": "edge_hard",
       "impulsive": false
     },
@@ -2330,6 +2562,8 @@
       "felt_g": 1.348,
       "accel_raw_ms2": 4.54,
       "felt_g_raw": 1.348,
+      "rope_length_m": 18.649,
+      "rope_angle_deg": 27.1,
       "phase": "edge_hard",
       "impulsive": false
     },
@@ -2351,6 +2585,8 @@
       "felt_g": 1.239,
       "accel_raw_ms2": 3.35,
       "felt_g_raw": 1.229,
+      "rope_length_m": 18.633,
+      "rope_angle_deg": 27.12,
       "phase": "edge_hard",
       "impulsive": false
     },
@@ -2372,6 +2608,8 @@
       "felt_g": 1.097,
       "accel_raw_ms2": 2.032,
       "felt_g_raw": 1.134,
+      "rope_length_m": 18.618,
+      "rope_angle_deg": 27.13,
       "phase": "edge_hard",
       "impulsive": false
     },
@@ -2393,6 +2631,8 @@
       "felt_g": 0.959,
       "accel_raw_ms2": 0.295,
       "felt_g_raw": 0.972,
+      "rope_length_m": 18.603,
+      "rope_angle_deg": 27.14,
       "phase": "edge_hard",
       "impulsive": false
     },
@@ -2414,6 +2654,8 @@
       "felt_g": 0.87,
       "accel_raw_ms2": 2.782,
       "felt_g_raw": 0.839,
+      "rope_length_m": 18.589,
+      "rope_angle_deg": 27.15,
       "phase": "edge_hard",
       "impulsive": false
     },
@@ -2435,6 +2677,8 @@
       "felt_g": 0.846,
       "accel_raw_ms2": 5.362,
       "felt_g_raw": 0.818,
+      "rope_length_m": 18.574,
+      "rope_angle_deg": 27.16,
       "phase": "edge_hard",
       "impulsive": false
     },
@@ -2456,6 +2700,8 @@
       "felt_g": 0.904,
       "accel_raw_ms2": 7.779,
       "felt_g_raw": 0.892,
+      "rope_length_m": 18.559,
+      "rope_angle_deg": 27.18,
       "phase": "edge_hard",
       "impulsive": false
     },
@@ -2477,6 +2723,8 @@
       "felt_g": 1.027,
       "accel_raw_ms2": 9.486,
       "felt_g_raw": 1.014,
+      "rope_length_m": 18.542,
+      "rope_angle_deg": 27.2,
       "phase": "edge_hard",
       "impulsive": false
     },
@@ -2498,6 +2746,8 @@
       "felt_g": 1.168,
       "accel_raw_ms2": 11.322,
       "felt_g_raw": 1.128,
+      "rope_length_m": 18.525,
+      "rope_angle_deg": 27.23,
       "phase": "edge_hard",
       "impulsive": false
     },
@@ -2519,6 +2769,8 @@
       "felt_g": 1.292,
       "accel_raw_ms2": 12.734,
       "felt_g_raw": 1.366,
+      "rope_length_m": 18.506,
+      "rope_angle_deg": 27.26,
       "phase": "edge_hard",
       "impulsive": false
     },
@@ -2540,6 +2792,8 @@
       "felt_g": 1.407,
       "accel_raw_ms2": 13.897,
       "felt_g_raw": 1.635,
+      "rope_length_m": 18.484,
+      "rope_angle_deg": 27.31,
       "phase": "edge_hard",
       "impulsive": false
     },
@@ -2561,6 +2815,8 @@
       "felt_g": 1.557,
       "accel_raw_ms2": 13.614,
       "felt_g_raw": 1.686,
+      "rope_length_m": 18.456,
+      "rope_angle_deg": 27.36,
       "phase": "edge_hard",
       "impulsive": false
     },
@@ -2582,6 +2838,8 @@
       "felt_g": 1.779,
       "accel_raw_ms2": 15.227,
       "felt_g_raw": 1.902,
+      "rope_length_m": 18.42,
+      "rope_angle_deg": 27.4,
       "phase": "edge_hard",
       "impulsive": false
     },
@@ -2603,6 +2861,8 @@
       "felt_g": 2.092,
       "accel_raw_ms2": 18.242,
       "felt_g_raw": 2.315,
+      "rope_length_m": 18.377,
+      "rope_angle_deg": 27.45,
       "phase": "edge_hard",
       "impulsive": false
     },
@@ -2624,6 +2884,8 @@
       "felt_g": 2.465,
       "accel_raw_ms2": 22.182,
       "felt_g_raw": 2.621,
+      "rope_length_m": 18.33,
+      "rope_angle_deg": 27.5,
       "phase": "flatten",
       "impulsive": false
     },
@@ -2645,6 +2907,8 @@
       "felt_g": 2.83,
       "accel_raw_ms2": 25.461,
       "felt_g_raw": 2.822,
+      "rope_length_m": 18.281,
+      "rope_angle_deg": 27.54,
       "phase": "flatten",
       "impulsive": false
     },
@@ -2666,6 +2930,8 @@
       "felt_g": 3.139,
       "accel_raw_ms2": 29.104,
       "felt_g_raw": 3.297,
+      "rope_length_m": 18.233,
+      "rope_angle_deg": 27.58,
       "phase": "flatten",
       "impulsive": false
     },
@@ -2687,6 +2953,8 @@
       "felt_g": 3.366,
       "accel_raw_ms2": 31.78,
       "felt_g_raw": 3.585,
+      "rope_length_m": 18.186,
+      "rope_angle_deg": 27.61,
       "phase": "flatten",
       "impulsive": false
     },
@@ -2708,6 +2976,8 @@
       "felt_g": 3.491,
       "accel_raw_ms2": 33.32,
       "felt_g_raw": 3.659,
+      "rope_length_m": 18.143,
+      "rope_angle_deg": 27.64,
       "phase": "flatten",
       "impulsive": false
     },
@@ -2729,6 +2999,8 @@
       "felt_g": 3.49,
       "accel_raw_ms2": 33.54,
       "felt_g_raw": 3.666,
+      "rope_length_m": 18.105,
+      "rope_angle_deg": 27.66,
       "phase": "flatten",
       "impulsive": false
     },
@@ -2750,6 +3022,8 @@
       "felt_g": 3.345,
       "accel_raw_ms2": 32.785,
       "felt_g_raw": 3.587,
+      "rope_length_m": 18.073,
+      "rope_angle_deg": 27.68,
       "phase": "flatten",
       "impulsive": false
     },
@@ -2771,6 +3045,8 @@
       "felt_g": 3.051,
       "accel_raw_ms2": 29.495,
       "felt_g_raw": 3.235,
+      "rope_length_m": 18.049,
+      "rope_angle_deg": 27.68,
       "phase": "flatten",
       "impulsive": false
     },
@@ -2792,6 +3068,8 @@
       "felt_g": 2.608,
       "accel_raw_ms2": 25.462,
       "felt_g_raw": 2.793,
+      "rope_length_m": 18.032,
+      "rope_angle_deg": 27.68,
       "phase": "flatten",
       "impulsive": false
     },
@@ -2813,6 +3091,8 @@
       "felt_g": 2.045,
       "accel_raw_ms2": 20.737,
       "felt_g_raw": 2.244,
+      "rope_length_m": 18.022,
+      "rope_angle_deg": 27.67,
       "phase": "flatten",
       "impulsive": false
     },
@@ -2834,6 +3114,8 @@
       "felt_g": 1.42,
       "accel_raw_ms2": 13.653,
       "felt_g_raw": 1.444,
+      "rope_length_m": 18.019,
+      "rope_angle_deg": 27.65,
       "phase": "flatten",
       "impulsive": false
     },
@@ -2855,6 +3137,8 @@
       "felt_g": 0.844,
       "accel_raw_ms2": 6.117,
       "felt_g_raw": 0.744,
+      "rope_length_m": 18.022,
+      "rope_angle_deg": 27.63,
       "phase": "flatten",
       "impulsive": false
     },
@@ -2876,6 +3160,8 @@
       "felt_g": 0.552,
       "accel_raw_ms2": 5.025,
       "felt_g_raw": 0.632,
+      "rope_length_m": 18.03,
+      "rope_angle_deg": 27.61,
       "phase": "flatten",
       "impulsive": false
     },
@@ -2897,6 +3183,8 @@
       "felt_g": 0.665,
       "accel_raw_ms2": 9.932,
       "felt_g_raw": 0.728,
+      "rope_length_m": 18.039,
+      "rope_angle_deg": 27.58,
       "phase": "flatten",
       "impulsive": false
     },
@@ -2918,6 +3206,8 @@
       "felt_g": 0.843,
       "accel_raw_ms2": 10.42,
       "felt_g_raw": 1.047,
+      "rope_length_m": 18.048,
+      "rope_angle_deg": 27.57,
       "phase": "flatten",
       "impulsive": false
     },
@@ -2939,6 +3229,8 @@
       "felt_g": 0.949,
       "accel_raw_ms2": 8.393,
       "felt_g_raw": 1.259,
+      "rope_length_m": 18.055,
+      "rope_angle_deg": 27.56,
       "phase": "flatten",
       "impulsive": false
     },
@@ -2960,6 +3252,8 @@
       "felt_g": 0.989,
       "accel_raw_ms2": 9.147,
       "felt_g_raw": 0.847,
+      "rope_length_m": 18.06,
+      "rope_angle_deg": 27.56,
       "phase": "flatten",
       "impulsive": false
     },
@@ -2981,6 +3275,8 @@
       "felt_g": 0.984,
       "accel_raw_ms2": 9.463,
       "felt_g_raw": 0.863,
+      "rope_length_m": 18.064,
+      "rope_angle_deg": 27.56,
       "phase": "flatten",
       "impulsive": false
     },
@@ -3002,6 +3298,8 @@
       "felt_g": 0.997,
       "accel_raw_ms2": 7.835,
       "felt_g_raw": 1.189,
+      "rope_length_m": 18.067,
+      "rope_angle_deg": 27.58,
       "phase": "flatten",
       "impulsive": false
     },
@@ -3023,6 +3321,8 @@
       "felt_g": 1.533,
       "accel_raw_ms2": 7.432,
       "felt_g_raw": 0.955,
+      "rope_length_m": 18.069,
+      "rope_angle_deg": 27.59,
       "phase": "flatten",
       "impulsive": false
     },
@@ -3044,6 +3344,8 @@
       "felt_g": 1.533,
       "accel_raw_ms2": 6.19,
       "felt_g_raw": 0.808,
+      "rope_length_m": 18.069,
+      "rope_angle_deg": 27.61,
       "phase": "flatten",
       "impulsive": true,
       "note": "keyframed transition - impulsive, magnitude depends on frame rate"
@@ -3066,6 +3368,8 @@
       "felt_g": 1.533,
       "accel_raw_ms2": 10.037,
       "felt_g_raw": 2.011,
+      "rope_length_m": 18.068,
+      "rope_angle_deg": 27.64,
       "phase": "flatten",
       "impulsive": true,
       "note": "keyframed transition - impulsive, magnitude depends on frame rate"
@@ -3088,6 +3392,8 @@
       "felt_g": 1.533,
       "accel_raw_ms2": 91.554,
       "felt_g_raw": 10.333,
+      "rope_length_m": 18.066,
+      "rope_angle_deg": 27.65,
       "phase": "flatten",
       "impulsive": true,
       "note": "keyframed transition - impulsive, magnitude depends on frame rate"
@@ -3110,6 +3416,8 @@
       "felt_g": 1.533,
       "accel_raw_ms2": 0.0,
       "felt_g_raw": 1.0,
+      "rope_length_m": 18.041,
+      "rope_angle_deg": 27.63,
       "phase": "flatten",
       "impulsive": true,
       "note": "keyframed transition - impulsive, magnitude depends on frame rate"
@@ -3132,6 +3440,8 @@
       "felt_g": 1.955,
       "accel_raw_ms2": 0.0,
       "felt_g_raw": 1.0,
+      "rope_length_m": 18.016,
+      "rope_angle_deg": 27.59,
       "phase": "ramp",
       "impulsive": true,
       "note": "keyframed transition - impulsive, magnitude depends on frame rate"
@@ -3154,6 +3464,8 @@
       "felt_g": 1.955,
       "accel_raw_ms2": 11.095,
       "felt_g_raw": 2.131,
+      "rope_length_m": 18.026,
+      "rope_angle_deg": 27.56,
       "phase": "ramp",
       "impulsive": true,
       "note": "keyframed transition - impulsive, magnitude depends on frame rate"
@@ -3176,6 +3488,8 @@
       "felt_g": 1.955,
       "accel_raw_ms2": 9.77,
       "felt_g_raw": 1.994,
+      "rope_length_m": 18.036,
+      "rope_angle_deg": 27.52,
       "phase": "ramp",
       "impulsive": true,
       "note": "keyframed transition - impulsive, magnitude depends on frame rate"
@@ -3198,6 +3512,8 @@
       "felt_g": 1.955,
       "accel_raw_ms2": 10.432,
       "felt_g_raw": 2.059,
+      "rope_length_m": 18.044,
+      "rope_angle_deg": 27.48,
       "phase": "ramp",
       "impulsive": true,
       "note": "keyframed transition - impulsive, magnitude depends on frame rate"
@@ -3220,6 +3536,8 @@
       "felt_g": 1.955,
       "accel_raw_ms2": 9.069,
       "felt_g_raw": 1.914,
+      "rope_length_m": 18.05,
+      "rope_angle_deg": 27.44,
       "phase": "ramp",
       "impulsive": true,
       "note": "keyframed transition - impulsive, magnitude depends on frame rate"
@@ -3242,6 +3560,8 @@
       "felt_g": 1.909,
       "accel_raw_ms2": 9.476,
       "felt_g_raw": 1.953,
+      "rope_length_m": 18.057,
+      "rope_angle_deg": 27.38,
       "phase": "ramp",
       "impulsive": false
     },
@@ -3263,6 +3583,8 @@
       "felt_g": 1.863,
       "accel_raw_ms2": 8.199,
       "felt_g_raw": 1.816,
+      "rope_length_m": 18.06,
+      "rope_angle_deg": 27.33,
       "phase": "ramp",
       "impulsive": false
     },
@@ -3284,6 +3606,8 @@
       "felt_g": 1.815,
       "accel_raw_ms2": 8.529,
       "felt_g_raw": 1.848,
+      "rope_length_m": 18.064,
+      "rope_angle_deg": 27.26,
       "phase": "ramp",
       "impulsive": false
     },
@@ -3305,6 +3629,8 @@
       "felt_g": 1.771,
       "accel_raw_ms2": 7.715,
       "felt_g_raw": 1.761,
+      "rope_length_m": 18.067,
+      "rope_angle_deg": 27.19,
       "phase": "ramp",
       "impulsive": false
     },
@@ -3326,6 +3652,8 @@
       "felt_g": 1.727,
       "accel_raw_ms2": 7.315,
       "felt_g_raw": 1.719,
+      "rope_length_m": 18.069,
+      "rope_angle_deg": 27.12,
       "phase": "ramp",
       "impulsive": false
     },
@@ -3347,6 +3675,8 @@
       "felt_g": 1.685,
       "accel_raw_ms2": 6.852,
       "felt_g_raw": 1.672,
+      "rope_length_m": 18.069,
+      "rope_angle_deg": 27.05,
       "phase": "ramp",
       "impulsive": false
     },
@@ -3368,6 +3698,8 @@
       "felt_g": 1.644,
       "accel_raw_ms2": 6.79,
       "felt_g_raw": 1.671,
+      "rope_length_m": 18.07,
+      "rope_angle_deg": 26.96,
       "phase": "ramp",
       "impulsive": false
     },
@@ -3389,6 +3721,8 @@
       "felt_g": 1.606,
       "accel_raw_ms2": 5.939,
       "felt_g_raw": 1.587,
+      "rope_length_m": 18.068,
+      "rope_angle_deg": 26.88,
       "phase": "ramp",
       "impulsive": false
     },
@@ -3410,6 +3744,8 @@
       "felt_g": 1.576,
       "accel_raw_ms2": 5.566,
       "felt_g_raw": 1.555,
+      "rope_length_m": 18.068,
+      "rope_angle_deg": 26.79,
       "phase": "ramp",
       "impulsive": false
     },
@@ -3431,6 +3767,8 @@
       "felt_g": 1.546,
       "accel_raw_ms2": 5.516,
       "felt_g_raw": 1.557,
+      "rope_length_m": 18.065,
+      "rope_angle_deg": 26.7,
       "phase": "ramp",
       "impulsive": false
     },
@@ -3452,6 +3790,8 @@
       "felt_g": 1.521,
       "accel_raw_ms2": 4.862,
       "felt_g_raw": 1.495,
+      "rope_length_m": 18.062,
+      "rope_angle_deg": 26.6,
       "phase": "ramp",
       "impulsive": false
     },
@@ -3473,6 +3813,8 @@
       "felt_g": 1.497,
       "accel_raw_ms2": 5.572,
       "felt_g_raw": 1.568,
+      "rope_length_m": 18.057,
+      "rope_angle_deg": 26.5,
       "phase": "ramp",
       "impulsive": false
     },
@@ -3494,6 +3836,8 @@
       "felt_g": 1.469,
       "accel_raw_ms2": 3.932,
       "felt_g_raw": 1.401,
+      "rope_length_m": 18.051,
+      "rope_angle_deg": 26.4,
       "phase": "ramp",
       "impulsive": false
     },
@@ -3515,6 +3859,8 @@
       "felt_g": 1.439,
       "accel_raw_ms2": 4.802,
       "felt_g_raw": 1.49,
+      "rope_length_m": 18.045,
+      "rope_angle_deg": 26.29,
       "phase": "ramp",
       "impulsive": false
     },
@@ -3536,6 +3882,8 @@
       "felt_g": 1.406,
       "accel_raw_ms2": 3.777,
       "felt_g_raw": 1.385,
+      "rope_length_m": 18.037,
+      "rope_angle_deg": 26.19,
       "phase": "ramp",
       "impulsive": false
     },
@@ -3557,6 +3905,8 @@
       "felt_g": 1.374,
       "accel_raw_ms2": 3.631,
       "felt_g_raw": 1.37,
+      "rope_length_m": 18.03,
+      "rope_angle_deg": 26.08,
       "phase": "ramp",
       "impulsive": false
     },
@@ -3578,6 +3928,8 @@
       "felt_g": 1.345,
       "accel_raw_ms2": 3.529,
       "felt_g_raw": 1.36,
+      "rope_length_m": 18.019,
+      "rope_angle_deg": 25.97,
       "phase": "ramp",
       "impulsive": false
     },
@@ -3599,6 +3951,8 @@
       "felt_g": 1.314,
       "accel_raw_ms2": 2.815,
       "felt_g_raw": 1.287,
+      "rope_length_m": 18.01,
+      "rope_angle_deg": 25.85,
       "phase": "ramp",
       "impulsive": false
     },
@@ -3620,6 +3974,8 @@
       "felt_g": 1.286,
       "accel_raw_ms2": 3.065,
       "felt_g_raw": 1.312,
+      "rope_length_m": 17.998,
+      "rope_angle_deg": 25.74,
       "phase": "ramp",
       "impulsive": false
     },
@@ -3641,6 +3997,8 @@
       "felt_g": 1.254,
       "accel_raw_ms2": 2.318,
       "felt_g_raw": 1.236,
+      "rope_length_m": 17.986,
+      "rope_angle_deg": 25.62,
       "phase": "ramp",
       "impulsive": false
     },
@@ -3662,6 +4020,8 @@
       "felt_g": 1.222,
       "accel_raw_ms2": 2.381,
       "felt_g_raw": 1.243,
+      "rope_length_m": 17.974,
+      "rope_angle_deg": 25.5,
       "phase": "ramp",
       "impulsive": false
     },
@@ -3683,6 +4043,8 @@
       "felt_g": 1.191,
       "accel_raw_ms2": 1.843,
       "felt_g_raw": 1.188,
+      "rope_length_m": 17.961,
+      "rope_angle_deg": 25.38,
       "phase": "ramp",
       "impulsive": false
     },
@@ -3704,6 +4066,8 @@
       "felt_g": 1.159,
       "accel_raw_ms2": 1.391,
       "felt_g_raw": 1.142,
+      "rope_length_m": 17.946,
+      "rope_angle_deg": 25.26,
       "phase": "ramp",
       "impulsive": false
     },
@@ -3725,6 +4089,8 @@
       "felt_g": 1.13,
       "accel_raw_ms2": 1.242,
       "felt_g_raw": 1.127,
+      "rope_length_m": 17.931,
+      "rope_angle_deg": 25.14,
       "phase": "ramp",
       "impulsive": false
     },
@@ -3746,6 +4112,8 @@
       "felt_g": 1.098,
       "accel_raw_ms2": 1.076,
       "felt_g_raw": 1.11,
+      "rope_length_m": 17.916,
+      "rope_angle_deg": 25.01,
       "phase": "ramp",
       "impulsive": false
     },
@@ -3767,6 +4135,8 @@
       "felt_g": 1.068,
       "accel_raw_ms2": 0.783,
       "felt_g_raw": 1.08,
+      "rope_length_m": 17.901,
+      "rope_angle_deg": 24.89,
       "phase": "ramp",
       "impulsive": false
     },
@@ -3788,6 +4158,8 @@
       "felt_g": 1.037,
       "accel_raw_ms2": 0.333,
       "felt_g_raw": 1.034,
+      "rope_length_m": 17.884,
+      "rope_angle_deg": 24.76,
       "phase": "ramp",
       "impulsive": false
     },
@@ -3809,6 +4181,8 @@
       "felt_g": 1.005,
       "accel_raw_ms2": 0.246,
       "felt_g_raw": 0.975,
+      "rope_length_m": 17.868,
+      "rope_angle_deg": 24.64,
       "phase": "ramp",
       "impulsive": false
     },
@@ -3830,6 +4204,8 @@
       "felt_g": 0.974,
       "accel_raw_ms2": 0.055,
       "felt_g_raw": 1.006,
+      "rope_length_m": 17.851,
+      "rope_angle_deg": 24.51,
       "phase": "ramp",
       "impulsive": false
     },
@@ -3851,6 +4227,8 @@
       "felt_g": 0.944,
       "accel_raw_ms2": 0.757,
       "felt_g_raw": 0.923,
+      "rope_length_m": 17.833,
+      "rope_angle_deg": 24.39,
       "phase": "ramp",
       "impulsive": false
     },
@@ -3872,6 +4250,8 @@
       "felt_g": 0.944,
       "accel_raw_ms2": 0.624,
       "felt_g_raw": 0.936,
+      "rope_length_m": 17.815,
+      "rope_angle_deg": 24.27,
       "phase": "ramp",
       "impulsive": true,
       "note": "keyframed transition - impulsive, magnitude depends on frame rate"
@@ -3894,6 +4274,8 @@
       "felt_g": 0.944,
       "accel_raw_ms2": 1.229,
       "felt_g_raw": 0.875,
+      "rope_length_m": 17.798,
+      "rope_angle_deg": 24.14,
       "phase": "ramp",
       "impulsive": true,
       "note": "keyframed transition - impulsive, magnitude depends on frame rate"
@@ -3916,6 +4298,8 @@
       "felt_g": 0.944,
       "accel_raw_ms2": 1.553,
       "felt_g_raw": 0.842,
+      "rope_length_m": 17.779,
+      "rope_angle_deg": 24.02,
       "phase": "ramp",
       "impulsive": true,
       "note": "keyframed transition - impulsive, magnitude depends on frame rate"
@@ -3938,6 +4322,8 @@
       "felt_g": 0.944,
       "accel_raw_ms2": 0.0,
       "felt_g_raw": 1.0,
+      "rope_length_m": 17.724,
+      "rope_angle_deg": 23.92,
       "phase": "ramp",
       "impulsive": true,
       "note": "keyframed transition - impulsive, magnitude depends on frame rate"
@@ -3960,6 +4346,8 @@
       "felt_g": 0.0,
       "accel_raw_ms2": 0.0,
       "felt_g_raw": 1.0,
+      "rope_length_m": 17.844,
+      "rope_angle_deg": 23.78,
       "phase": "air",
       "impulsive": true,
       "note": "keyframed transition - impulsive, magnitude depends on frame rate"
@@ -3982,6 +4370,8 @@
       "felt_g": 0.0,
       "accel_raw_ms2": 9.81,
       "felt_g_raw": 0.0,
+      "rope_length_m": 17.825,
+      "rope_angle_deg": 23.67,
       "phase": "air",
       "impulsive": true,
       "note": "keyframed transition - impulsive, magnitude depends on frame rate"
@@ -4004,6 +4394,8 @@
       "felt_g": 0.0,
       "accel_raw_ms2": 9.81,
       "felt_g_raw": 0.0,
+      "rope_length_m": 17.805,
+      "rope_angle_deg": 23.56,
       "phase": "air_fs360",
       "impulsive": true,
       "note": "keyframed transition - impulsive, magnitude depends on frame rate"
@@ -4026,6 +4418,8 @@
       "felt_g": 0.0,
       "accel_raw_ms2": 9.81,
       "felt_g_raw": 0.0,
+      "rope_length_m": 17.783,
+      "rope_angle_deg": 23.46,
       "phase": "air_fs360",
       "impulsive": true,
       "note": "keyframed transition - impulsive, magnitude depends on frame rate"
@@ -4048,6 +4442,8 @@
       "felt_g": 0.0,
       "accel_raw_ms2": 9.81,
       "felt_g_raw": 0.0,
+      "rope_length_m": 17.76,
+      "rope_angle_deg": 23.37,
       "phase": "air_fs360",
       "impulsive": true,
       "note": "keyframed transition - impulsive, magnitude depends on frame rate"
@@ -4070,6 +4466,8 @@
       "felt_g": 0.0,
       "accel_raw_ms2": 9.81,
       "felt_g_raw": 0.0,
+      "rope_length_m": 17.737,
+      "rope_angle_deg": 23.29,
       "phase": "air_fs360",
       "impulsive": false
     },
@@ -4091,6 +4489,8 @@
       "felt_g": 0.0,
       "accel_raw_ms2": 9.81,
       "felt_g_raw": 0.0,
+      "rope_length_m": 17.713,
+      "rope_angle_deg": 23.22,
       "phase": "air_fs360",
       "impulsive": false
     },
@@ -4112,6 +4512,8 @@
       "felt_g": 0.0,
       "accel_raw_ms2": 9.81,
       "felt_g_raw": 0.0,
+      "rope_length_m": 17.688,
+      "rope_angle_deg": 23.16,
       "phase": "air_fs360",
       "impulsive": false
     },
@@ -4133,6 +4535,8 @@
       "felt_g": 0.0,
       "accel_raw_ms2": 9.81,
       "felt_g_raw": 0.0,
+      "rope_length_m": 17.661,
+      "rope_angle_deg": 23.11,
       "phase": "air_fs360",
       "impulsive": false
     },
@@ -4154,6 +4558,8 @@
       "felt_g": 0.0,
       "accel_raw_ms2": 9.81,
       "felt_g_raw": 0.0,
+      "rope_length_m": 17.634,
+      "rope_angle_deg": 23.08,
       "phase": "air_fs360",
       "impulsive": false
     },
@@ -4175,6 +4581,8 @@
       "felt_g": 0.0,
       "accel_raw_ms2": 9.81,
       "felt_g_raw": 0.0,
+      "rope_length_m": 17.607,
+      "rope_angle_deg": 23.05,
       "phase": "air_fs360",
       "impulsive": false
     },
@@ -4196,6 +4604,8 @@
       "felt_g": 0.0,
       "accel_raw_ms2": 9.81,
       "felt_g_raw": 0.0,
+      "rope_length_m": 17.58,
+      "rope_angle_deg": 23.03,
       "phase": "air_fs360",
       "impulsive": false
     },
@@ -4217,6 +4627,8 @@
       "felt_g": 0.0,
       "accel_raw_ms2": 9.81,
       "felt_g_raw": 0.0,
+      "rope_length_m": 17.555,
+      "rope_angle_deg": 23.02,
       "phase": "air_fs360",
       "impulsive": false
     },
@@ -4238,6 +4650,8 @@
       "felt_g": 0.0,
       "accel_raw_ms2": 9.81,
       "felt_g_raw": 0.0,
+      "rope_length_m": 17.534,
+      "rope_angle_deg": 23.02,
       "phase": "air_fs360",
       "impulsive": false
     },
@@ -4259,6 +4673,8 @@
       "felt_g": 0.0,
       "accel_raw_ms2": 9.81,
       "felt_g_raw": 0.0,
+      "rope_length_m": 17.517,
+      "rope_angle_deg": 23.02,
       "phase": "air_fs360",
       "impulsive": false
     },
@@ -4280,6 +4696,8 @@
       "felt_g": 0.0,
       "accel_raw_ms2": 9.81,
       "felt_g_raw": 0.0,
+      "rope_length_m": 17.505,
+      "rope_angle_deg": 23.03,
       "phase": "air_fs360",
       "impulsive": false
     },
@@ -4301,6 +4719,8 @@
       "felt_g": 0.0,
       "accel_raw_ms2": 9.81,
       "felt_g_raw": 0.0,
+      "rope_length_m": 17.501,
+      "rope_angle_deg": 23.04,
       "phase": "air_fs360",
       "impulsive": false
     },
@@ -4322,6 +4742,8 @@
       "felt_g": 0.0,
       "accel_raw_ms2": 9.81,
       "felt_g_raw": 0.0,
+      "rope_length_m": 17.504,
+      "rope_angle_deg": 23.05,
       "phase": "air_fs360",
       "impulsive": false
     },
@@ -4343,6 +4765,8 @@
       "felt_g": 0.0,
       "accel_raw_ms2": 9.81,
       "felt_g_raw": 0.0,
+      "rope_length_m": 17.514,
+      "rope_angle_deg": 23.05,
       "phase": "air_fs360",
       "impulsive": false
     },
@@ -4364,6 +4788,8 @@
       "felt_g": 0.0,
       "accel_raw_ms2": 9.81,
       "felt_g_raw": 0.0,
+      "rope_length_m": 17.53,
+      "rope_angle_deg": 23.06,
       "phase": "air_fs360",
       "impulsive": false
     },
@@ -4385,6 +4811,8 @@
       "felt_g": 0.0,
       "accel_raw_ms2": 9.81,
       "felt_g_raw": 0.0,
+      "rope_length_m": 17.55,
+      "rope_angle_deg": 23.08,
       "phase": "air_fs360",
       "impulsive": false
     },
@@ -4406,6 +4834,8 @@
       "felt_g": 0.0,
       "accel_raw_ms2": 9.81,
       "felt_g_raw": 0.0,
+      "rope_length_m": 17.572,
+      "rope_angle_deg": 23.1,
       "phase": "air_fs360",
       "impulsive": false
     },
@@ -4427,6 +4857,8 @@
       "felt_g": 0.0,
       "accel_raw_ms2": 9.81,
       "felt_g_raw": 0.0,
+      "rope_length_m": 17.594,
+      "rope_angle_deg": 23.13,
       "phase": "air_fs360",
       "impulsive": false
     },
@@ -4448,6 +4880,8 @@
       "felt_g": 0.0,
       "accel_raw_ms2": 9.81,
       "felt_g_raw": 0.0,
+      "rope_length_m": 17.613,
+      "rope_angle_deg": 23.17,
       "phase": "air_fs360",
       "impulsive": false
     },
@@ -4469,6 +4903,8 @@
       "felt_g": 0.0,
       "accel_raw_ms2": 9.81,
       "felt_g_raw": 0.0,
+      "rope_length_m": 17.631,
+      "rope_angle_deg": 23.22,
       "phase": "air_fs360",
       "impulsive": false
     },
@@ -4490,6 +4926,8 @@
       "felt_g": 0.0,
       "accel_raw_ms2": 9.81,
       "felt_g_raw": 0.0,
+      "rope_length_m": 17.646,
+      "rope_angle_deg": 23.28,
       "phase": "air_fs360",
       "impulsive": false
     },
@@ -4511,6 +4949,8 @@
       "felt_g": 0.0,
       "accel_raw_ms2": 9.81,
       "felt_g_raw": 0.0,
+      "rope_length_m": 17.659,
+      "rope_angle_deg": 23.36,
       "phase": "air_fs360",
       "impulsive": false
     },
@@ -4532,6 +4972,8 @@
       "felt_g": 0.0,
       "accel_raw_ms2": 9.81,
       "felt_g_raw": 0.0,
+      "rope_length_m": 17.669,
+      "rope_angle_deg": 23.45,
       "phase": "air_fs360",
       "impulsive": false
     },
@@ -4553,6 +4995,8 @@
       "felt_g": 0.0,
       "accel_raw_ms2": 9.81,
       "felt_g_raw": 0.0,
+      "rope_length_m": 17.677,
+      "rope_angle_deg": 23.55,
       "phase": "air_fs360",
       "impulsive": false
     },
@@ -4574,6 +5018,8 @@
       "felt_g": 0.0,
       "accel_raw_ms2": 9.81,
       "felt_g_raw": 0.0,
+      "rope_length_m": 17.684,
+      "rope_angle_deg": 23.67,
       "phase": "air_fs360",
       "impulsive": false
     },
@@ -4595,6 +5041,8 @@
       "felt_g": 0.0,
       "accel_raw_ms2": 9.81,
       "felt_g_raw": 0.0,
+      "rope_length_m": 17.69,
+      "rope_angle_deg": 23.8,
       "phase": "air_fs360",
       "impulsive": false
     },
@@ -4616,6 +5064,8 @@
       "felt_g": 0.0,
       "accel_raw_ms2": 9.81,
       "felt_g_raw": 0.0,
+      "rope_length_m": 17.694,
+      "rope_angle_deg": 23.93,
       "phase": "air_fs360",
       "impulsive": false
     },
@@ -4637,6 +5087,8 @@
       "felt_g": 0.0,
       "accel_raw_ms2": 9.81,
       "felt_g_raw": 0.0,
+      "rope_length_m": 17.696,
+      "rope_angle_deg": 24.09,
       "phase": "air_fs360",
       "impulsive": false
     },
@@ -4658,6 +5110,8 @@
       "felt_g": 0.0,
       "accel_raw_ms2": 9.81,
       "felt_g_raw": 0.0,
+      "rope_length_m": 17.697,
+      "rope_angle_deg": 24.25,
       "phase": "air_fs360",
       "impulsive": false
     },
@@ -4679,6 +5133,8 @@
       "felt_g": 0.0,
       "accel_raw_ms2": 9.81,
       "felt_g_raw": 0.0,
+      "rope_length_m": 17.696,
+      "rope_angle_deg": 24.43,
       "phase": "air_fs360",
       "impulsive": false
     },
@@ -4700,6 +5156,8 @@
       "felt_g": 0.0,
       "accel_raw_ms2": 9.81,
       "felt_g_raw": 0.0,
+      "rope_length_m": 17.695,
+      "rope_angle_deg": 24.62,
       "phase": "air_fs360",
       "impulsive": false
     },
@@ -4721,6 +5179,8 @@
       "felt_g": 0.0,
       "accel_raw_ms2": 9.81,
       "felt_g_raw": 0.0,
+      "rope_length_m": 17.692,
+      "rope_angle_deg": 24.82,
       "phase": "air_fs360",
       "impulsive": false
     },
@@ -4742,6 +5202,8 @@
       "felt_g": 0.0,
       "accel_raw_ms2": 9.81,
       "felt_g_raw": 0.0,
+      "rope_length_m": 17.691,
+      "rope_angle_deg": 25.03,
       "phase": "air_fs360",
       "impulsive": false
     },
@@ -4763,6 +5225,8 @@
       "felt_g": 0.0,
       "accel_raw_ms2": 9.81,
       "felt_g_raw": 0.0,
+      "rope_length_m": 17.691,
+      "rope_angle_deg": 25.25,
       "phase": "air_fs360",
       "impulsive": false
     },
@@ -4784,6 +5248,8 @@
       "felt_g": 0.0,
       "accel_raw_ms2": 9.81,
       "felt_g_raw": 0.0,
+      "rope_length_m": 17.694,
+      "rope_angle_deg": 25.48,
       "phase": "air_fs360",
       "impulsive": false
     },
@@ -4805,6 +5271,8 @@
       "felt_g": 0.0,
       "accel_raw_ms2": 9.81,
       "felt_g_raw": 0.0,
+      "rope_length_m": 17.699,
+      "rope_angle_deg": 25.71,
       "phase": "air_fs360",
       "impulsive": false
     },
@@ -4826,6 +5294,8 @@
       "felt_g": 0.0,
       "accel_raw_ms2": 9.81,
       "felt_g_raw": 0.0,
+      "rope_length_m": 17.709,
+      "rope_angle_deg": 25.95,
       "phase": "air_fs360",
       "impulsive": false
     },
@@ -4847,6 +5317,8 @@
       "felt_g": 0.0,
       "accel_raw_ms2": 9.81,
       "felt_g_raw": 0.0,
+      "rope_length_m": 17.722,
+      "rope_angle_deg": 26.19,
       "phase": "air_fs360",
       "impulsive": false
     },
@@ -4868,6 +5340,8 @@
       "felt_g": 0.0,
       "accel_raw_ms2": 9.81,
       "felt_g_raw": 0.0,
+      "rope_length_m": 17.739,
+      "rope_angle_deg": 26.44,
       "phase": "air_fs360",
       "impulsive": false
     },
@@ -4889,6 +5363,8 @@
       "felt_g": 0.0,
       "accel_raw_ms2": 9.81,
       "felt_g_raw": 0.0,
+      "rope_length_m": 17.76,
+      "rope_angle_deg": 26.68,
       "phase": "air_fs360",
       "impulsive": false
     },
@@ -4910,6 +5386,8 @@
       "felt_g": 0.0,
       "accel_raw_ms2": 9.81,
       "felt_g_raw": 0.0,
+      "rope_length_m": 17.786,
+      "rope_angle_deg": 26.93,
       "phase": "air_fs360",
       "impulsive": false
     },
@@ -4931,6 +5409,8 @@
       "felt_g": 0.0,
       "accel_raw_ms2": 9.81,
       "felt_g_raw": 0.0,
+      "rope_length_m": 17.815,
+      "rope_angle_deg": 27.19,
       "phase": "air_fs360",
       "impulsive": false
     },
@@ -4952,6 +5432,8 @@
       "felt_g": 0.0,
       "accel_raw_ms2": 9.81,
       "felt_g_raw": 0.0,
+      "rope_length_m": 17.848,
+      "rope_angle_deg": 27.44,
       "phase": "air_fs360",
       "impulsive": true,
       "note": "keyframed transition - impulsive, magnitude depends on frame rate"
@@ -4974,6 +5456,8 @@
       "felt_g": 0.0,
       "accel_raw_ms2": 9.81,
       "felt_g_raw": 0.0,
+      "rope_length_m": 17.884,
+      "rope_angle_deg": 27.7,
       "phase": "air",
       "impulsive": true,
       "note": "keyframed transition - impulsive, magnitude depends on frame rate"
@@ -4996,6 +5480,8 @@
       "felt_g": 0.0,
       "accel_raw_ms2": 9.81,
       "felt_g_raw": 0.0,
+      "rope_length_m": 17.923,
+      "rope_angle_deg": 27.96,
       "phase": "air",
       "impulsive": true,
       "note": "keyframed transition - impulsive, magnitude depends on frame rate"
@@ -5018,6 +5504,8 @@
       "felt_g": 0.0,
       "accel_raw_ms2": 0.0,
       "felt_g_raw": 1.0,
+      "rope_length_m": 17.965,
+      "rope_angle_deg": 28.22,
       "phase": "air",
       "impulsive": true,
       "note": "keyframed transition - impulsive, magnitude depends on frame rate"
@@ -5040,6 +5528,8 @@
       "felt_g": 3.695,
       "accel_raw_ms2": 0.0,
       "felt_g_raw": 1.0,
+      "rope_length_m": 18.036,
+      "rope_angle_deg": 28.48,
       "phase": "landing",
       "impulsive": true,
       "note": "keyframed transition - impulsive, magnitude depends on frame rate"
@@ -5062,6 +5552,8 @@
       "felt_g": 3.695,
       "accel_raw_ms2": 8.034,
       "felt_g_raw": 1.819,
+      "rope_length_m": 18.059,
+      "rope_angle_deg": 28.6,
       "phase": "landing",
       "impulsive": true,
       "note": "keyframed transition - impulsive, magnitude depends on frame rate"
@@ -5084,6 +5576,8 @@
       "felt_g": 3.695,
       "accel_raw_ms2": 15.665,
       "felt_g_raw": 2.597,
+      "rope_length_m": 18.085,
+      "rope_angle_deg": 28.7,
       "phase": "landing",
       "impulsive": true,
       "note": "keyframed transition - impulsive, magnitude depends on frame rate"
@@ -5106,6 +5600,8 @@
       "felt_g": 3.695,
       "accel_raw_ms2": 22.51,
       "felt_g_raw": 3.295,
+      "rope_length_m": 18.112,
+      "rope_angle_deg": 28.78,
       "phase": "landing",
       "impulsive": true,
       "note": "keyframed transition - impulsive, magnitude depends on frame rate"
@@ -5128,6 +5624,8 @@
       "felt_g": 3.695,
       "accel_raw_ms2": 28.227,
       "felt_g_raw": 3.877,
+      "rope_length_m": 18.138,
+      "rope_angle_deg": 28.83,
       "phase": "landing",
       "impulsive": true,
       "note": "keyframed transition - impulsive, magnitude depends on frame rate"
@@ -5150,6 +5648,8 @@
       "felt_g": 4.106,
       "accel_raw_ms2": 32.528,
       "felt_g_raw": 4.316,
+      "rope_length_m": 18.163,
+      "rope_angle_deg": 28.86,
       "phase": "landing",
       "impulsive": false
     },
@@ -5171,6 +5671,8 @@
       "felt_g": 4.361,
       "accel_raw_ms2": 35.199,
       "felt_g_raw": 4.588,
+      "rope_length_m": 18.186,
+      "rope_angle_deg": 28.86,
       "phase": "landing",
       "impulsive": false
     },
@@ -5192,6 +5694,8 @@
       "felt_g": 4.448,
       "accel_raw_ms2": 36.104,
       "felt_g_raw": 4.68,
+      "rope_length_m": 18.205,
+      "rope_angle_deg": 28.83,
       "phase": "landing",
       "impulsive": false
     },
@@ -5213,6 +5717,8 @@
       "felt_g": 4.361,
       "accel_raw_ms2": 35.199,
       "felt_g_raw": 4.588,
+      "rope_length_m": 18.219,
+      "rope_angle_deg": 28.78,
       "phase": "landing",
       "impulsive": false
     },
@@ -5234,6 +5740,8 @@
       "felt_g": 4.106,
       "accel_raw_ms2": 32.528,
       "felt_g_raw": 4.316,
+      "rope_length_m": 18.229,
+      "rope_angle_deg": 28.71,
       "phase": "landing",
       "impulsive": false
     },
@@ -5255,6 +5763,8 @@
       "felt_g": 3.62,
       "accel_raw_ms2": 28.227,
       "felt_g_raw": 3.877,
+      "rope_length_m": 18.233,
+      "rope_angle_deg": 28.61,
       "phase": "landing",
       "impulsive": false
     },
@@ -5276,6 +5786,8 @@
       "felt_g": 1.959,
       "accel_raw_ms2": 22.51,
       "felt_g_raw": 3.295,
+      "rope_length_m": 18.232,
+      "rope_angle_deg": 28.5,
       "phase": "landing",
       "impulsive": false
     },
@@ -5297,6 +5809,8 @@
       "felt_g": 0.028,
       "accel_raw_ms2": 15.665,
       "felt_g_raw": 2.597,
+      "rope_length_m": 18.225,
+      "rope_angle_deg": 28.39,
       "phase": "landing",
       "impulsive": false
     },
@@ -5318,6 +5832,8 @@
       "felt_g": 1.494,
       "accel_raw_ms2": 4.119,
       "felt_g_raw": 0.58,
+      "rope_length_m": 18.212,
+      "rope_angle_deg": 28.27,
       "phase": "landing",
       "impulsive": false
     },
@@ -5339,6 +5855,8 @@
       "felt_g": 2.191,
       "accel_raw_ms2": 165.367,
       "felt_g_raw": 15.857,
+      "rope_length_m": 18.21,
+      "rope_angle_deg": 28.14,
       "phase": "landing",
       "impulsive": false
     },
@@ -5360,6 +5878,8 @@
       "felt_g": 1.934,
       "accel_raw_ms2": 3.572,
       "felt_g_raw": 1.364,
+      "rope_length_m": 18.212,
+      "rope_angle_deg": 28.16,
       "phase": "runout",
       "impulsive": false
     },
@@ -5381,6 +5901,8 @@
       "felt_g": 0.885,
       "accel_raw_ms2": 5.237,
       "felt_g_raw": 1.534,
+      "rope_length_m": 18.215,
+      "rope_angle_deg": 28.18,
       "phase": "runout",
       "impulsive": false
     },
@@ -5402,6 +5924,8 @@
       "felt_g": 0.513,
       "accel_raw_ms2": 6.267,
       "felt_g_raw": 1.639,
+      "rope_length_m": 18.216,
+      "rope_angle_deg": 28.19,
       "phase": "runout",
       "impulsive": false
     },
@@ -5423,6 +5947,8 @@
       "felt_g": 1.567,
       "accel_raw_ms2": 6.537,
       "felt_g_raw": 1.666,
+      "rope_length_m": 18.217,
+      "rope_angle_deg": 28.2,
       "phase": "runout",
       "impulsive": false
     },
@@ -5444,6 +5970,8 @@
       "felt_g": 1.522,
       "accel_raw_ms2": 6.015,
       "felt_g_raw": 1.613,
+      "rope_length_m": 18.217,
+      "rope_angle_deg": 28.21,
       "phase": "runout",
       "impulsive": false
     },
@@ -5465,6 +5993,8 @@
       "felt_g": 1.413,
       "accel_raw_ms2": 4.763,
       "felt_g_raw": 1.486,
+      "rope_length_m": 18.217,
+      "rope_angle_deg": 28.21,
       "phase": "runout",
       "impulsive": false
     },
@@ -5486,6 +6016,8 @@
       "felt_g": 1.255,
       "accel_raw_ms2": 2.934,
       "felt_g_raw": 1.299,
+      "rope_length_m": 18.216,
+      "rope_angle_deg": 28.21,
       "phase": "runout",
       "impulsive": false
     },
@@ -5507,6 +6039,8 @@
       "felt_g": 1.065,
       "accel_raw_ms2": 0.749,
       "felt_g_raw": 1.076,
+      "rope_length_m": 18.214,
+      "rope_angle_deg": 28.2,
       "phase": "runout",
       "impulsive": false
     },
@@ -5528,6 +6062,8 @@
       "felt_g": 0.867,
       "accel_raw_ms2": 1.527,
       "felt_g_raw": 0.844,
+      "rope_length_m": 18.213,
+      "rope_angle_deg": 28.19,
       "phase": "runout",
       "impulsive": false
     },
@@ -5549,6 +6085,8 @@
       "felt_g": 0.686,
       "accel_raw_ms2": 3.618,
       "felt_g_raw": 0.631,
+      "rope_length_m": 18.212,
+      "rope_angle_deg": 28.19,
       "phase": "runout",
       "impulsive": false
     },
@@ -5570,6 +6108,8 @@
       "felt_g": 0.543,
       "accel_raw_ms2": 5.27,
       "felt_g_raw": 0.463,
+      "rope_length_m": 18.211,
+      "rope_angle_deg": 28.19,
       "phase": "runout",
       "impulsive": false
     },
@@ -5591,6 +6131,8 @@
       "felt_g": 0.455,
       "accel_raw_ms2": 6.283,
       "felt_g_raw": 0.36,
+      "rope_length_m": 18.211,
+      "rope_angle_deg": 28.19,
       "phase": "runout",
       "impulsive": false
     },
@@ -5612,6 +6154,8 @@
       "felt_g": 0.433,
       "accel_raw_ms2": 6.534,
       "felt_g_raw": 0.334,
+      "rope_length_m": 18.212,
+      "rope_angle_deg": 28.19,
       "phase": "runout",
       "impulsive": false
     },
@@ -5633,6 +6177,8 @@
       "felt_g": 0.48,
       "accel_raw_ms2": 5.993,
       "felt_g_raw": 0.389,
+      "rope_length_m": 18.214,
+      "rope_angle_deg": 28.2,
       "phase": "runout",
       "impulsive": false
     },
@@ -5654,6 +6200,8 @@
       "felt_g": 0.59,
       "accel_raw_ms2": 4.725,
       "felt_g_raw": 0.518,
+      "rope_length_m": 18.217,
+      "rope_angle_deg": 28.22,
       "phase": "runout",
       "impulsive": false
     },
@@ -5675,6 +6223,8 @@
       "felt_g": 0.75,
       "accel_raw_ms2": 2.884,
       "felt_g_raw": 0.706,
+      "rope_length_m": 18.22,
+      "rope_angle_deg": 28.24,
       "phase": "runout",
       "impulsive": false
     },
@@ -5696,6 +6246,8 @@
       "felt_g": 0.94,
       "accel_raw_ms2": 0.694,
       "felt_g_raw": 0.929,
+      "rope_length_m": 18.224,
+      "rope_angle_deg": 28.26,
       "phase": "runout",
       "impulsive": false
     },
@@ -5717,6 +6269,8 @@
       "felt_g": 1.137,
       "accel_raw_ms2": 1.581,
       "felt_g_raw": 1.161,
+      "rope_length_m": 18.228,
+      "rope_angle_deg": 28.28,
       "phase": "runout",
       "impulsive": false
     },
@@ -5738,6 +6292,8 @@
       "felt_g": 1.318,
       "accel_raw_ms2": 3.664,
       "felt_g_raw": 1.373,
+      "rope_length_m": 18.231,
+      "rope_angle_deg": 28.3,
       "phase": "runout",
       "impulsive": false
     },
@@ -5759,6 +6315,8 @@
       "felt_g": 1.46,
       "accel_raw_ms2": 5.302,
       "felt_g_raw": 1.541,
+      "rope_length_m": 18.235,
+      "rope_angle_deg": 28.32,
       "phase": "runout",
       "impulsive": false
     },
@@ -5780,6 +6338,8 @@
       "felt_g": 1.547,
       "accel_raw_ms2": 6.298,
       "felt_g_raw": 1.642,
+      "rope_length_m": 18.237,
+      "rope_angle_deg": 28.33,
       "phase": "runout",
       "impulsive": false
     },
@@ -5801,6 +6361,8 @@
       "felt_g": 1.567,
       "accel_raw_ms2": 6.53,
       "felt_g_raw": 1.666,
+      "rope_length_m": 18.239,
+      "rope_angle_deg": 28.34,
       "phase": "runout",
       "impulsive": false
     },
@@ -5822,6 +6384,8 @@
       "felt_g": 1.518,
       "accel_raw_ms2": 5.971,
       "felt_g_raw": 1.609,
+      "rope_length_m": 18.24,
+      "rope_angle_deg": 28.35,
       "phase": "runout",
       "impulsive": false
     },
@@ -5843,6 +6407,8 @@
       "felt_g": 1.407,
       "accel_raw_ms2": 4.687,
       "felt_g_raw": 1.478,
+      "rope_length_m": 18.24,
+      "rope_angle_deg": 28.35,
       "phase": "runout",
       "impulsive": false
     },
@@ -5864,6 +6430,8 @@
       "felt_g": 1.246,
       "accel_raw_ms2": 2.835,
       "felt_g_raw": 1.289,
+      "rope_length_m": 18.239,
+      "rope_angle_deg": 28.34,
       "phase": "runout",
       "impulsive": false
     },
@@ -5885,6 +6453,8 @@
       "felt_g": 1.055,
       "accel_raw_ms2": 0.639,
       "felt_g_raw": 1.065,
+      "rope_length_m": 18.239,
+      "rope_angle_deg": 28.34,
       "phase": "runout",
       "impulsive": false
     },
@@ -5906,6 +6476,8 @@
       "felt_g": 0.858,
       "accel_raw_ms2": 1.634,
       "felt_g_raw": 0.833,
+      "rope_length_m": 18.238,
+      "rope_angle_deg": 28.33,
       "phase": "runout",
       "impulsive": false
     },
@@ -5927,6 +6499,8 @@
       "felt_g": 0.678,
       "accel_raw_ms2": 3.709,
       "felt_g_raw": 0.622,
+      "rope_length_m": 18.237,
+      "rope_angle_deg": 28.33,
       "phase": "runout",
       "impulsive": false
     },
@@ -5948,6 +6522,8 @@
       "felt_g": 0.537,
       "accel_raw_ms2": 5.334,
       "felt_g_raw": 0.456,
+      "rope_length_m": 18.237,
+      "rope_angle_deg": 28.33,
       "phase": "runout",
       "impulsive": false
     },
@@ -5969,6 +6545,8 @@
       "felt_g": 0.452,
       "accel_raw_ms2": 6.313,
       "felt_g_raw": 0.356,
+      "rope_length_m": 18.238,
+      "rope_angle_deg": 28.33,
       "phase": "runout",
       "impulsive": false
     },
@@ -5990,6 +6568,8 @@
       "felt_g": 0.434,
       "accel_raw_ms2": 6.526,
       "felt_g_raw": 0.335,
+      "rope_length_m": 18.239,
+      "rope_angle_deg": 28.33,
       "phase": "runout",
       "impulsive": false
     },
@@ -6011,6 +6591,8 @@
       "felt_g": 0.484,
       "accel_raw_ms2": 5.948,
       "felt_g_raw": 0.394,
+      "rope_length_m": 18.241,
+      "rope_angle_deg": 28.35,
       "phase": "runout",
       "impulsive": false
     },
@@ -6032,6 +6614,8 @@
       "felt_g": 0.597,
       "accel_raw_ms2": 4.648,
       "felt_g_raw": 0.526,
+      "rope_length_m": 18.244,
+      "rope_angle_deg": 28.36,
       "phase": "runout",
       "impulsive": false
     },
@@ -6053,6 +6637,8 @@
       "felt_g": 0.758,
       "accel_raw_ms2": 2.785,
       "felt_g_raw": 0.716,
+      "rope_length_m": 18.248,
+      "rope_angle_deg": 28.38,
       "phase": "runout",
       "impulsive": false
     },
@@ -6074,6 +6660,8 @@
       "felt_g": 0.949,
       "accel_raw_ms2": 0.584,
       "felt_g_raw": 0.94,
+      "rope_length_m": 18.252,
+      "rope_angle_deg": 28.4,
       "phase": "runout",
       "impulsive": false
     },
@@ -6095,6 +6683,8 @@
       "felt_g": 1.146,
       "accel_raw_ms2": 1.687,
       "felt_g_raw": 1.172,
+      "rope_length_m": 18.256,
+      "rope_angle_deg": 28.43,
       "phase": "runout",
       "impulsive": false
     },
@@ -6116,6 +6706,8 @@
       "felt_g": 1.326,
       "accel_raw_ms2": 3.754,
       "felt_g_raw": 1.383,
+      "rope_length_m": 18.26,
+      "rope_angle_deg": 28.45,
       "phase": "runout",
       "impulsive": false
     },
@@ -6137,6 +6729,8 @@
       "felt_g": 1.466,
       "accel_raw_ms2": 5.366,
       "felt_g_raw": 1.547,
+      "rope_length_m": 18.264,
+      "rope_angle_deg": 28.46,
       "phase": "runout",
       "impulsive": false
     },
@@ -6158,6 +6752,8 @@
       "felt_g": 1.549,
       "accel_raw_ms2": 6.327,
       "felt_g_raw": 1.645,
+      "rope_length_m": 18.266,
+      "rope_angle_deg": 28.48,
       "phase": "runout",
       "impulsive": false
     },
@@ -6179,6 +6775,8 @@
       "felt_g": 1.566,
       "accel_raw_ms2": 6.521,
       "felt_g_raw": 1.665,
+      "rope_length_m": 18.268,
+      "rope_angle_deg": 28.49,
       "phase": "runout",
       "impulsive": false
     },
@@ -6200,6 +6798,8 @@
       "felt_g": 1.514,
       "accel_raw_ms2": 5.925,
       "felt_g_raw": 1.604,
+      "rope_length_m": 18.269,
+      "rope_angle_deg": 28.49,
       "phase": "runout",
       "impulsive": false
     },
@@ -6221,6 +6821,8 @@
       "felt_g": 1.4,
       "accel_raw_ms2": 4.609,
       "felt_g_raw": 1.47,
+      "rope_length_m": 18.27,
+      "rope_angle_deg": 28.49,
       "phase": "runout",
       "impulsive": false
     },
@@ -6242,6 +6844,8 @@
       "felt_g": 1.237,
       "accel_raw_ms2": 2.735,
       "felt_g_raw": 1.279,
+      "rope_length_m": 18.269,
+      "rope_angle_deg": 28.49,
       "phase": "runout",
       "impulsive": false
     },
@@ -6263,6 +6867,8 @@
       "felt_g": 1.046,
       "accel_raw_ms2": 0.53,
       "felt_g_raw": 1.054,
+      "rope_length_m": 18.268,
+      "rope_angle_deg": 28.48,
       "phase": "runout",
       "impulsive": false
     },
@@ -6284,6 +6890,8 @@
       "felt_g": 0.849,
       "accel_raw_ms2": 1.74,
       "felt_g_raw": 0.823,
+      "rope_length_m": 18.268,
+      "rope_angle_deg": 28.48,
       "phase": "runout",
       "impulsive": false
     },
@@ -6305,6 +6913,8 @@
       "felt_g": 0.67,
       "accel_raw_ms2": 3.799,
       "felt_g_raw": 0.613,
+      "rope_length_m": 18.267,
+      "rope_angle_deg": 28.48,
       "phase": "runout",
       "impulsive": false
     },
@@ -6326,6 +6936,8 @@
       "felt_g": 0.532,
       "accel_raw_ms2": 5.398,
       "felt_g_raw": 0.45,
+      "rope_length_m": 18.267,
+      "rope_angle_deg": 28.47,
       "phase": "runout",
       "impulsive": false
     },
@@ -6347,6 +6959,8 @@
       "felt_g": 0.45,
       "accel_raw_ms2": 6.341,
       "felt_g_raw": 0.354,
+      "rope_length_m": 18.268,
+      "rope_angle_deg": 28.48,
       "phase": "runout",
       "impulsive": false
     },
@@ -6368,6 +6982,8 @@
       "felt_g": 0.435,
       "accel_raw_ms2": 6.516,
       "felt_g_raw": 0.336,
+      "rope_length_m": 18.269,
+      "rope_angle_deg": 28.48,
       "phase": "runout",
       "impulsive": false
     },
@@ -6389,6 +7005,8 @@
       "felt_g": 0.488,
       "accel_raw_ms2": 5.901,
       "felt_g_raw": 0.398,
+      "rope_length_m": 18.272,
+      "rope_angle_deg": 28.5,
       "phase": "runout",
       "impulsive": false
     },
@@ -6410,6 +7028,8 @@
       "felt_g": 0.603,
       "accel_raw_ms2": 4.57,
       "felt_g_raw": 0.534,
+      "rope_length_m": 18.275,
+      "rope_angle_deg": 28.51,
       "phase": "runout",
       "impulsive": false
     },
@@ -6431,6 +7051,8 @@
       "felt_g": 0.767,
       "accel_raw_ms2": 2.685,
       "felt_g_raw": 0.726,
+      "rope_length_m": 18.278,
+      "rope_angle_deg": 28.53,
       "phase": "runout",
       "impulsive": false
     },
@@ -6452,6 +7074,8 @@
       "felt_g": 0.959,
       "accel_raw_ms2": 0.475,
       "felt_g_raw": 0.952,
+      "rope_length_m": 18.283,
+      "rope_angle_deg": 28.56,
       "phase": "runout",
       "impulsive": false
     },
@@ -6473,6 +7097,8 @@
       "felt_g": 1.156,
       "accel_raw_ms2": 1.793,
       "felt_g_raw": 1.183,
+      "rope_length_m": 18.287,
+      "rope_angle_deg": 28.58,
       "phase": "runout",
       "impulsive": false
     },
@@ -6494,6 +7120,8 @@
       "felt_g": 1.334,
       "accel_raw_ms2": 3.844,
       "felt_g_raw": 1.392,
+      "rope_length_m": 18.291,
+      "rope_angle_deg": 28.6,
       "phase": "runout",
       "impulsive": false
     },
@@ -6515,6 +7143,8 @@
       "felt_g": 1.471,
       "accel_raw_ms2": 5.429,
       "felt_g_raw": 1.553,
+      "rope_length_m": 18.294,
+      "rope_angle_deg": 28.62,
       "phase": "runout",
       "impulsive": false
     },
@@ -6536,6 +7166,8 @@
       "felt_g": 1.471,
       "accel_raw_ms2": 6.355,
       "felt_g_raw": 1.648,
+      "rope_length_m": 18.297,
+      "rope_angle_deg": 28.64,
       "phase": "runout",
       "impulsive": false
     },
@@ -6557,6 +7189,8 @@
       "felt_g": 1.471,
       "accel_raw_ms2": 6.511,
       "felt_g_raw": 1.664,
+      "rope_length_m": 18.299,
+      "rope_angle_deg": 28.65,
       "phase": "runout",
       "impulsive": false
     },
@@ -6578,6 +7212,8 @@
       "felt_g": 1.471,
       "accel_raw_ms2": 5.877,
       "felt_g_raw": 1.599,
+      "rope_length_m": 18.3,
+      "rope_angle_deg": 28.65,
       "phase": "runout",
       "impulsive": false
     },
@@ -6599,6 +7235,8 @@
       "felt_g": 1.471,
       "accel_raw_ms2": 0.0,
       "felt_g_raw": 1.0,
+      "rope_length_m": 18.3,
+      "rope_angle_deg": 28.65,
       "phase": "runout",
       "impulsive": false
     }

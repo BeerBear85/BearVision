@@ -30,7 +30,19 @@ button.danger { color: #ff8e8e; }
 .panel-title small { color: #19d5aa; }
 .preview-content { height: calc(100% - 42px); display: flex; flex-direction: column; justify-content: center; align-items: center; position: relative; background: linear-gradient(145deg, #091d2b, #0b2b3f); color: #d9e8ef; }
 .preview-content p { color: #7998a9; max-width: 420px; text-align: center; }
+.video-stage { width: 100%; height: 100%; position: relative; display: flex; align-items: center; justify-content: center; background: #02080d; }
 .preview-content video { width: 100%; height: 100%; object-fit: contain; background: #02080d; }
+.tracking-overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.detector-measurement rect { fill: none; stroke: #35e06f; stroke-width: 2; vector-effect: non-scaling-stroke; }
+.detector-measurement text { fill: #35e06f; font: 700 6px ui-monospace, monospace; paint-order: stroke; stroke: #031019; stroke-width: 2px; }
+.kalman-estimate circle { fill: rgba(255, 67, 80, .08); stroke: #ff4350; stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.kalman-estimate line { stroke: #ff4350; stroke-width: 2; vector-effect: non-scaling-stroke; }
+.crop-window { fill: none; stroke: #48bfe3; stroke-width: 1.5; stroke-dasharray: 7 5; vector-effect: non-scaling-stroke; }
+.overlay-legend { position: absolute; right: 12px; top: 12px; display: flex; gap: 5px; padding: 6px; border: 1px solid #315267; border-radius: 6px; background: rgba(3, 16, 25, .88); font: 700 10px ui-monospace, monospace; }
+.overlay-legend span { padding: 3px 5px; border-left: 3px solid; }
+.overlay-legend .green { color: #35e06f; border-color: #35e06f; }
+.overlay-legend .red { color: #ff6f79; border-color: #ff4350; }
+.overlay-legend .cyan { color: #48bfe3; border-color: #48bfe3; }
 .sources { position: absolute; top: 12px; left: 12px; display: flex; flex-wrap: wrap; gap: 5px; max-width: calc(100% - 24px); }
 .sources span { padding: 4px 7px; border: 1px solid #315267; border-radius: 4px; background: rgba(5, 20, 33, .88); color: #b8d0dc; font: 650 10px ui-monospace, monospace; }
 .media-switcher { position: absolute; left: 12px; bottom: 12px; display: flex; align-items: center; gap: 6px; padding: 6px; border: 1px solid #315267; border-radius: 7px; background: rgba(5, 20, 33, .92); }

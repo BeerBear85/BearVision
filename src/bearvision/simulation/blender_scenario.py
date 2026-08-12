@@ -91,15 +91,18 @@ def generate_blender_scenario(
     rider_id = rider_id or f"rider-{identity_suffix}"
     camera_path = directory / f"{scene_name}_camera_info.yaml"
     video_path = directory / f"{scene_name}.mp4"
-    if not camera_path.is_file():
-        raise ValueError(f"camera information does not exist: {camera_path}")
     if not video_path.is_file():
         raise ValueError(f"scene video does not exist: {video_path}")
 
     motion = json.loads(motion_path.read_text(encoding="utf-8"))
-    camera_document = yaml.safe_load(camera_path.read_text(encoding="utf-8"))
-    if motion.get("schema_version") != "1.0":
-        raise ValueError("unsupported Blender rider-motion schema; expected 1.0")
+    has_external_camera = camera_path.is_file()
+    camera_document = (
+        yaml.safe_load(camera_path.read_text(encoding="utf-8"))
+        if has_external_camera
+        else motion
+    )
+    if motion.get("schema_version") not in {"1.0", "1.1"}:
+        raise ValueError("unsupported Blender rider-motion schema; expected 1.0 or 1.1")
     if camera_document.get("camera", {}).get("static") is not True:
         raise ValueError("blender-motion-v1 requires a static camera")
 
@@ -111,7 +114,9 @@ def generate_blender_scenario(
         motion.get("camera", {}).get("transform_world", {}).get("location_m"),
         "motion-file camera location",
     )
-    if any(abs(left - right) > 1e-6 for left, right in zip(camera_xyz, embedded_camera_xyz)):
+    if has_external_camera and any(
+        abs(left - right) > 1e-6 for left, right in zip(camera_xyz, embedded_camera_xyz)
+    ):
         raise ValueError("camera YAML and rider-motion JSON disagree on camera location")
 
     timing = motion.get("timing", {})
@@ -202,7 +207,9 @@ def generate_blender_scenario(
             "generated_from": {
                 "generator": "blender-motion-v1",
                 "motion_path": _repository_path(motion_path, root),
-                "camera_path": _repository_path(camera_path, root),
+                "camera_path": (
+                    _repository_path(camera_path, root) if has_external_camera else None
+                ),
                 "reference_rssi_dbm_at_1m": reference_rssi_dbm_at_1m,
                 "path_loss_exponent": path_loss_exponent,
                 "gravity_mps2": STANDARD_GRAVITY_MPS2,

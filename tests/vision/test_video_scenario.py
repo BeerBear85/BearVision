@@ -30,26 +30,46 @@ def test_recorded_video_drives_real_yolo_capture_and_rider_assignment(
     detected = [entry for entry in result.trace if entry.kind == "person_detected"]
     assert detected[0].at_s == pytest.approx(6.006, abs=0.01)
     assert result.captures
-    assert result.uploads[0].object_key == "rider-video/capture-video-frame-180.mp4"
-    output = tmp_path / "capture-video-frame-180.mp4"
+    assert result.uploads[0].object_key == (
+        "rider-video/capture-video-frame-180.virtual-cameraman.mp4"
+    )
+    output = tmp_path / "capture-video-frame-180.virtual-cameraman.mp4"
     assert output.is_file()
+    extracted = tmp_path / "capture-video-frame-180.mp4"
+    assert extracted.is_file()
+    tracking = tmp_path / "capture-video-frame-180.tracking.json"
+    debug = tmp_path / "capture-video-frame-180.tracking-debug.mp4"
+    assert tracking.is_file()
+    assert debug.is_file()
+    assert output.stat().st_size < extracted.stat().st_size
+    assert any(entry.kind == "virtual_cameraman_completed" for entry in result.trace)
+    tracking_events = [entry for entry in result.trace if entry.kind == "tracking_observation"]
+    assert tracking_events
+    assert tracking_events[0].payload["estimate"]
+    assert tracking_events[0].payload["confidence_radius_95_px"] > 0
     assert hashlib.sha256(source.read_bytes()).hexdigest() == source_hash
 
     output_capture = cv2.VideoCapture(str(output))
+    extracted_capture = cv2.VideoCapture(str(extracted))
     source_capture = cv2.VideoCapture(str(source))
     try:
-        output_duration = output_capture.get(cv2.CAP_PROP_FRAME_COUNT) / output_capture.get(
+        output_duration = extracted_capture.get(
+            cv2.CAP_PROP_FRAME_COUNT
+        ) / extracted_capture.get(
             cv2.CAP_PROP_FPS
         )
         source_capture.set(cv2.CAP_PROP_POS_MSEC, detected[0].at_s * 1000)
         source_ok, source_frame = source_capture.read()
-        output_ok, output_frame = output_capture.read()
-        assert source_ok and output_ok
+        extracted_ok, extracted_frame = extracted_capture.read()
+        processed_ok, processed_frame = output_capture.read()
+        assert source_ok and extracted_ok and processed_ok
         assert output_duration == pytest.approx(5.0, abs=0.1)
         mean_absolute_error = abs(
-            source_frame.astype("float32") - output_frame.astype("float32")
+            source_frame.astype("float32") - extracted_frame.astype("float32")
         ).mean()
         assert mean_absolute_error < 12
+        assert processed_frame.shape[:2] == (90, 160)
     finally:
         output_capture.release()
+        extracted_capture.release()
         source_capture.release()

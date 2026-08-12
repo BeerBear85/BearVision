@@ -130,7 +130,7 @@ class GeneratedScenarioSource(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
     generator: Literal["blender-motion-v1"]
     motion_path: str = Field(min_length=1)
-    camera_path: str = Field(min_length=1)
+    camera_path: str | None = Field(default=None, min_length=1)
     reference_rssi_dbm_at_1m: int = Field(ge=-127, le=20)
     path_loss_exponent: float = Field(gt=0)
     gravity_mps2: float = Field(gt=0)

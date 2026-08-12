@@ -22,9 +22,8 @@ def scene_dir(tmp_path: Path) -> Path:
 
     target = tmp_path / SCENE.relative_to(ROOT)
     target.mkdir(parents=True)
-    for suffix in ("_rider_motion.json", "_camera_info.yaml"):
-        source = next(SCENE.glob(f"*{suffix}"))
-        (target / source.name).write_bytes(source.read_bytes())
+    motion = next(SCENE.glob("*_rider_motion.json"))
+    (target / motion.name).write_bytes(motion.read_bytes())
     (target / "wakeboard_fs360_60fps.mp4").write_bytes(b"local-video-placeholder")
     return target
 
@@ -88,7 +87,13 @@ def test_generator_rejects_camera_metadata_disagreement(
 ) -> None:
     camera = scene_dir / "wakeboard_fs360_60fps_camera_info.yaml"
     camera.write_text(
-        camera.read_text(encoding="utf-8").replace("x: -8.0", "x: -9.0", 1),
+        "camera:\n"
+        "  static: true\n"
+        "  transform_world:\n"
+        "    location_m:\n"
+        "      x: -9.0\n"
+        "      y: -30.5\n"
+        "      z: 3.0\n",
         encoding="utf-8",
     )
 

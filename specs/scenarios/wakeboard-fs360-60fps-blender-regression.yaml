@@ -499,7 +499,6 @@ synthetic_bear_tags:
 generated_from:
   generator: blender-motion-v1
   motion_path: test/blender_scenes/wakeboard_fs360_60fps/wakeboard_fs360_60fps_rider_motion.json
-  camera_path: test/blender_scenes/wakeboard_fs360_60fps/wakeboard_fs360_60fps_camera_info.yaml
   reference_rssi_dbm_at_1m: -50
   path_loss_exponent: 2.0
   gravity_mps2: 9.80665

@@ -10,6 +10,7 @@ from bearvision.config import AssignmentConfig
 from bearvision.config.models import ClipExtractionConfig
 from bearvision.contracts import ScenarioDefinition
 from bearvision.edge.orchestrator import BearVisionOrchestrator, OrchestrationResult
+from bearvision.processing import VirtualCameramanProcessor
 
 from .adapters import InMemoryStorage, InMemoryTagRegistry, SimulatedTagScanner, VirtualClock
 from .engine import TraceEntry
@@ -30,6 +31,7 @@ class VideoScenarioRunner:
         camera: RecordedVideoCamera,
         frame_source: RecordedVideoFrameSource,
         storage: InMemoryStorage,
+        post_processor: VirtualCameramanProcessor,
     ) -> None:
         self.scenario = scenario
         self.orchestrator = orchestrator
@@ -37,6 +39,7 @@ class VideoScenarioRunner:
         self.camera = camera
         self.frame_source = frame_source
         self.storage = storage
+        self.post_processor = post_processor
 
     @classmethod
     def from_scenario(
@@ -71,10 +74,11 @@ class VideoScenarioRunner:
         handler = DnnHandler(scenario.detector.model)
         handler.confidence_threshold = scenario.detector.confidence_threshold
         handler.init()
+        clipper = FfmpegVideoClipper(ClipExtractionConfig())
         camera = RecordedVideoCamera(
             video_path,
             clock,
-            clipper=FfmpegVideoClipper(ClipExtractionConfig()),
+            clipper=clipper,
             capture_dir=capture_dir or root / "temp/captures",
         )
         frame_source = RecordedVideoFrameSource(sample_fps=scenario.video.sample_fps)
@@ -91,6 +95,19 @@ class VideoScenarioRunner:
             observation_retention_s=max(30.0, scenario.duration_s + recording_duration_s),
             frame_source=frame_source,
             ble_logging_enabled=False,
+            # The recorded-video scenario uploads only after the virtual
+            # cameraman has produced the smaller processed clip.
+            upload_enabled=False,
+        )
+        post_handler = DnnHandler(scenario.detector.model)
+        post_handler.confidence_threshold = min(
+            0.25, scenario.detector.confidence_threshold
+        )
+        post_handler.init()
+        post_processor = VirtualCameramanProcessor(
+            YoloDetectorAdapter(post_handler),
+            clock,
+            ffmpeg_path=clipper.ffmpeg_path,
         )
         for observation in observations:
             orchestrator.add_tag_observation(observation)
@@ -101,6 +118,7 @@ class VideoScenarioRunner:
             camera=camera,
             frame_source=frame_source,
             storage=storage,
+            post_processor=post_processor,
         )
 
     def run(self) -> ScenarioRunResult:
@@ -123,14 +141,24 @@ class VideoScenarioRunner:
                 )
                 if self.clock.monotonic() < frame.observed_at_monotonic_s:
                     self.clock.advance_to(frame.observed_at_monotonic_s)
-                result = await self.orchestrator.process_frame(frame)
-                if result is not None:
+                detections = await self.orchestrator.detector.detect(frame)
+                if detections:
+                    detection = detections[0]
+                    result = await self.orchestrator.handle_detection(detection)
                     detection_times_s.append(frame.observed_at_monotonic_s)
                     trace_events.append(
                         (
                             frame.observed_at_monotonic_s,
                             "person_detected",
-                            {"frame_id": frame.frame_id},
+                            {
+                                "frame_id": frame.frame_id,
+                                "confidence": detection.confidence,
+                                "bounding_box": detection.bounding_box.model_dump(mode="json"),
+                                "coordinate_space": {
+                                    "width_px": frame.width_px,
+                                    "height_px": frame.height_px,
+                                },
+                            },
                         )
                     )
                     results.setdefault(result.request_id, result)
@@ -141,6 +169,15 @@ class VideoScenarioRunner:
             await self.orchestrator.stop()
 
         for result in results.values():
+            processed = await self.post_processor.process(
+                result.media,
+                result.media.local_path.parent if result.media.local_path else Path("temp/captures"),
+            )
+            owner = result.assignment.rider_id or result.assignment.status.value
+            receipt = await self.storage.upload(
+                processed.media,
+                f"{owner}/{processed.media.asset.filename}",
+            )
             trace_events.extend(
                 [
                     (
@@ -175,16 +212,42 @@ class VideoScenarioRunner:
                             ),
                         },
                     ),
-                ]
-            )
-            if result.upload is not None:
-                trace_events.append(
+                    (
+                        result.clip_end_monotonic_s,
+                        "virtual_cameraman_completed",
+                        {
+                            "source_filename": result.media.asset.filename,
+                            "processed_filename": processed.media.asset.filename,
+                            "tracking_filename": processed.metadata_path.name,
+                            "debug_video_filename": processed.debug_video_path.name,
+                            "source_size_bytes": processed.source_size_bytes,
+                            "processed_size_bytes": processed.processed_size_bytes,
+                            "size_reduction_ratio": processed.reduction_ratio,
+                            "output_width_px": self.post_processor.config.output_width_px,
+                            "output_height_px": self.post_processor.config.output_height_px,
+                        },
+                    ),
                     (
                         result.clip_end_monotonic_s,
                         "clip_uploaded",
                         {
-                            "asset_id": result.upload.asset_id,
-                            "object_key": result.upload.object_key,
+                            "asset_id": receipt.asset_id,
+                            "object_key": receipt.object_key,
+                        },
+                    ),
+                ]
+            )
+            for tracking_frame in processed.tracking_frames:
+                trace_events.append(
+                    (
+                        result.clip_start_monotonic_s + tracking_frame.at_s,
+                        "tracking_observation",
+                        {
+                            **tracking_frame.to_dict(),
+                            "coordinate_space": {
+                                "width_px": processed.source_width_px,
+                                "height_px": processed.source_height_px,
+                            },
                         },
                     )
                 )
