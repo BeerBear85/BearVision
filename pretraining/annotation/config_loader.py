@@ -22,7 +22,12 @@ from status import track
 def load_config(path: str) -> Dict[str, Any]:
     """Load YAML configuration file."""
     with open(path, "r", encoding="utf-8") as f:
-        return yaml.safe_load(f)
+        data = yaml.safe_load(f) or {}
+    if data.get("config_schema_version") != "2.0":
+        raise ValueError("unsupported or missing annotation configuration schema version")
+    if data.get("config_kind") != "bearvision-annotation":
+        raise ValueError("configuration kind is not bearvision-annotation")
+    return data
 
 
 @track

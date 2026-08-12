@@ -2,7 +2,6 @@ import asyncio
 from pathlib import Path
 from types import SimpleNamespace
 
-import pytest
 
 from bearvision.adapters import (
     BoxStorageAdapter,
@@ -144,24 +143,17 @@ def test_existing_beacon_wrapper_converts_acceleration_and_voltage() -> None:
     asyncio.run(exercise())
 
 
-def test_real_composition_wraps_existing_implementations(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    import bearvision.edge.composition as composition
-
-    implementations = {
-        "GoProController": SimpleNamespace(GoProController=StubGoPro),
-        "ble_beacon_handler": SimpleNamespace(BleBeaconHandler=StubBeacon),
-        "DnnHandler": SimpleNamespace(DnnHandler=StubDnn),
-        "BoxHandler": SimpleNamespace(BoxHandler=StubBox),
-    }
-    monkeypatch.setattr(composition.importlib, "import_module", implementations.__getitem__)
+def test_real_composition_wraps_existing_implementations(tmp_path: Path) -> None:
     config = load_edge_config(Path(__file__).resolve().parents[2] / "config" / "edge.yaml")
 
     components = build_real_system(
         config,
         capture_dir=tmp_path / "captures",
         scratch_dir=tmp_path / "scratch",
+        gopro_factory=StubGoPro,
+        beacon_factory=StubBeacon,
+        detector_factory=StubDnn,
+        box_factory=StubBox,
     )
 
     assert isinstance(components.camera, GoProCameraAdapter)
@@ -174,6 +166,10 @@ def test_real_composition_wraps_existing_implementations(
         config,
         capture_dir=tmp_path / "captures",
         scratch_dir=tmp_path / "scratch",
+        gopro_factory=StubGoPro,
+        beacon_factory=StubBeacon,
+        detector_factory=StubDnn,
+        box_factory=StubBox,
     )
     assert isinstance(orchestrator, BearVisionOrchestrator)
     assert orchestrator.recording_duration_s == config.recording.post_detection_duration_s

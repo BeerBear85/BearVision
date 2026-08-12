@@ -13,7 +13,54 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0"]
+edge = [
+    "numpy>=2,<3",
+    "opencv-python-headless>=4.10,<5",
+    "bleak>=0.22,<2",
+    "open-gopro>=0.18,<1",
+    "boxsdk[jwt]>=3.9,<4",
+]
+gui = ["PySide6>=6.8,<7", "opencv-python>=4.10,<5"]
+training = ["numpy>=2,<3", "scipy>=1.14,<2", "ultralytics>=8.3,<9"]
+dev = [
+    "pytest>=8,<10",
+    "pytest-cov>=6,<8",
+    "ruff>=0.12,<1",
+    "mypy>=1.17,<2",
+    "types-PyYAML>=6.0,<7",
+]
+
+[project.scripts]
+bearvision-edge = "bearvision.cli:edge_main"
+bearvision-simulate = "bearvision.cli:simulate_main"
+bearvision-migrate-config = "bearvision.config.migrate:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+extend-exclude = ["code", "pretraining", "tools"]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]
+
+[tool.mypy]
+python_version = "3.12"
+packages = ["bearvision"]
+check_untyped_defs = true
+ignore_missing_imports = true
+exclude = ["src/bearvision/integrations"]
+
+[tool.coverage.run]
+source = ["bearvision"]
+omit = [
+    "src/bearvision/integrations/*",
+    "src/bearvision/adapters/opencv_frames.py",
+    "src/bearvision/cli.py",
+]
+
+[tool.coverage.report]
+fail_under = 80
+show_missing = true

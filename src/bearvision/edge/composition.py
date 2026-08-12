@@ -3,22 +3,39 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-import importlib
 from pathlib import Path
+from collections.abc import Iterable
+from typing import Any, Callable, TYPE_CHECKING
 
 from bearvision.adapters import (
     BoxStorageAdapter,
+    BleakKBeaconSource,
     GoProCameraAdapter,
     KBeaconTagScannerAdapter,
+    OpenCvPreviewFrameSource,
     SystemClock,
     YoloDetectorAdapter,
 )
 from bearvision.config import AssignmentConfig, EdgeConfig
 from bearvision.ports import Camera, Clock, Detector, Storage, TagRegistry, TagScanner
-from bearvision.simulation import ClosedLoopScenarioRunner
+from bearvision.ports import FrameSource
 from bearvision.contracts import ScenarioDefinition, TagRegistryEntry
-from bearvision.simulation import InMemoryTagRegistry
 from .orchestrator import BearVisionOrchestrator
+
+if TYPE_CHECKING:
+    from bearvision.simulation.runner import ClosedLoopScenarioRunner
+
+
+class ConfiguredTagRegistry:
+    def __init__(self, entries: Iterable[TagRegistryEntry]) -> None:
+        self._entries = {entry.tag_id: entry for entry in entries}
+
+    def resolve(self, tag_id: str) -> TagRegistryEntry | None:
+        entry = self._entries.get(tag_id)
+        return entry if entry is not None and entry.enabled else None
+
+    def entries(self) -> tuple[TagRegistryEntry, ...]:
+        return tuple(self._entries.values())
 
 
 @dataclass(frozen=True, slots=True)
@@ -30,12 +47,15 @@ class RealEdgeComponents:
     storage: Storage
     registry: TagRegistry
     assignment_policy: AssignmentConfig
+    frame_source: FrameSource
 
 
 def build_behavioral_system(
     scenario: ScenarioDefinition,
     assignment_policy: AssignmentConfig | None = None,
-) -> ClosedLoopScenarioRunner:
+) -> "ClosedLoopScenarioRunner":
+    from bearvision.simulation.runner import ClosedLoopScenarioRunner
+
     return ClosedLoopScenarioRunner.from_scenario(
         scenario,
         assignment_policy=assignment_policy,
@@ -47,15 +67,29 @@ def build_real_system(
     *,
     capture_dir: str | Path,
     scratch_dir: str | Path,
+    gopro_factory: Callable[[], Any] | None = None,
+    beacon_factory: Callable[[], Any] | None = None,
+    detector_factory: Callable[[str], Any] | None = None,
+    box_factory: Callable[[dict[str, dict[str, str]]], Any] | None = None,
 ) -> RealEdgeComponents:
     """Instantiate existing hardware implementations behind BearVision 3 ports."""
 
-    gopro_type = importlib.import_module("GoProController").GoProController
-    beacon_type = importlib.import_module("ble_beacon_handler").BleBeaconHandler
-    detector_type = importlib.import_module("DnnHandler").DnnHandler
-    box_type = importlib.import_module("BoxHandler").BoxHandler
+    if gopro_factory is None:
+        from bearvision.integrations.gopro_controller import GoProController
 
-    legacy_detector = detector_type(config.detection.model)
+        gopro_factory = GoProController
+    if beacon_factory is None:
+        beacon_factory = BleakKBeaconSource
+    if detector_factory is None:
+        from bearvision.integrations.opencv_dnn import DnnHandler
+
+        detector_factory = DnnHandler
+    if box_factory is None:
+        from bearvision.integrations.box_handler import BoxHandler
+
+        box_factory = BoxHandler
+
+    legacy_detector = detector_factory(config.detection.model)
     legacy_detector.confidence_threshold = config.detection.confidence_threshold
     legacy_detector.init()
     box_config = {
@@ -66,18 +100,29 @@ def build_real_system(
         "BOX": {"root_folder": config.storage.root_folder},
     }
     clock = SystemClock()
-    registry = InMemoryTagRegistry(
+    registry = ConfiguredTagRegistry(
         TagRegistryEntry(tag_id=item.tag_id, rider_id=item.rider_id, enabled=item.enabled)
         for item in config.tag_registry
     )
     return RealEdgeComponents(
         clock=clock,
-        camera=GoProCameraAdapter(gopro_type(), clock, capture_dir),
-        scanner=KBeaconTagScannerAdapter(beacon_type(), clock),
+        camera=GoProCameraAdapter(
+            gopro_factory(),
+            clock,
+            capture_dir,
+            hindsight_enabled=config.recording.hindsight_enabled,
+        ),
+        scanner=KBeaconTagScannerAdapter(beacon_factory(), clock),
         detector=YoloDetectorAdapter(legacy_detector),
-        storage=BoxStorageAdapter(box_type(box_config), clock, scratch_dir),
+        storage=BoxStorageAdapter(box_factory(box_config), clock, scratch_dir),
         registry=registry,
         assignment_policy=config.assignment,
+        frame_source=OpenCvPreviewFrameSource(
+            clock,
+            max_fps=config.performance.max_fps,
+            queue_size=config.performance.callback_queue_size,
+            drain_old_frames=config.performance.buffer_drain,
+        ),
     )
 
 
@@ -86,6 +131,10 @@ def build_real_orchestrator(
     *,
     capture_dir: str | Path,
     scratch_dir: str | Path,
+    gopro_factory: Callable[[], Any] | None = None,
+    beacon_factory: Callable[[], Any] | None = None,
+    detector_factory: Callable[[str], Any] | None = None,
+    box_factory: Callable[[dict[str, dict[str, str]]], Any] | None = None,
 ) -> BearVisionOrchestrator:
     """Build the production orchestrator without exposing legacy SDKs to it."""
 
@@ -93,6 +142,10 @@ def build_real_orchestrator(
         config,
         capture_dir=capture_dir,
         scratch_dir=scratch_dir,
+        gopro_factory=gopro_factory,
+        beacon_factory=beacon_factory,
+        detector_factory=detector_factory,
+        box_factory=box_factory,
     )
     return BearVisionOrchestrator(
         clock=components.clock,
@@ -104,4 +157,12 @@ def build_real_orchestrator(
         assignment_policy=components.assignment_policy,
         recording_duration_s=config.recording.post_detection_duration_s,
         observation_retention_s=max(30.0, config.recording.post_detection_duration_s),
+        frame_source=components.frame_source,
+        detection_enabled=config.detection.enabled,
+        upload_enabled=config.features.cloud_upload,
+        preview_enabled=True,
+        ble_logging_enabled=config.features.ble_logging,
+        detection_cooldown_s=config.detection.cooldown_s,
+        max_restarts=config.error_recovery.max_restarts,
+        restart_delay_s=config.error_recovery.restart_delay_s,
     )

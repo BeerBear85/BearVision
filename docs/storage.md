@@ -4,7 +4,7 @@ BearVision currently stores generated files in Box. The versioned edge
 configuration selects the provider:
 
 ```yaml
-config_schema_version: "1.0"
+config_schema_version: "2.0"
 config_kind: bearvision-edge
 storage:
   provider: box

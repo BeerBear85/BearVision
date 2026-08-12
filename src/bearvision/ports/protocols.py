@@ -40,6 +40,17 @@ class Camera(Protocol):
 
 
 @runtime_checkable
+class FrameSource(Protocol):
+    """Turn a camera preview endpoint into timestamped video frames."""
+
+    async def open(self, preview_source: str) -> None: ...
+
+    async def close(self) -> None: ...
+
+    def frames(self) -> AsyncIterator[VideoFrame]: ...
+
+
+@runtime_checkable
 class TagScanner(Protocol):
     def observations(self) -> AsyncIterator[TagObservation]: ...
 

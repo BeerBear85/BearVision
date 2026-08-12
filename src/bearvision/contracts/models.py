@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-from datetime import datetime
 from enum import StrEnum
 from typing import Annotated, Literal
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
 
 
-ContractVersion = Literal["1.0"]
+ContractVersion = Literal["2.0"]
 Identifier = Annotated[str, Field(min_length=1, max_length=128, pattern=r"^[A-Za-z0-9._:-]+$")]
 
 
@@ -17,7 +16,7 @@ class ContractModel(BaseModel):
     """Strict base for serialized contracts."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
-    contract_schema_version: ContractVersion = "1.0"
+    contract_schema_version: ContractVersion = "2.0"
 
 
 class Vector3(BaseModel):
@@ -47,7 +46,7 @@ class TagObservation(ContractModel):
     observed_at_monotonic_s: float = Field(ge=0)
     rssi_dbm: int = Field(ge=-127, le=20)
     acceleration_mps2: Vector3
-    battery_percent: float | None = Field(default=None, ge=0, le=100)
+    battery_voltage_mv: int | None = Field(default=None, ge=0, le=10_000)
 
 
 class TagRegistryEntry(ContractModel):

@@ -12,19 +12,33 @@ import yaml
 class TimelineEvent(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
     at_s: float = Field(ge=0)
-    event: str = Field(min_length=1, max_length=100)
+    event: Literal["tag_enters_range", "tag_observation", "person_detected"]
     payload: dict[str, Any] = Field(default_factory=dict)
+
+
+class ScenarioFaults(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    camera_capture: bool = False
+    storage_upload: bool = False
+
+
+class ScenarioExpectation(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    rider_id: str | None = None
+    assignment_status: Literal["assigned", "unassigned", "ambiguous"] | None = None
+    capture_triggered: bool | None = None
+    clip_uploaded: bool | None = None
 
 
 class ScenarioDefinition(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
-    scenario_schema_version: Literal["1.0"]
+    scenario_schema_version: Literal["2.0"]
     name: str = Field(min_length=1, max_length=150)
     seed: int = 0
     duration_s: float = Field(gt=0)
     timeline: tuple[TimelineEvent, ...]
-    faults: dict[str, Any] = Field(default_factory=dict)
-    expect: dict[str, Any] = Field(default_factory=dict)
+    faults: ScenarioFaults = Field(default_factory=ScenarioFaults)
+    expect: ScenarioExpectation = Field(default_factory=ScenarioExpectation)
 
 
 def load_scenario(path: str | Path) -> ScenarioDefinition:

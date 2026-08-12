@@ -1,16 +1,3 @@
-pandas
-opencv-python
-scipy
-matplotlib
-bleak
-pyyaml>=6.0
-ultralytics
-lxml
-opencv-python-headless
-open_gopro
-boxsdk
-PySide6
-pytest-qt
-pydantic
-pyautogui
-Pillow
+# Compatibility installer for contributors who do not use uv.
+# pyproject.toml is the authoritative dependency definition.
+-e .[edge,gui,training,dev]

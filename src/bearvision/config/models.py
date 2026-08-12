@@ -1,4 +1,4 @@
-"""Version 1.0 configuration schema for the BearVision 3 edge system."""
+"""Version 2.0 configuration schema for the BearVision 3 edge system."""
 
 from __future__ import annotations
 
@@ -50,7 +50,6 @@ class AssignmentConfig(StrictConfigModel):
 
 class PerformanceConfig(StrictConfigModel):
     max_fps: int = Field(default=30, ge=1, le=120)
-    max_lag_ms: int = Field(default=250, ge=0, le=60_000)
     buffer_drain: bool = True
     callback_queue_size: int = Field(default=5, ge=1, le=100)
 
@@ -62,9 +61,7 @@ class ErrorRecoveryConfig(StrictConfigModel):
 
 class FeatureConfig(StrictConfigModel):
     ble_logging: bool = True
-    post_processing: bool = True
     cloud_upload: bool = True
-    preview_stream: bool = True
 
 
 class StorageConfig(StrictConfigModel):
@@ -87,16 +84,16 @@ class TagRegistration(StrictConfigModel):
 class EdgeConfig(StrictConfigModel):
     """Complete edge configuration; versioned separately from the application."""
 
-    config_schema_version: Literal["1.0"]
+    config_schema_version: Literal["2.0"]
     config_kind: Literal["bearvision-edge"]
-    recording: RecordingConfig = RecordingConfig()
-    detection: DetectionConfig = DetectionConfig()
-    assignment: AssignmentConfig = AssignmentConfig()
-    performance: PerformanceConfig = PerformanceConfig()
-    error_recovery: ErrorRecoveryConfig = ErrorRecoveryConfig()
-    features: FeatureConfig = FeatureConfig()
-    storage: StorageConfig = StorageConfig()
-    system: SystemConfig = SystemConfig()
+    recording: RecordingConfig = Field(default_factory=RecordingConfig)
+    detection: DetectionConfig = Field(default_factory=DetectionConfig)
+    assignment: AssignmentConfig = Field(default_factory=AssignmentConfig)
+    performance: PerformanceConfig = Field(default_factory=PerformanceConfig)
+    error_recovery: ErrorRecoveryConfig = Field(default_factory=ErrorRecoveryConfig)
+    features: FeatureConfig = Field(default_factory=FeatureConfig)
+    storage: StorageConfig = Field(default_factory=StorageConfig)
+    system: SystemConfig = Field(default_factory=SystemConfig)
     tag_registry: tuple[TagRegistration, ...] = ()
 
 

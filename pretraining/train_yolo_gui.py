@@ -360,6 +360,8 @@ class TrainYoloGUI(QMainWindow):
     def _get_current_config(self) -> Dict[str, Any]:
         """Get current GUI parameters as a config dictionary."""
         return {
+            "config_schema_version": "2.0",
+            "config_kind": "bearvision-training",
             "data_dir": self.data_dir,
             "model": self.model_combo.currentText(),
             "epochs": self.epochs_spin.value(),
@@ -372,6 +374,10 @@ class TrainYoloGUI(QMainWindow):
 
     def _apply_config(self, config: Dict[str, Any]) -> None:
         """Apply configuration values to GUI elements."""
+        if config.get("config_schema_version") != "2.0":
+            raise ValueError("unsupported or missing training configuration schema version")
+        if config.get("config_kind") != "bearvision-training":
+            raise ValueError("configuration kind is not bearvision-training")
         if "data_dir" in config and config["data_dir"]:
             self.data_dir = config["data_dir"]
             self.data_dir_label.setText(config["data_dir"])

@@ -140,6 +140,10 @@ class BleManualTestGUI(QMainWindow):
         try:
             with open(config_file, 'r') as f:
                 self.config = yaml.safe_load(f)
+            if self.config.get("config_schema_version") != "2.0":
+                raise ValueError("unsupported or missing BLE test configuration schema version")
+            if self.config.get("config_kind") != "bearvision-ble-test":
+                raise ValueError("configuration kind is not bearvision-ble-test")
                 
         except FileNotFoundError:
             self.show_error_popup(

@@ -1,104 +1,79 @@
-BearVision
+# BearVision 3
 
-Instant, hands-free wakeboard highlight clips – no cameraman required.
+BearVision creates hands-free wakeboard clips. Vision detects a person and
+starts a fixed-duration GoPro clip. Rider identity is selected afterwards from
+whole-clip BearTag accelerometer activity and RSSI; vision does not identify the
+rider or determine a jump timestamp.
 
-## Version 3 remake
+## Active architecture
 
-The version 3 foundation uses executable specifications and a deterministic
-behavioural simulator. See [the remake foundation](docs/remake/foundation.md)
-for the current development entry point.
+The installable package lives in `src/bearvision` and uses ports for camera,
+preview frames, BLE scanning, detection, storage and time. Behavioural scenarios
+and the edge service execute the same `BearVisionOrchestrator`.
 
-BearTag ─▶ BLE ─▶ Edge Cam ─▶ 4G/Wi-Fi ─▶ Cloud ─▶ Mobile/Web App
+```text
+GoPro preview -> FrameSource -> Detector -> BearVisionOrchestrator
+BearTag BLE -------------------------------> |
+GoPro capture <----------------------------- |
+Box storage <------------------------------- |
 
-How It Works
-
-1. Tag detected – RSSI spike tells the edge camera to buffer 10 s before the trick.
-
-
-2. Computer vision crops, tracks and trims the clip.
-
-
-3. Upload & process – clip is stabilised and pushed to the rider’s phone within seconds.
-
-
-
-Tech Stack (MVP)
-
-BearTag – rugged BLE tracker with accelerometer.
-
-Edge unit – Raspberry Pi 4 + wide-angle camera (CV-only mode)【citation RPi CPU?】
-
-Cloud – S3-compatible storage, serverless processing, REST/WebSocket API.
-
-App – React Native / PWA.
-
-
-Tested at ~2-3 FPS on a Pi 4 CPU-only build
-
-Quick Start (Edge)
-
-git clone https://github.com/your-org/bearvision-edge
-cd bearvision-edge && ./setup.sh
-python run.py                 # starts live pipeline
-
-
-
-## Annotation Pipeline GUI
-
-Run a minimal interface to preview YOLO detections and save the resulting dataset:
-
-```bash
-python pretraining/annotation/annotation_gui.py
+Scenario events -> simulated adapters -> same orchestrator
 ```
 
-Choose a video and output directory, then press **Run** to watch the video with green bounding boxes while frames and labels are exported.
+The current production storage provider is Box. The active Android application,
+Google Drive integration and previous physical simulation are outside the 3.0
+runtime and have been moved to a separate local archive.
 
-The pipeline automatically splits rider trajectories when no detections are
-seen for `detection_gap_timeout_s` seconds (default 3). Adjust this and other
-options in `config/annotation-example.yaml`.
+## Development
 
-Tiny person detections can be ignored by tuning
-`min_person_bbox_diagonal_ratio` (default `0.001`). The value represents the
-minimum fraction of the image diagonal a person's bounding box must span to be
-kept. Raise it to discard more distant subjects or lower it to retain smaller
-ones.
-
-## YOLOv8 Wakeboard Detector Training
-
-Fine-tune a YOLOv8 model on a folder of images and YOLO-format labels:
+Python 3.12 and `uv` are the reference development environment.
 
 ```bash
-python pretraining/train_yolo.py /path/to/dataset --epochs 100 --batch 8 --onnx-out wakeboard.onnx
+uv sync --locked --extra dev
+uv run pytest
+uv run ruff check src tests/remake
+uv run mypy
 ```
 
-Prerequisites:
-
-- Install dependencies with `pip install -r requirements.txt`.
-- The dataset directory must contain images and matching `.txt` annotation files using YOLO coordinates.
-
-The script automatically creates train/val splits, fine-tunes the base model and exports the best weights as an ONNX file.
-
-## Box Upload Testing Tool
-
-A cross-platform GUI for manually testing Box cloud storage uploads:
+Run a versioned behavioural scenario:
 
 ```bash
-python box_upload_gui.py
+uv run bearvision-simulate specs/scenarios/single-rider-success.yaml
 ```
 
-Features:
+Install edge dependencies and start the production service:
 
-- **Show Cloud Content**: View files in the Box root folder
-- **File Selection**: Browse and select local files for upload
-- **Destination Folder**: Specify Box folder path (default: `test_upload`)
-- **Upload with Safeguards**:
-  - Preserves original filename
-  - Warns for files > 1 MB
-  - Prompts before overwriting existing files
-- **Comprehensive Logging**: All operations logged to `box_upload_gui.log`
+```bash
+uv sync --locked --extra edge
+uv run bearvision-edge --config config/edge.yaml
+```
 
-Prerequisites:
+Real operation additionally requires a supported GoPro, BLE hardware, valid Box
+credentials and a populated `tag_registry` in `config/edge.yaml`.
 
-- Box credentials must be configured through the environment variable names in `config/edge.yaml`.
-- Set environment variable with base64-encoded Box credentials
-- The tool uses the existing `BoxHandler` module for all Box operations
+## Training, annotation and post-processing
+
+These remain part of version 3.0, but are separate workflows from the edge
+runtime:
+
+```bash
+uv sync --extra training --extra gui
+uv run python pretraining/annotation/annotation_gui_pyqt.py
+uv run python run_train_gui.py
+uv run python run_post_processing.py INPUT.mp4 OUTPUT.json
+uv run python post_processing_gui.py
+```
+
+Their versioned configuration files live in `config/`. Test videos remain under
+`test/` and `tests/data/` and are stored using Git LFS.
+
+## Specifications
+
+- Runtime and simulation: `docs/remake/foundation.md`
+- Component behaviour: `specs/components/`
+- Versioned scenarios: `specs/scenarios/`
+- Architecture decisions: `specs/decisions/`
+
+Product vision and unimplemented roadmap items are documented separately in
+`BearVision_LLM_Context.md`; they must not be interpreted as implemented runtime
+behaviour.

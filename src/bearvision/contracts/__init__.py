@@ -15,7 +15,13 @@ from .models import (
     StorageReceipt,
     Vector3,
 )
-from .scenario import ScenarioDefinition, TimelineEvent, load_scenario
+from .scenario import (
+    ScenarioDefinition,
+    ScenarioExpectation,
+    ScenarioFaults,
+    TimelineEvent,
+    load_scenario,
+)
 
 __all__ = [
     "BoundingBox",
@@ -27,6 +33,8 @@ __all__ = [
     "RiderAssignment",
     "RiderAssignmentStatus",
     "ScenarioDefinition",
+    "ScenarioExpectation",
+    "ScenarioFaults",
     "TagObservation",
     "TagAssignmentEvidence",
     "TagRegistryEntry",

@@ -1,5 +1,9 @@
 # CLAUDE.md
 
+> Legacy contributor notes. Commands and architecture below describe the
+> pre-remake application. For active BearVision 3 work, use `README.md`,
+> `docs/remake/foundation.md`, `specs/` and `src/bearvision`.
+
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Project Overview

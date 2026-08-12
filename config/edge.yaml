@@ -1,4 +1,4 @@
-config_schema_version: "1.0"
+config_schema_version: "2.0"
 config_kind: bearvision-edge
 recording:
   post_detection_duration_s: 5.0
@@ -20,7 +20,6 @@ assignment:
   minimum_score_margin: 0.12
 performance:
   max_fps: 30
-  max_lag_ms: 250
   buffer_drain: true
   callback_queue_size: 5
 error_recovery:
@@ -28,9 +27,7 @@ error_recovery:
   restart_delay_s: 2.0
 features:
   ble_logging: true
-  post_processing: true
   cloud_upload: false
-  preview_stream: true
 storage:
   provider: box
   root_folder: bearvision_files

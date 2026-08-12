@@ -39,6 +39,7 @@ class BoxStorageAdapter:
                 source = temporary_path
                 content = media.content
             else:
+                assert media.local_path is not None
                 source = media.local_path
                 content = source.read_bytes()
             await asyncio.to_thread(

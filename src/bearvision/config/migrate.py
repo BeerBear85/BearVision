@@ -26,7 +26,7 @@ def migrate_edge_data(ini_path: str | Path, yaml_path: str | Path) -> tuple[dict
     """Merge legacy INI and YAML edge settings; YAML takes precedence."""
 
     data = EdgeConfig(
-        config_schema_version="1.0",
+        config_schema_version="2.0",
         config_kind="bearvision-edge",
     ).model_dump(mode="json")
     warnings: list[str] = []
@@ -42,15 +42,12 @@ def migrate_edge_data(ini_path: str | Path, yaml_path: str | Path) -> tuple[dict
         _set_if_present(edge, "detection_confidence_threshold", data["detection"], "confidence_threshold", float)
         _set_if_present(edge, "detection_cooldown", data["detection"], "cooldown_s", float)
         _set_if_present(edge, "stream_max_fps", data["performance"], "max_fps", int)
-        _set_if_present(edge, "stream_max_lag_ms", data["performance"], "max_lag_ms", int)
         _set_if_present(edge, "stream_buffer_drain", data["performance"], "buffer_drain", _as_bool)
         _set_if_present(edge, "stream_callback_queue_size", data["performance"], "callback_queue_size", int)
         _set_if_present(edge, "max_error_restarts", data["error_recovery"], "max_restarts", int)
         _set_if_present(edge, "error_restart_delay", data["error_recovery"], "restart_delay_s", float)
         _set_if_present(edge, "enable_ble_logging", data["features"], "ble_logging", _as_bool)
-        _set_if_present(edge, "enable_post_processing", data["features"], "post_processing", _as_bool)
         _set_if_present(edge, "enable_cloud_upload", data["features"], "cloud_upload", _as_bool)
-        _set_if_present(edge, "preview_stream_enabled", data["features"], "preview_stream", _as_bool)
 
     if parser.has_section("BOX"):
         _set_if_present(parser["BOX"], "root_folder", data["storage"], "root_folder", str)
@@ -85,8 +82,6 @@ def migrate_edge_data(ini_path: str | Path, yaml_path: str | Path) -> tuple[dict
     performance = legacy_yaml.get("performance", {})
     if "stream_max_fps" in performance:
         data["performance"]["max_fps"] = performance["stream_max_fps"]
-    if "stream_max_lag_ms" in performance:
-        data["performance"]["max_lag_ms"] = performance["stream_max_lag_ms"]
 
     recovery = legacy_yaml.get("error_recovery", {})
     if "max_restarts" in recovery:
@@ -114,7 +109,7 @@ def add_version_header(data: dict[str, Any], *, kind: str) -> dict[str, Any]:
 
     if "config_schema_version" in data or "config_kind" in data:
         raise ValueError("configuration is already versioned")
-    return {"config_schema_version": "1.0", "config_kind": kind, **data}
+    return {"config_schema_version": "2.0", "config_kind": kind, **data}
 
 
 def write_yaml(path: str | Path, data: dict[str, Any]) -> None:

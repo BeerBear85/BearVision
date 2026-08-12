@@ -1,4 +1,8 @@
 # BearVision – LLM Context Doc v1.2
+> Status: product vision and roadmap context. This document includes planned
+> capabilities and is not an implementation reference. Use `README.md`,
+> `docs/remake/foundation.md` and `specs/` for current BearVision 3 behaviour.
+
 **Date:** 25‑07‑2025  
 **Version:** 1.2  
 **Author:** Mr. Bear (Bjørn Eskildsen)

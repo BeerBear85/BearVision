@@ -1,4 +1,4 @@
-scenario_schema_version: "1.0"
+scenario_schema_version: "2.0"
 name: single-rider-success
 seed: 42
 duration_s: 60

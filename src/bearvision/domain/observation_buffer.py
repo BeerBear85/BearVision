@@ -4,8 +4,12 @@ from __future__ import annotations
 
 from collections import deque
 from threading import Lock
+import logging
 
 from bearvision.contracts import TagObservation
+
+
+logger = logging.getLogger(__name__)
 
 
 class BearTagObservationBuffer:
@@ -17,13 +21,24 @@ class BearTagObservationBuffer:
         self.retention_s = retention_s
         self._items: deque[TagObservation] = deque()
         self._lock = Lock()
+        self.dropped_late_observations = 0
 
     def append(self, observation: TagObservation) -> None:
         with self._lock:
-            if self._items and observation.observed_at_monotonic_s < self._items[-1].observed_at_monotonic_s:
-                raise ValueError("BearTag observations must arrive in monotonic order")
-            self._items.append(observation)
-            cutoff = observation.observed_at_monotonic_s - self.retention_s
+            latest = self._items[-1].observed_at_monotonic_s if self._items else observation.observed_at_monotonic_s
+            cutoff = latest - self.retention_s
+            if observation.observed_at_monotonic_s < cutoff:
+                self.dropped_late_observations += 1
+                logger.warning(
+                    "Dropping BearTag observation %.3fs older than buffer window",
+                    observation.observed_at_monotonic_s,
+                )
+                return
+            items = list(self._items)
+            items.append(observation)
+            items.sort(key=lambda item: item.observed_at_monotonic_s)
+            self._items = deque(items)
+            cutoff = self._items[-1].observed_at_monotonic_s - self.retention_s
             while self._items and self._items[0].observed_at_monotonic_s < cutoff:
                 self._items.popleft()
 

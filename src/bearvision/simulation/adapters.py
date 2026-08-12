@@ -122,7 +122,11 @@ class InMemoryStorage:
                 return receipt
             if not overwrite:
                 raise FileExistsError(object_key)
-        content = media.content if media.content is not None else media.local_path.read_bytes()
+        if media.content is not None:
+            content = media.content
+        else:
+            assert media.local_path is not None
+            content = media.local_path.read_bytes()
         receipt = StorageReceipt(
             asset_id=media.asset.asset_id,
             object_key=object_key,

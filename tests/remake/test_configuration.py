@@ -15,7 +15,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 def test_active_edge_config_is_versioned_and_valid() -> None:
     config = load_edge_config(REPO_ROOT / "config" / "edge.yaml")
-    assert config.config_schema_version == "1.0"
+    assert config.config_schema_version == "2.0"
     assert config.storage.provider == "box"
     assert config.assignment.motion_weight == 0.7
 
@@ -28,7 +28,7 @@ def test_assignment_fusion_weights_must_sum_to_one() -> None:
 def test_all_active_configs_start_with_independent_version_header() -> None:
     for name in ("edge.yaml", "ble-test.yaml", "training.yaml", "annotation-example.yaml"):
         lines = (REPO_ROOT / "config" / name).read_text(encoding="utf-8").splitlines()
-        assert lines[0] == 'config_schema_version: "1.0"'
+        assert lines[0] == 'config_schema_version: "2.0"'
         assert lines[1].startswith("config_kind: bearvision-")
 
 
@@ -48,7 +48,7 @@ def test_missing_or_unsupported_config_version_is_rejected(tmp_path: Path) -> No
         load_edge_config(path)
 
     path.write_text(
-        'config_schema_version: "2.0"\nconfig_kind: bearvision-edge\n',
+        'config_schema_version: "3.0"\nconfig_kind: bearvision-edge\n',
         encoding="utf-8",
     )
     with pytest.raises(ValidationError):
@@ -66,15 +66,13 @@ def test_legacy_edge_files_migrate_with_yaml_precedence(tmp_path: Path) -> None:
     )
     legacy_yaml = tmp_path / "edge.yaml"
     legacy_yaml.write_text(
-        "recording:\n  post_detection_duration: 5\n"
-        "performance:\n  stream_max_lag_ms: 250\n",
+        "recording:\n  post_detection_duration: 5\n",
         encoding="utf-8",
     )
 
     migrated, warnings = migrate_edge_data(ini, legacy_yaml)
 
     assert migrated["recording"]["post_detection_duration_s"] == 5
-    assert migrated["performance"]["max_lag_ms"] == 250
     assert migrated["storage"]["root_folder"] == "clips"
     assert any("ANNOTATION_GUI" in warning for warning in warnings)
 
@@ -83,13 +81,13 @@ def test_migration_never_overwrites_target(tmp_path: Path) -> None:
     target = tmp_path / "target.yaml"
     target.write_text("existing", encoding="utf-8")
     with pytest.raises(FileExistsError):
-        write_yaml(target, {"config_schema_version": "1.0"})
+        write_yaml(target, {"config_schema_version": "2.0"})
 
 
 def test_unversioned_yaml_gets_header_first() -> None:
     migrated = add_version_header({"epochs": 50}, kind="bearvision-training")
     dumped = yaml.safe_dump(migrated, sort_keys=False)
     assert dumped.splitlines()[:2] == [
-        "config_schema_version: '1.0'",
+        "config_schema_version: '2.0'",
         "config_kind: bearvision-training",
     ]

@@ -1,3 +1,7 @@
-- Få taget et billede af en wakeboarder og lægge det i repositoryet.
-- Implementere en regressionstest, der kører YOLO high grade på billedet.
-- Implementere en regressionstest, der kører min egen trænede YOLO low grade på billedet.
+# BearVision 3 open work
+
+- Calibrate BearTag motion/RSSI thresholds from labelled field clips.
+- Run end-to-end hardware tests with GoPro preview, capture, BLE and Box.
+- Verify model and test-video redistribution rights before a public release.
+- Select the BearVision source-code licence before distribution.
+- Add explicit CI jobs for training, post-processing GUI and physical hardware.

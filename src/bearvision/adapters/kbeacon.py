@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import suppress
+import ctypes
+from types import SimpleNamespace
 from typing import Any
 
 from bearvision.contracts import TagObservation, Vector3
@@ -12,6 +14,62 @@ from ._errors import translated_error
 
 
 STANDARD_GRAVITY_MPS2 = 9.80665
+KSENSOR_TYPE = 0x21
+SENSOR_MASK_VOLTAGE = 0x1
+SENSOR_MASK_ACC_AXIS = 0x8
+
+
+class BleakKBeaconSource:
+    """Minimal packaged KBeacon advertisement source used in production."""
+
+    def __init__(self) -> None:
+        self.advertisement_queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
+
+    @staticmethod
+    def _decode(data: bytes) -> tuple[int | None, Any | None]:
+        if len(data) < 3 or data[0] != KSENSOR_TYPE:
+            return None, None
+        mask = int.from_bytes(data[1:3], byteorder="big")
+        voltage = int.from_bytes(data[3:5], byteorder="big") if mask & SENSOR_MASK_VOLTAGE else None
+        acceleration = None
+        if mask & SENSOR_MASK_ACC_AXIS and len(data) >= 13:
+            acceleration = SimpleNamespace(
+                x=ctypes.c_int16(int.from_bytes(data[7:9], "big")).value / 1000.0,
+                y=ctypes.c_int16(int.from_bytes(data[9:11], "big")).value / 1000.0,
+                z=ctypes.c_int16(int.from_bytes(data[11:13], "big")).value / 1000.0,
+            )
+        return voltage, acceleration
+
+    async def look_for_advertisements(self, timeout: float = 0.0) -> None:
+        try:
+            from bleak import BleakScanner
+        except ImportError as exc:  # pragma: no cover - production dependency
+            raise RuntimeError("bleak is required for KBeacon scanning") from exc
+
+        async def callback(device: Any, advertisement: Any) -> None:
+            if not device.name or "KBPro" not in device.name:
+                return
+            for data in advertisement.service_data.values():
+                voltage, acceleration = self._decode(bytes(data))
+                if acceleration is not None:
+                    await self.advertisement_queue.put(
+                        {
+                            "address": device.address,
+                            "rssi": advertisement.rssi,
+                            "batteryLevel": voltage,
+                            "acc_sensor": acceleration,
+                        }
+                    )
+
+        scanner = BleakScanner(detection_callback=callback)
+        await scanner.start()
+        try:
+            if timeout == 0.0:
+                await asyncio.Future()
+            else:
+                await asyncio.sleep(timeout)
+        finally:
+            await scanner.stop()
 
 
 class KBeaconTagScannerAdapter:
@@ -31,8 +89,6 @@ class KBeaconTagScannerAdapter:
     def _convert(self, raw: dict[str, Any]) -> TagObservation:
         acceleration = raw["acc_sensor"]
         battery = raw.get("batteryLevel")
-        if battery is not None and not 0 <= float(battery) <= 100:
-            battery = None
         return TagObservation(
             tag_id=str(raw["address"]),
             observed_at_utc=self.clock.utc_now(),
@@ -43,7 +99,7 @@ class KBeaconTagScannerAdapter:
                 y=float(acceleration.y) * STANDARD_GRAVITY_MPS2,
                 z=float(acceleration.z) * STANDARD_GRAVITY_MPS2,
             ),
-            battery_percent=float(battery) if battery is not None else None,
+            battery_voltage_mv=int(battery) if battery is not None else None,
         )
 
     async def observations(self):

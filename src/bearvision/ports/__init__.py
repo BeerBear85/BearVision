@@ -8,7 +8,7 @@ from .errors import (
     PermanentComponentError,
 )
 from .models import CapturedMedia, VideoFrame
-from .protocols import Camera, Clock, Detector, Storage, TagRegistry, TagScanner
+from .protocols import Camera, Clock, Detector, FrameSource, Storage, TagRegistry, TagScanner
 
 __all__ = [
     "Camera",
@@ -18,6 +18,7 @@ __all__ = [
     "ComponentTimeout",
     "ComponentUnavailable",
     "Detector",
+    "FrameSource",
     "InvalidComponentData",
     "PermanentComponentError",
     "Storage",

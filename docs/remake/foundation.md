@@ -1,55 +1,40 @@
 # BearVision 3 foundation
 
-BearVision 3 is being rebuilt around executable specifications and deterministic
-behavioural simulation. The simulator models component behaviour, timing and
-failures. It does not claim physical accuracy and has no rendering dependency.
+Status: implemented foundation; hardware calibration and endurance testing are
+still required before production deployment.
 
-## Development
+BearVision 3 is built around executable specifications and deterministic
+behavioural simulation. Simulation models component behaviour, timing and
+failures; it does not claim physical accuracy.
 
-```bash
-python -m pip install -e ".[dev]"
-python -m pytest tests/remake
-```
+## One orchestration core
 
-The active package lives under `src/bearvision`. Legacy implementations remain
-available behind production adapters; domain and simulation code do not import
-their SDKs.
-
-Run the first complete behavioural scenario with:
-
-```bash
-python tools/run_behavioral_scenario.py specs/scenarios/single-rider-success.yaml
-```
-
-## Behavioural composition
+Both behavioural and production composition drive `BearVisionOrchestrator`.
+Only adapters differ:
 
 ```mermaid
 flowchart LR
-    Scenario[Versioned scenario] --> Engine[Deterministic event engine]
-    Engine --> Core[Assignment and capture orchestration]
-    Core --> Camera[Camera port]
-    Core --> Scanner[BLE scanner port]
-    Core --> Detector[Detector port]
-    Core --> Storage[Storage port]
-    Scanner --> Core
-    Detector --> Core
-    Sim[Simulated adapters] --> Camera
-    Sim --> Scanner
-    Sim --> Detector
-    Sim --> Storage
-    Real[GoPro / KBeacon / YOLO / Box adapters] --> Camera
-    Real --> Scanner
-    Real --> Detector
-    Real --> Storage
+    Scenario[Versioned scenario] --> Sim[Simulated adapters]
+    Preview[GoPro preview] --> Frames[OpenCV FrameSource]
+    Real[GoPro / BLE / YOLO / Box] --> Core[BearVisionOrchestrator]
+    Sim --> Core
+    Frames --> Core
+    Core --> Result[Capture, assignment and optional upload]
 ```
 
-Vision triggers a fixed-duration person clip but never supplies rider identity.
-The policy evaluates every registered BearTag accelerometer sample recorded
-during that complete clip together with median RSSI from the same interval.
-Mean acceleration activity magnitude makes the motion evidence independent of
-tag orientation without letting signed axes cancel. Candidates must pass the
-sample-count, motion and RSSI gates; close combined scores remain `ambiguous`.
+Vision triggers a fixed-duration clip but never supplies rider identity or a
+jump timestamp. The policy evaluates every registered BearTag accelerometer
+sample recorded during the clip together with median RSSI. Thresholds and the
+70/30 motion/RSSI weights are calibration starting points, not physical facts.
 
-The initial fusion policy is configurable in `config/edge.yaml`. Its 70% motion
-and 30% RSSI weights and thresholds are calibration starting points—not proven
-physical constants.
+## Configuration
+
+The edge configuration is schema version 2.0. Only options consumed by the
+runtime belong in it. Training, annotation and BLE tooling have independent
+versioned configurations.
+
+## Quality gate
+
+The default `pytest` invocation runs the active BearVision 3 behavioural suite.
+Legacy, GUI and physical-hardware checks are deliberately outside that gate and
+must use explicit test commands/environments.

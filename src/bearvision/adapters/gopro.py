@@ -13,10 +13,18 @@ from ._errors import translated_error
 
 
 class GoProCameraAdapter:
-    def __init__(self, controller: Any, clock: Any, capture_dir: str | Path) -> None:
+    def __init__(
+        self,
+        controller: Any,
+        clock: Any,
+        capture_dir: str | Path,
+        *,
+        hindsight_enabled: bool = True,
+    ) -> None:
         self.controller = controller
         self.clock = clock
         self.capture_dir = Path(capture_dir)
+        self.hindsight_enabled = hindsight_enabled
         self._captures: dict[str, CapturedMedia] = {}
 
     async def connect(self) -> None:
@@ -49,7 +57,12 @@ class GoProCameraAdapter:
             return cached
         try:
             before = set(await asyncio.to_thread(self.controller.list_videos))
-            await asyncio.to_thread(self.controller.start_hindsight_clip, request.post_roll_s)
+            if self.hindsight_enabled:
+                await asyncio.to_thread(self.controller.start_hindsight_clip, request.post_roll_s)
+            else:
+                await asyncio.to_thread(self.controller.start_recording)
+                await self.clock.sleep(request.post_roll_s)
+                await asyncio.to_thread(self.controller.stop_recording)
             after = list(await asyncio.to_thread(self.controller.list_videos))
             new_files = [name for name in after if name not in before]
             if not new_files:

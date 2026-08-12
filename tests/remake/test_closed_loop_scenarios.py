@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def scenario(timeline, *, faults=None) -> ScenarioDefinition:
     return ScenarioDefinition(
-        scenario_schema_version="1.0",
+        scenario_schema_version="2.0",
         name="test-scenario",
         seed=42,
         duration_s=20,
@@ -210,3 +210,23 @@ def test_storage_failure_preserves_completed_capture() -> None:
     assert len(result.captures) == 1
     assert not result.uploads
     assert result.failures[0]["component"] == "storage"
+
+
+def test_declared_scenario_expectations_are_executable() -> None:
+    definition = ScenarioDefinition(
+        scenario_schema_version="2.0",
+        name="wrong-rider-expectation",
+        duration_s=20,
+        timeline=[
+            {
+                "at_s": 2,
+                "event": "person_detected",
+                "payload": {"confidence": 0.9},
+            }
+        ],
+        expect={"rider_id": "rider-that-was-not-observed"},
+    )
+    result = ClosedLoopScenarioRunner.from_scenario(definition).run()
+    assert result.expectation_failures == (
+        "expected rider_id='rider-that-was-not-observed', got None",
+    )

@@ -1,7 +1,6 @@
 import asyncio
 from datetime import datetime, timezone
 
-import pytest
 
 from bearvision.config import AssignmentConfig
 from bearvision.contracts import (
@@ -130,5 +129,5 @@ def test_observation_buffer_retains_bounded_ordered_clip_data() -> None:
     buffer.append(observation("active", 2, active=True, rssi_dbm=-60))
     buffer.append(observation("active", 4, active=True, rssi_dbm=-60))
     assert tuple(item.observed_at_monotonic_s for item in buffer.between(2, 4)) == (2, 4)
-    with pytest.raises(ValueError):
-        buffer.append(observation("active", 3, active=True, rssi_dbm=-60))
+    buffer.append(observation("active", 3, active=True, rssi_dbm=-60))
+    assert tuple(item.observed_at_monotonic_s for item in buffer.between(2, 4)) == (2, 3, 4)

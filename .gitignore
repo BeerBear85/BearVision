@@ -17,3 +17,8 @@ code/obsolite_junk_box/GPMD2CSV_extract_gopro_sensor_data/gopro2json.exe
 code/obsolite_junk_box/GPMD2CSV_extract_gopro_sensor_data/gpmdinfo.exe
 simulation/out/
 archived/untracked/
+BearVision_archived_*.zip
+.coverage
+htmlcov/
+dist/
+build/
