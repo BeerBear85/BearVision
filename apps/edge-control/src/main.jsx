@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
 
@@ -19,6 +19,7 @@ function eventMessage(event) {
     component_failed: "Component failure",
     stop_requested: "Stop requested",
     runtime_stopped: "Runtime stopped",
+    preview_frame: "Preview frame analysed",
   };
   return labels[event.kind] ?? event.kind?.replaceAll("_", " ") ?? "Event";
 }
@@ -38,6 +39,8 @@ function App() {
   const [selectedScenario, setSelectedScenario] = useState("");
   const [events, setEvents] = useState([]);
   const [error, setError] = useState("");
+  const [playhead, setPlayhead] = useState(0);
+  const videoRef = useRef(null);
 
   async function request(path, options) {
     const response = await fetch(path, options);
@@ -51,7 +54,7 @@ function App() {
       .then(([health, scenarioList]) => {
         setState(health);
         setScenarios(scenarioList.scenarios);
-        setSelectedScenario(scenarioList.scenarios[0] ?? "");
+        setSelectedScenario(scenarioList.scenarios[0]?.name ?? "");
       })
       .catch((reason) => setError(reason.message));
     const source = new EventSource("/api/events");
@@ -61,7 +64,22 @@ function App() {
         setState(event.payload);
         return;
       }
-      setEvents((current) => [event, ...current].slice(0, 200));
+      if (event.at_s != null) {
+        const nextTime = Number(event.at_s);
+        setPlayhead(nextTime);
+        if (videoRef.current) {
+          if (Math.abs(videoRef.current.currentTime - nextTime) > 0.45) {
+            videoRef.current.currentTime = nextTime;
+          }
+          if (event.kind === "preview_frame") videoRef.current.play().catch(() => {});
+        }
+      }
+      if (event.kind === "runtime_stopped" || event.kind === "runtime_completed") {
+        videoRef.current?.pause();
+      }
+      if (event.kind !== "preview_frame") {
+        setEvents((current) => [event, ...current].slice(0, 200));
+      }
       request("/api/health").then(setState).catch(() => {});
     };
     source.onerror = () => setError("Event stream disconnected; reconnecting...");
@@ -70,6 +88,7 @@ function App() {
 
   const running = state.phase !== "idle";
   const current = events[0];
+  const selected = scenarios.find((scenario) => scenario.name === selectedScenario);
   const lastAssignment = useMemo(
     () => events.find((event) => event.kind === "rider_assignment"),
     [events],
@@ -84,6 +103,11 @@ function App() {
         body: JSON.stringify({ mode }),
       }));
       setEvents([]);
+      setPlayhead(0);
+      if (videoRef.current) {
+        videoRef.current.pause();
+        videoRef.current.currentTime = 0;
+      }
     } catch (reason) { setError(reason.message); }
   }
 
@@ -118,7 +142,7 @@ function App() {
         </div>
         {state.mode === "simulation" && (
           <select value={selectedScenario} disabled={running} onChange={(event) => setSelectedScenario(event.target.value)}>
-            {scenarios.map((scenario) => <option key={scenario}>{scenario}</option>)}
+            {scenarios.map((scenario) => <option key={scenario.name}>{scenario.name}</option>)}
           </select>
         )}
         <button className="primary" disabled={running || (state.mode === "simulation" && !selectedScenario)} onClick={run}>
@@ -133,10 +157,23 @@ function App() {
         <div className="preview panel">
           <div className="panel-title"><span>Preview</span><small>{state.mode}</small></div>
           <div className="preview-content">
-            <div className="reticle" />
-            <strong>{state.mode === "simulation" ? "Behavioural scenario" : "Hardware preview"}</strong>
-            <p>{state.mode === "simulation" ? "No video is attached to scenario schema 2.0 yet." : "Preview transport is the next hardware integration slice."}</p>
-            {current?.at_s != null && <div className="clock">T+ {Number(current.at_s).toFixed(1)} s</div>}
+            {state.mode === "simulation" && selected?.video_url ? (
+              <video ref={videoRef} src={selected.video_url} muted playsInline controls />
+            ) : (
+              <>
+                <div className="reticle" />
+                <strong>{state.mode === "simulation" ? "Behavioural scenario" : "Hardware preview"}</strong>
+                <p>{state.mode === "simulation" ? "This scenario has no recorded video." : "Preview transport is the next hardware integration slice."}</p>
+              </>
+            )}
+            {state.mode === "simulation" && selected && (
+              <div className="sources">
+                {Object.entries(selected.components).map(([component, source]) => (
+                  <span key={component}>{component}: {source}</span>
+                ))}
+              </div>
+            )}
+            {(current?.at_s != null || playhead > 0) && <div className="clock">T+ {playhead.toFixed(1)} s</div>}
           </div>
         </div>
 

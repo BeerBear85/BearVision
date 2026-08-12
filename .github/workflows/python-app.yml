@@ -24,10 +24,27 @@ jobs:
         uses: astral-sh/setup-uv@v6
       - run: uv sync --locked --extra dev
       - name: Lint active package
-        run: uv run ruff check src tests/remake
+        run: uv run ruff check src tests/remake tests/vision
       - name: Type-check active package
         run: uv run mypy
       - name: Run behavioural gate
         run: uv run pytest --cov=bearvision --cov-report=term-missing
       - name: Build package
         run: uv build
+
+  vision-regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: false
+      - name: Materialize only required vision assets
+        run: git lfs pull --include="code/dnn_models/yolov8n.onnx,test/images/*.jpg,tests/images/*.jpg,tests/data/preview_low.mp4"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --locked --extra edge --extra dev
+      - name: Run image and recorded-video regression tests
+        run: uv run pytest tests/vision -q

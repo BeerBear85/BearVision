@@ -1,0 +1,49 @@
+scenario_schema_version: "3.0"
+name: wakeboard-video-yolo
+seed: 42
+duration_s: 15.3
+
+components:
+  frames: video
+  detector: yolo
+  bear_tag: synthetic
+  camera: recorded_video
+  storage: memory
+
+video:
+  path: tests/data/preview_low.mp4
+  sample_fps: 5
+
+detector:
+  model: yolov8n
+  confidence_threshold: 0.6
+
+synthetic_bear_tags:
+  - tag_id: tag-video-rider
+    rider_id: rider-video
+    start_s: 0
+    end_s: 13
+    sample_rate_hz: 10
+    rssi_dbm: -58
+    baseline_acceleration_mps2:
+      x: 0
+      y: 0
+      z: 9.80665
+    motion_windows:
+      - start_s: 5.5
+        end_s: 11.1
+        rssi_dbm: -50
+        acceleration_mps2:
+          x: 4
+          y: 2
+          z: 19
+
+timeline: []
+faults: {}
+expect:
+  rider_id: rider-video
+  assignment_status: assigned
+  capture_triggered: true
+  clip_uploaded: true
+  minimum_person_detections: 1
+  first_detection_between_s: [5.8, 6.3]

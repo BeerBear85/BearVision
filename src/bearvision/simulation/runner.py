@@ -41,6 +41,54 @@ class ScenarioRunResult:
     expectation_failures: tuple[str, ...] = ()
 
 
+def evaluate_expectations(
+    scenario: ScenarioDefinition,
+    assignments: tuple[RiderAssignment, ...],
+    captures: tuple[str, ...],
+    uploads: tuple[StorageReceipt, ...],
+    *,
+    detection_times_s: tuple[float, ...] = (),
+) -> tuple[str, ...]:
+    """Evaluate shared declared outcomes for synthetic and video scenarios."""
+
+    expected = scenario.expect
+    failures: list[str] = []
+    first = assignments[0] if assignments else None
+    if expected.rider_id is not None and (first is None or first.rider_id != expected.rider_id):
+        actual = first.rider_id if first is not None else None
+        failures.append(f"expected rider_id={expected.rider_id!r}, got {actual!r}")
+    if expected.assignment_status is not None and (
+        first is None or first.status.value != expected.assignment_status
+    ):
+        actual = first.status.value if first is not None else None
+        failures.append(
+            f"expected assignment_status={expected.assignment_status!r}, got {actual!r}"
+        )
+    if expected.capture_triggered is not None and bool(captures) != expected.capture_triggered:
+        failures.append(
+            f"expected capture_triggered={expected.capture_triggered}, got {bool(captures)}"
+        )
+    if expected.clip_uploaded is not None and bool(uploads) != expected.clip_uploaded:
+        failures.append(f"expected clip_uploaded={expected.clip_uploaded}, got {bool(uploads)}")
+    if (
+        expected.minimum_person_detections is not None
+        and len(detection_times_s) < expected.minimum_person_detections
+    ):
+        failures.append(
+            "expected at least "
+            f"{expected.minimum_person_detections} person detections, got {len(detection_times_s)}"
+        )
+    if expected.first_detection_between_s is not None:
+        window_start, window_end = expected.first_detection_between_s
+        first_detection = detection_times_s[0] if detection_times_s else None
+        if first_detection is None or not window_start <= first_detection <= window_end:
+            failures.append(
+                f"expected first detection in [{window_start}, {window_end}], "
+                f"got {first_detection!r}"
+            )
+    return tuple(failures)
+
+
 class ClosedLoopScenarioRunner:
     """Drive the exact same orchestration core used by the edge service."""
 
@@ -231,7 +279,16 @@ class ClosedLoopScenarioRunner:
         # SimulatedCamera stores by request id; expose stable asset ids.
         captures = tuple(media.asset.asset_id for media in self.camera.captures.values())
         uploads = tuple(receipt for _, receipt in self.storage.objects.values())
-        expectation_failures = self._evaluate_expectations(assignments, captures, uploads)
+        detection_times_s = tuple(
+            entry.at_s for entry in trace if entry.kind == "person_detected"
+        )
+        expectation_failures = evaluate_expectations(
+            self.scenario,
+            assignments,
+            captures,
+            uploads,
+            detection_times_s=detection_times_s,
+        )
         return ScenarioRunResult(
             trace=trace,
             assignments=assignments,
@@ -240,30 +297,3 @@ class ClosedLoopScenarioRunner:
             failures=tuple(failures),
             expectation_failures=expectation_failures,
         )
-
-    def _evaluate_expectations(
-        self,
-        assignments: tuple[RiderAssignment, ...],
-        captures: tuple[str, ...],
-        uploads: tuple[StorageReceipt, ...],
-    ) -> tuple[str, ...]:
-        expected = self.scenario.expect
-        failures: list[str] = []
-        first = assignments[0] if assignments else None
-        if expected.rider_id is not None and (first is None or first.rider_id != expected.rider_id):
-            actual = first.rider_id if first is not None else None
-            failures.append(f"expected rider_id={expected.rider_id!r}, got {actual!r}")
-        if expected.assignment_status is not None and (
-            first is None or first.status.value != expected.assignment_status
-        ):
-            actual = first.status.value if first is not None else None
-            failures.append(
-                f"expected assignment_status={expected.assignment_status!r}, got {actual!r}"
-            )
-        if expected.capture_triggered is not None and bool(captures) != expected.capture_triggered:
-            failures.append(
-                f"expected capture_triggered={expected.capture_triggered}, got {bool(captures)}"
-            )
-        if expected.clip_uploaded is not None and bool(uploads) != expected.clip_uploaded:
-            failures.append(f"expected clip_uploaded={expected.clip_uploaded}, got {bool(uploads)}")
-        return tuple(failures)

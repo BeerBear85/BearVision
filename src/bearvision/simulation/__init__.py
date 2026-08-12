@@ -10,6 +10,7 @@ from .adapters import (
 )
 from .engine import BehavioralSimulation, Event, TraceEntry
 from .runner import ClosedLoopScenarioRunner, ScenarioRunResult
+from .scenario_inputs import generate_bear_tag_series
 
 __all__ = [
     "BehavioralSimulation",
@@ -23,4 +24,5 @@ __all__ = [
     "ScenarioRunResult",
     "TraceEntry",
     "VirtualClock",
+    "generate_bear_tag_series",
 ]

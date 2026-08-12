@@ -1,9 +1,10 @@
 import { spawn } from "node:child_process";
-import { createReadStream, existsSync, readdirSync, statSync } from "node:fs";
+import { createReadStream, existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { createServer } from "node:http";
 import { dirname, extname, join, normalize, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createInterface } from "node:readline";
+import { parse as parseYaml } from "yaml";
 import { ControlState } from "./control-state.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -21,6 +22,7 @@ const mimeTypes = {
   ".css": "text/css; charset=utf-8",
   ".html": "text/html; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
+  ".mp4": "video/mp4",
   ".png": "image/png",
   ".svg": "image/svg+xml",
 };
@@ -70,6 +72,71 @@ function scenarios() {
 function safeScenario(name) {
   if (!scenarios().includes(name)) throw new Error("unknown scenario");
   return join(scenarioRoot, name);
+}
+
+function scenarioDetails(name) {
+  const document = parseYaml(readFileSync(safeScenario(name), "utf8"));
+  const videoPath = document.video?.path ?? null;
+  return {
+    name,
+    scenario_schema_version: document.scenario_schema_version,
+    components: document.components ?? {
+      frames: "synthetic",
+      detector: "declared",
+      bear_tag: "synthetic",
+      camera: "simulated",
+      storage: "memory",
+    },
+    video_url: videoPath ? `/api/scenarios/${encodeURIComponent(name)}/video` : null,
+  };
+}
+
+function scenarioVideo(name) {
+  const document = parseYaml(readFileSync(safeScenario(name), "utf8"));
+  if (!document.video?.path) throw new Error("scenario has no video");
+  const candidate = resolve(repoRoot, document.video.path);
+  if (!candidate.startsWith(`${repoRoot}\\`) && !candidate.startsWith(`${repoRoot}/`)) {
+    throw new Error("scenario video must stay inside the repository");
+  }
+  if (!existsSync(candidate) || !statSync(candidate).isFile()) {
+    throw new Error("scenario video does not exist");
+  }
+  return candidate;
+}
+
+function serveVideo(request, response, name) {
+  const filePath = scenarioVideo(name);
+  const size = statSync(filePath).size;
+  const range = request.headers.range;
+  if (!range) {
+    response.writeHead(200, {
+      "accept-ranges": "bytes",
+      "content-length": size,
+      "content-type": mimeTypes[extname(filePath)] ?? "application/octet-stream",
+    });
+    createReadStream(filePath).pipe(response);
+    return;
+  }
+  const match = /^bytes=(\d+)-(\d*)$/.exec(range);
+  if (!match) {
+    response.writeHead(416, { "content-range": `bytes */${size}` });
+    response.end();
+    return;
+  }
+  const start = Number(match[1]);
+  const end = match[2] ? Math.min(Number(match[2]), size - 1) : size - 1;
+  if (start > end || start >= size) {
+    response.writeHead(416, { "content-range": `bytes */${size}` });
+    response.end();
+    return;
+  }
+  response.writeHead(206, {
+    "accept-ranges": "bytes",
+    "content-length": end - start + 1,
+    "content-range": `bytes ${start}-${end}/${size}`,
+    "content-type": mimeTypes[extname(filePath)] ?? "application/octet-stream",
+  });
+  createReadStream(filePath, { start, end }).pipe(response);
 }
 
 function attachOutput(stream, source) {
@@ -131,7 +198,16 @@ const server = createServer(async (request, response) => {
     if (request.method === "GET" && url.pathname === "/api/health") {
       writeJson(response, 200, { status: "ok", ...state.snapshot() });
     } else if (request.method === "GET" && url.pathname === "/api/scenarios") {
-      writeJson(response, 200, { scenario_schema_version: "2.0", scenarios: scenarios() });
+      writeJson(response, 200, {
+        scenario_catalog_version: "1.0",
+        scenarios: scenarios().map(scenarioDetails),
+      });
+    } else if (
+      request.method === "GET"
+      && /^\/api\/scenarios\/[^/]+\/video$/.test(url.pathname)
+    ) {
+      const name = decodeURIComponent(url.pathname.split("/")[3]);
+      serveVideo(request, response, name);
     } else if (request.method === "GET" && url.pathname === "/api/events") {
       response.writeHead(200, {
         "content-type": "text/event-stream",

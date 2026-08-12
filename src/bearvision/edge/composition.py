@@ -24,6 +24,7 @@ from .orchestrator import BearVisionOrchestrator
 
 if TYPE_CHECKING:
     from bearvision.simulation.runner import ClosedLoopScenarioRunner
+    from bearvision.simulation.video_runner import VideoScenarioRunner
 
 
 class ConfiguredTagRegistry:
@@ -53,7 +54,26 @@ class RealEdgeComponents:
 def build_behavioral_system(
     scenario: ScenarioDefinition,
     assignment_policy: AssignmentConfig | None = None,
-) -> "ClosedLoopScenarioRunner":
+) -> "ClosedLoopScenarioRunner | VideoScenarioRunner":
+    if scenario.components.frames == "video":
+        from bearvision.simulation.video_runner import VideoScenarioRunner
+
+        return VideoScenarioRunner.from_scenario(
+            scenario,
+            assignment_policy=assignment_policy,
+        )
+    supported_synthetic = (
+        scenario.components.frames == "synthetic"
+        and scenario.components.detector == "declared"
+        and scenario.components.bear_tag == "synthetic"
+        and scenario.components.camera == "simulated"
+        and scenario.components.storage == "memory"
+    )
+    if not supported_synthetic:
+        raise ValueError(
+            "this component-source combination is declared but not implemented as a "
+            "behavioural composition"
+        )
     from bearvision.simulation.runner import ClosedLoopScenarioRunner
 
     return ClosedLoopScenarioRunner.from_scenario(

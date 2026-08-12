@@ -41,6 +41,13 @@ Run a versioned behavioural scenario:
 uv run bearvision-simulate specs/scenarios/single-rider-success.yaml
 ```
 
+Run the recorded-video scenario through the real YOLO detector:
+
+```bash
+uv sync --locked --extra edge --extra dev
+uv run python -m bearvision.control simulate specs/scenarios/wakeboard-video-yolo.yaml
+```
+
 Run the Edge computer's Node.js/React control GUI:
 
 ```bash
@@ -51,8 +58,9 @@ corepack pnpm serve
 ```
 
 Open `http://localhost:4310`. The GUI can select behavioural simulation or real
-hardware and shows the scenario trace in wall-clock time. Scenario video and
-real preview proxying are the next integration slice.
+hardware, play an attached scenario video on the trace timeline and show its
+component sources and events. Physical hardware preview proxying is not yet
+implemented.
 
 Install edge dependencies and start the production service:
 

@@ -58,6 +58,8 @@ source = ["bearvision"]
 omit = [
     "src/bearvision/integrations/*",
     "src/bearvision/adapters/opencv_frames.py",
+    "src/bearvision/simulation/video.py",
+    "src/bearvision/simulation/video_runner.py",
     "src/bearvision/cli.py",
 ]
 

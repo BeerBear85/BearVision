@@ -30,6 +30,9 @@ button.danger { color: #ff8e8e; }
 .panel-title small { color: #19d5aa; }
 .preview-content { height: calc(100% - 42px); display: flex; flex-direction: column; justify-content: center; align-items: center; position: relative; background: linear-gradient(145deg, #091d2b, #0b2b3f); color: #d9e8ef; }
 .preview-content p { color: #7998a9; max-width: 420px; text-align: center; }
+.preview-content video { width: 100%; height: 100%; object-fit: contain; background: #02080d; }
+.sources { position: absolute; top: 12px; left: 12px; display: flex; flex-wrap: wrap; gap: 5px; max-width: calc(100% - 24px); }
+.sources span { padding: 4px 7px; border: 1px solid #315267; border-radius: 4px; background: rgba(5, 20, 33, .88); color: #b8d0dc; font: 650 10px ui-monospace, monospace; }
 .reticle { width: 120px; height: 82px; border: 2px solid #19d5aa; margin-bottom: 28px; position: relative; opacity: .7; }
 .reticle::before, .reticle::after { content: ""; position: absolute; background: #19d5aa; }
 .reticle::before { width: 22px; height: 2px; left: 48px; top: 39px; }

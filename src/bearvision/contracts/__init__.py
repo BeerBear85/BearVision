@@ -17,8 +17,13 @@ from .models import (
 )
 from .scenario import (
     ScenarioDefinition,
+    ScenarioComponents,
+    ScenarioDetector,
     ScenarioExpectation,
     ScenarioFaults,
+    ScenarioVideo,
+    SyntheticBearTagSeries,
+    SyntheticMotionWindow,
     TimelineEvent,
     load_scenario,
 )
@@ -33,13 +38,18 @@ __all__ = [
     "RiderAssignment",
     "RiderAssignmentStatus",
     "ScenarioDefinition",
+    "ScenarioComponents",
+    "ScenarioDetector",
     "ScenarioExpectation",
     "ScenarioFaults",
+    "ScenarioVideo",
     "TagObservation",
     "TagAssignmentEvidence",
     "TagRegistryEntry",
     "StorageReceipt",
     "TimelineEvent",
+    "SyntheticBearTagSeries",
+    "SyntheticMotionWindow",
     "Vector3",
     "load_scenario",
 ]

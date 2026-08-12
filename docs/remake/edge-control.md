@@ -1,7 +1,7 @@
 # Edge computer and control GUI
 
-Status: first control slice implemented; real preview and scenario video remain
-future work.
+Status: control GUI and recorded-video regression implemented; physical preview
+transport remains future work.
 
 ## Deployment boundary
 
@@ -21,8 +21,9 @@ flowchart LR
         orchestrator --> ports["Camera, frames, detector, BLE, storage and clock ports"]
     end
 
-    ports -->|"Hardware mode"| hardware["GoPro, BearTag BLE and Box"]
-    ports -->|"Simulation mode"| simulated["Deterministic simulated adapters"]
+    ports -->|"Physical sources"| hardware["GoPro, BearTag BLE and Box"]
+    ports -->|"Synthetic sources"| simulated["Declared frames, BearTag series and memory storage"]
+    ports -->|"Recorded source"| video["MP4 frames through real YOLO"]
 ```
 
 Node is deliberately a thin shell. Python owns the orchestrator, contracts and
@@ -51,23 +52,41 @@ sequenceDiagram
     end
 ```
 
-The scenario is currently executed deterministically first and its trace is
-then replayed at wall-clock speed. This is sufficient for UI behaviour testing,
-but it is not a physical real-time simulation.
+The scenario is executed deterministically first and its trace is then replayed
+at wall-clock speed. For the recorded-video scenario, React plays the source
+video on the same media timestamps as Python's frame-analysis trace. This is
+sufficient for repeatable UI behaviour testing, but it is not a physical
+real-time simulation.
 
-## Next vertical slice: synchronized scenario video
+## Scenario schema 3.0 sources
 
-Use an existing test video to produce one reproducible scenario bundle:
+Each scenario explicitly selects the adapter behind each port:
 
-- source video or extracted preview frames;
-- frame timestamps on the same monotonic timeline as scenario events;
-- person-detection expectations or recorded detections;
-- approximately 10 Hz BearTag RSSI and acceleration observations;
-- expected capture, assignment and upload outcome.
+| Part | Current choices |
+|---|---|
+| Frames | `synthetic`, `video`, `gopro` |
+| Detector | `declared`, `yolo` |
+| BearTag | `synthetic`, `ble` |
+| Camera | `simulated`, `recorded_video`, `gopro` |
+| Storage | `memory`, `box` |
 
-The Python runtime should own synchronization. Node should only proxy the
-preview stream and events to React. Before recording the bundle, define the
-clock origin and how dropped or late BLE observations are represented.
+The schema can express future physical/hybrid combinations. The behavioural
+runtime currently implements two deliberately tested compositions only:
+
+- fully synthetic with declared detections;
+- recorded video + real YOLO + synthetic BearTag + in-memory storage.
+
+The GUI's Hardware mode uses the physical composition from `config/edge.yaml`;
+arbitrary mixed physical/simulated compositions are not implemented yet and
+fail explicitly instead of silently selecting the wrong adapter.
+
+`wakeboard-video-yolo.yaml` combines the checked-in 15.3-second preview video,
+the real bundled YOLOv8n model and deterministic 10 Hz RSSI/accelerometer data.
+YOLO detects the rider at approximately T+6.0 s; the resulting five-second clip
+window assigns `rider-video` using its whole-window BearTag evidence.
+
+Node only serves scenario metadata/media and supervises Python. Python remains
+the owner of synchronization, YOLO, capture and rider assignment.
 
 ## Known gaps
 
@@ -75,5 +94,8 @@ clock origin and how dropped or late BLE observations are represented.
   mockup with mock events and no backend.
 - The PyQt Edge GUI is wired to the legacy state machine, not BearVision 3.
 - Hardware-mode preview transport is not implemented in Edge Control yet.
+- `recorded_video` currently returns the complete reference media as the
+  captured asset. Extracting the exact detection-to-clip-end segment is the
+  next camera-adapter slice.
 - Edge Control has no authentication; do not expose port 4310 outside a trusted
   local network.

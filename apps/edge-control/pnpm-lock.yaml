@@ -10,7 +10,7 @@ importers:
     dependencies:
       '@vitejs/plugin-react':
         specifier: latest
-        version: 6.0.5(vite@8.2.1)
+        version: 6.0.5(vite@8.2.1(yaml@2.9.0))
       react:
         specifier: latest
         version: 19.2.8
@@ -19,7 +19,10 @@ importers:
         version: 19.2.8(react@19.2.8)
       vite:
         specifier: latest
-        version: 8.2.1
+        version: 8.2.1(yaml@2.9.0)
+      yaml:
+        specifier: latest
+        version: 2.9.0
 
 packages:
 
@@ -308,6 +311,11 @@ packages:
       yaml:
         optional: true
 
+  yaml@2.9.0:
+    resolution: {integrity: sha512-2AvhNX3mb8zd6Zy7INTtSpl1F15HW6Wnqj0srWlkKLcpYl/gMIMJiyuGq2KeI2YFxUPjdlB+3Lc10seMLtL4cA==}
+    engines: {node: '>= 14.6'}
+    hasBin: true
+
 snapshots:
 
   '@oxc-project/types@0.143.0': {}
@@ -356,10 +364,10 @@ snapshots:
 
   '@rolldown/pluginutils@1.0.1': {}
 
-  '@vitejs/plugin-react@6.0.5(vite@8.2.1)':
+  '@vitejs/plugin-react@6.0.5(vite@8.2.1(yaml@2.9.0))':
     dependencies:
       '@rolldown/pluginutils': 1.0.1
-      vite: 8.2.1
+      vite: 8.2.1(yaml@2.9.0)
 
   detect-libc@2.1.2: {}
 
@@ -467,7 +475,7 @@ snapshots:
       fdir: 6.5.0(picomatch@4.0.5)
       picomatch: 4.0.5
 
-  vite@8.2.1:
+  vite@8.2.1(yaml@2.9.0):
     dependencies:
       lightningcss: 1.33.0
       picomatch: 4.0.5
@@ -476,3 +484,6 @@ snapshots:
       tinyglobby: 0.2.17
     optionalDependencies:
       fsevents: 2.3.3
+      yaml: 2.9.0
+
+  yaml@2.9.0: {}
