@@ -134,3 +134,12 @@ class CaptureResult(ContractModel):
         if self.status is CaptureStatus.FAILED and not self.error_code:
             raise ValueError("failed capture requires error_code")
         return self
+
+
+class StorageReceipt(ContractModel):
+    """Provider-neutral confirmation that a media asset was stored."""
+
+    asset_id: Identifier
+    object_key: str = Field(min_length=1, max_length=1024)
+    stored_at_utc: AwareDatetime
+    checksum_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")

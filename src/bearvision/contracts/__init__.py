@@ -11,6 +11,7 @@ from .models import (
     RiderAssignmentStatus,
     TagObservation,
     TagRegistryEntry,
+    StorageReceipt,
     Vector3,
 )
 from .scenario import ScenarioDefinition, TimelineEvent, load_scenario
@@ -27,6 +28,7 @@ __all__ = [
     "ScenarioDefinition",
     "TagObservation",
     "TagRegistryEntry",
+    "StorageReceipt",
     "TimelineEvent",
     "Vector3",
     "load_scenario",
