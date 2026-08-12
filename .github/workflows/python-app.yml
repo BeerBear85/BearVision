@@ -33,7 +33,11 @@ jobs:
         run: uv build
 
   vision-regression:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -48,3 +52,20 @@ jobs:
       - run: uv sync --locked --extra edge --extra dev
       - name: Run image and recorded-video regression tests
         run: uv run pytest tests/vision -q
+
+  edge-control:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: apps/edge-control
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: apps/edge-control/pnpm-lock.yaml
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test
+      - run: pnpm build

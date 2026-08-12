@@ -85,6 +85,13 @@ the real bundled YOLOv8n model and deterministic 10 Hz RSSI/accelerometer data.
 YOLO detects the rider at approximately T+6.0 s; the resulting five-second clip
 window assigns `rider-video` using its whole-window BearTag evidence.
 
+The recorded-video camera then uses the packaged FFmpeg/FFprobe executables on
+the Edge computer to re-encode exactly T+6.0 through T+11.0. It validates the
+result before an atomic rename, uploads only the extracted file and leaves the
+source unchanged. Edge Control exposes the capture through a range-enabled,
+capture-directory-confined endpoint and lets the operator switch between the
+scenario source and extracted clip.
+
 Node only serves scenario metadata/media and supervises Python. Python remains
 the owner of synchronization, YOLO, capture and rider assignment.
 
@@ -94,8 +101,17 @@ the owner of synchronization, YOLO, capture and rider assignment.
   mockup with mock events and no backend.
 - The PyQt Edge GUI is wired to the legacy state machine, not BearVision 3.
 - Hardware-mode preview transport is not implemented in Edge Control yet.
-- `recorded_video` currently returns the complete reference media as the
-  captured asset. Extracting the exact detection-to-clip-end segment is the
-  next camera-adapter slice.
 - Edge Control has no authentication; do not expose port 4310 outside a trusted
   local network.
+
+## Windows media runtime
+
+`uv sync --locked --extra edge` installs platform-specific FFmpeg and FFprobe
+binaries inside `.venv`; administrator access and a system-wide FFmpeg install
+are not required. Explicit `BEARVISION_FFMPEG` and `BEARVISION_FFPROBE` paths
+override the packaged binaries when deployment policy requires managed tools.
+
+Encoding policy is independently versioned in `config/edge.yaml` under
+`clip_extraction`. The current correctness-first default is H.264/AAC,
+`veryfast`, CRF 20. Mini-PC throughput still needs measurement on the selected
+production hardware; CI proves correctness, not performance.

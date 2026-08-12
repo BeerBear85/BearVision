@@ -59,8 +59,9 @@ corepack pnpm serve
 
 Open `http://localhost:4310`. The GUI can select behavioural simulation or real
 hardware, play an attached scenario video on the trace timeline and show its
-component sources and events. Physical hardware preview proxying is not yet
-implemented.
+component sources and events. After capture it can also play the frame-accurate
+five-second clip produced locally by the Windows Edge media runtime. Physical
+hardware preview proxying is not yet implemented.
 
 Install edge dependencies and start the production service:
 
@@ -68,6 +69,10 @@ Install edge dependencies and start the production service:
 uv sync --locked --extra edge
 uv run bearvision-edge --config config/edge.yaml
 ```
+
+The Edge extra includes packaged FFmpeg and FFprobe binaries for local clip
+extraction; no system-wide installation or administrator access is required.
+Override them with `BEARVISION_FFMPEG` and `BEARVISION_FFPROBE` if needed.
 
 Real operation additionally requires a supported GoPro, BLE hardware, valid Box
 credentials and a populated `tag_registry` in `config/edge.yaml`.
