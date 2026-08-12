@@ -41,6 +41,19 @@ Run a versioned behavioural scenario:
 uv run bearvision-simulate specs/scenarios/single-rider-success.yaml
 ```
 
+Run the Edge computer's Node.js/React control GUI:
+
+```bash
+cd apps/edge-control
+corepack pnpm install
+corepack pnpm build
+corepack pnpm serve
+```
+
+Open `http://localhost:4310`. The GUI can select behavioural simulation or real
+hardware and shows the scenario trace in wall-clock time. Scenario video and
+real preview proxying are the next integration slice.
+
 Install edge dependencies and start the production service:
 
 ```bash
@@ -70,6 +83,7 @@ Their versioned configuration files live in `config/`. Test videos remain under
 ## Specifications
 
 - Runtime and simulation: `docs/remake/foundation.md`
+- Edge computer and control GUI: `docs/remake/edge-control.md`
 - Component behaviour: `specs/components/`
 - Versioned scenarios: `specs/scenarios/`
 - Architecture decisions: `specs/decisions/`

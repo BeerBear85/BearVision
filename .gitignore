@@ -4,6 +4,7 @@
 test/debug.log
 __pycache__
 .venv/
+node_modules/
 *.egg-info/
 code/dnn_models/yolov3_608.weights
 android_app/.gradle/

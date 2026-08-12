@@ -7,6 +7,7 @@ import asyncio
 import json
 import logging
 from pathlib import Path
+import time
 
 from bearvision.config import load_edge_config
 from bearvision.contracts import load_scenario
@@ -39,14 +40,32 @@ def edge_main() -> int:
 def simulate_main() -> int:
     parser = argparse.ArgumentParser(description="Run a BearVision behavioural scenario")
     parser.add_argument("scenario", type=Path)
+    parser.add_argument(
+        "--realtime",
+        action="store_true",
+        help="Replay the deterministic trace at wall-clock speed for monitoring clients",
+    )
+    parser.add_argument(
+        "--speed",
+        type=float,
+        default=1.0,
+        help="Playback speed used with --realtime (1.0 is wall-clock speed)",
+    )
     args = parser.parse_args()
+    if args.speed <= 0:
+        parser.error("--speed must be positive")
     result = build_behavioral_system(load_scenario(args.scenario)).run()
+    previous_at_s = 0.0
     for entry in result.trace:
+        if args.realtime:
+            time.sleep(max(0.0, entry.at_s - previous_at_s) / args.speed)
+        previous_at_s = entry.at_s
         print(
             json.dumps(
                 {"at_s": entry.at_s, "kind": entry.kind, "payload": entry.payload},
                 default=str,
-            )
+            ),
+            flush=True,
         )
     for failure in result.expectation_failures:
         logging.error("Expectation failed: %s", failure)

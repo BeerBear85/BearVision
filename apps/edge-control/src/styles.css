@@ -1,0 +1,52 @@
+:root {
+  font-family: Inter, Aptos, system-ui, sans-serif;
+  color: #eaf3f7;
+  background: #051421;
+  font-synthesis: none;
+}
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 900px; min-height: 100vh; background: radial-gradient(circle at 70% -20%, #123f5e, #051421 45%); }
+button, select { font: inherit; }
+main { min-height: 100vh; padding: 24px 30px 30px; }
+header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #24445a; padding-bottom: 16px; }
+h1 { margin: 2px 0 0; font-size: 24px; letter-spacing: -.02em; }
+.eyebrow { color: #19d5aa; font-size: 11px; font-weight: 800; letter-spacing: .16em; }
+.phase { padding: 8px 14px; border: 1px solid #37586d; border-radius: 999px; text-transform: uppercase; font-size: 11px; letter-spacing: .12em; }
+.phase.running { color: #19d5aa; border-color: #19d5aa; }
+.controls { display: flex; gap: 10px; align-items: center; padding: 18px 0; }
+.controls button, select { min-height: 38px; border: 1px solid #315267; color: #d8e7ef; background: #0b2435; border-radius: 7px; padding: 0 14px; }
+.mode { display: flex; border: 1px solid #315267; border-radius: 8px; overflow: hidden; }
+.mode button { border: 0; border-radius: 0; }
+.mode button.selected { color: #041a18; background: #19d5aa; font-weight: 750; }
+select { min-width: 260px; }
+button { cursor: pointer; }
+button:disabled { cursor: not-allowed; opacity: .4; }
+button.primary { background: #19d5aa; color: #041a18; border-color: #19d5aa; font-weight: 800; }
+button.danger { color: #ff8e8e; }
+.error { padding: 10px 14px; margin-bottom: 14px; color: #ffb0b0; background: #3a1d27; border: 1px solid #804050; border-radius: 7px; }
+.dashboard { display: grid; grid-template-columns: minmax(560px, 3fr) minmax(300px, 1fr); gap: 12px; height: calc(100vh - 155px); }
+.panel { background: rgba(8, 30, 45, .94); border: 1px solid #26495f; border-radius: 9px; overflow: hidden; }
+.panel-title { display: flex; justify-content: space-between; padding: 12px 14px; border-bottom: 1px solid #26495f; color: #a9c1cf; font-size: 12px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.panel-title small { color: #19d5aa; }
+.preview-content { height: calc(100% - 42px); display: flex; flex-direction: column; justify-content: center; align-items: center; position: relative; background: linear-gradient(145deg, #091d2b, #0b2b3f); color: #d9e8ef; }
+.preview-content p { color: #7998a9; max-width: 420px; text-align: center; }
+.reticle { width: 120px; height: 82px; border: 2px solid #19d5aa; margin-bottom: 28px; position: relative; opacity: .7; }
+.reticle::before, .reticle::after { content: ""; position: absolute; background: #19d5aa; }
+.reticle::before { width: 22px; height: 2px; left: 48px; top: 39px; }
+.reticle::after { width: 2px; height: 22px; left: 58px; top: 29px; }
+.clock { position: absolute; bottom: 20px; right: 22px; color: #19d5aa; font: 700 14px ui-monospace, monospace; }
+aside { display: grid; grid-template-rows: auto 1fr; gap: 12px; min-height: 0; }
+.indicators { padding-bottom: 8px; }
+.indicator { display: flex; align-items: center; gap: 11px; padding: 11px 14px 4px; }
+.indicator span:last-child { display: flex; justify-content: space-between; flex: 1; }
+.indicator small { color: #7896a6; }
+.dot { width: 9px; height: 9px; border-radius: 50%; background: #425767; box-shadow: 0 0 0 4px #243844; }
+.dot.active { background: #19d5aa; box-shadow: 0 0 0 4px #16493e; }
+.event-panel { min-height: 0; }
+.event-panel ol { list-style: none; margin: 0; padding: 0; overflow: auto; height: calc(100% - 42px); }
+.event-panel li { display: grid; grid-template-columns: 58px 1fr; gap: 8px; padding: 10px 14px; border-bottom: 1px solid #15384b; font-size: 12px; }
+.event-panel time { color: #19d5aa; font-family: ui-monospace, monospace; }
+.event-panel li span { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.event-panel li small { color: #7896a6; overflow: hidden; text-overflow: ellipsis; }
+.event-panel li.empty { display: block; color: #7896a6; }
+@media (max-width: 1000px) { .dashboard { grid-template-columns: 2fr 1fr; } }
