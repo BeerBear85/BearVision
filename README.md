@@ -35,6 +35,17 @@ uv run ruff check src tests/remake
 uv run mypy
 ```
 
+The CI coverage figure combines the fast behavioural suite with the heavier
+real-video/YOLO suite. Reproduce it after installing the Edge extra:
+
+```bash
+uv run coverage erase
+uv run coverage run --parallel-mode -m pytest
+uv run coverage run --parallel-mode -m pytest tests/vision -q
+uv run coverage combine
+uv run coverage report
+```
+
 Run a versioned behavioural scenario:
 
 ```bash
