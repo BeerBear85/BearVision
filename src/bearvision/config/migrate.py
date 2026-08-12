@@ -26,7 +26,7 @@ def migrate_edge_data(ini_path: str | Path, yaml_path: str | Path) -> tuple[dict
     """Merge legacy INI and YAML edge settings; YAML takes precedence."""
 
     data = EdgeConfig(
-        config_schema_version="2.0",
+        config_schema_version="2.1",
         config_kind="bearvision-edge",
     ).model_dump(mode="json")
     warnings: list[str] = []

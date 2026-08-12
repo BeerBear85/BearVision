@@ -18,6 +18,16 @@ class RecordingConfig(StrictConfigModel):
     hindsight_enabled: bool = True
 
 
+class ClipExtractionConfig(StrictConfigModel):
+    engine: Literal["ffmpeg"] = "ffmpeg"
+    video_codec: Literal["libx264"] = "libx264"
+    audio_codec: Literal["aac"] = "aac"
+    preset: Literal["ultrafast", "superfast", "veryfast", "faster", "fast", "medium"] = (
+        "veryfast"
+    )
+    crf: int = Field(default=20, ge=0, le=51)
+
+
 class DetectionConfig(StrictConfigModel):
     enabled: bool = True
     model: str = Field(default="yolov8n", min_length=1)
@@ -84,9 +94,10 @@ class TagRegistration(StrictConfigModel):
 class EdgeConfig(StrictConfigModel):
     """Complete edge configuration; versioned separately from the application."""
 
-    config_schema_version: Literal["2.0"]
+    config_schema_version: Literal["2.0", "2.1"]
     config_kind: Literal["bearvision-edge"]
     recording: RecordingConfig = Field(default_factory=RecordingConfig)
+    clip_extraction: ClipExtractionConfig = Field(default_factory=ClipExtractionConfig)
     detection: DetectionConfig = Field(default_factory=DetectionConfig)
     assignment: AssignmentConfig = Field(default_factory=AssignmentConfig)
     performance: PerformanceConfig = Field(default_factory=PerformanceConfig)

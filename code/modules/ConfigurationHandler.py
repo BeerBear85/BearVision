@@ -80,7 +80,7 @@ class ConfigurationHandler:
         )
         if is_versioned_yaml:
             data = yaml.safe_load(text) or {}
-            if data.get("config_schema_version") != "2.0":
+            if data.get("config_schema_version") not in {"2.0", "2.1"}:
                 raise ValueError("unsupported or missing configuration schema version")
             if data.get("config_kind") != "bearvision-edge":
                 raise ValueError("ConfigurationHandler only accepts bearvision-edge configuration")

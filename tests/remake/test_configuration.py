@@ -15,9 +15,11 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 def test_active_edge_config_is_versioned_and_valid() -> None:
     config = load_edge_config(REPO_ROOT / "config" / "edge.yaml")
-    assert config.config_schema_version == "2.0"
+    assert config.config_schema_version == "2.1"
     assert config.storage.provider == "box"
     assert config.assignment.motion_weight == 0.7
+    assert config.clip_extraction.engine == "ffmpeg"
+    assert config.clip_extraction.crf == 20
 
 
 def test_assignment_fusion_weights_must_sum_to_one() -> None:
@@ -26,9 +28,15 @@ def test_assignment_fusion_weights_must_sum_to_one() -> None:
 
 
 def test_all_active_configs_start_with_independent_version_header() -> None:
-    for name in ("edge.yaml", "ble-test.yaml", "training.yaml", "annotation-example.yaml"):
+    expected_versions = {
+        "edge.yaml": "2.1",
+        "ble-test.yaml": "2.0",
+        "training.yaml": "2.0",
+        "annotation-example.yaml": "2.0",
+    }
+    for name, version in expected_versions.items():
         lines = (REPO_ROOT / "config" / name).read_text(encoding="utf-8").splitlines()
-        assert lines[0] == 'config_schema_version: "2.0"'
+        assert lines[0] == f'config_schema_version: "{version}"'
         assert lines[1].startswith("config_kind: bearvision-")
 
 
@@ -72,6 +80,7 @@ def test_legacy_edge_files_migrate_with_yaml_precedence(tmp_path: Path) -> None:
 
     migrated, warnings = migrate_edge_data(ini, legacy_yaml)
 
+    assert migrated["config_schema_version"] == "2.1"
     assert migrated["recording"]["post_detection_duration_s"] == 5
     assert migrated["storage"]["root_folder"] == "clips"
     assert any("ANNOTATION_GUI" in warning for warning in warnings)

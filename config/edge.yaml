@@ -1,8 +1,14 @@
-config_schema_version: "2.0"
+config_schema_version: "2.1"
 config_kind: bearvision-edge
 recording:
   post_detection_duration_s: 5.0
   hindsight_enabled: true
+clip_extraction:
+  engine: ffmpeg
+  video_codec: libx264
+  audio_codec: aac
+  preset: veryfast
+  crf: 20
 detection:
   enabled: true
   model: yolov8n

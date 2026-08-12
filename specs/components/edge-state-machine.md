@@ -12,8 +12,13 @@ Any active state may enter `recovering` after a retryable component failure or
 - Capture requires a person detection but never derives identity from it.
 - Capture starts immediately after person detection and runs for the configured
   fixed duration.
+- `Camera.capture` returns a playable asset containing precisely the requested
+  capture window. A recorded-video camera performs the cut locally on the Edge
+  computer before assignment and upload.
 - BearTag assignment fuses mean accelerometer activity and RSSI across the
   complete clip; it may be assigned, unassigned or ambiguous.
 - Repeated commands use stable request identifiers and must be idempotent.
 - All timeouts use monotonic time supplied by the configured clock.
 - Uploaded media remains provider-neutral outside the storage adapter.
+- Source media is immutable. Clip output is committed atomically; failed
+  partial output must be removed.
