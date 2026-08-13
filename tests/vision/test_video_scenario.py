@@ -1,5 +1,6 @@
 from pathlib import Path
 import hashlib
+import json
 
 import pytest
 
@@ -46,7 +47,12 @@ def test_recorded_video_drives_real_yolo_capture_and_rider_assignment(
     tracking_events = [entry for entry in result.trace if entry.kind == "tracking_observation"]
     assert tracking_events
     assert tracking_events[0].payload["estimate"]
+    assert tracking_events[0].payload["camera_center"]
     assert tracking_events[0].payload["confidence_radius_95_px"] > 0
+    tracking_metadata = json.loads(tracking.read_text(encoding="utf-8"))
+    assert tracking_metadata["tracking_schema_version"] == "2.0"
+    assert "rts_smoother" in tracking_metadata["state_estimator"]
+    assert tracking_metadata["camera_path"]["zero_phase"] is True
     assert hashlib.sha256(source.read_bytes()).hexdigest() == source_hash
 
     output_capture = cv2.VideoCapture(str(output))

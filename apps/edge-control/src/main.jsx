@@ -301,8 +301,8 @@ function App() {
                 {showOverlay && (
                   <div className="overlay-legend">
                     <span className="green">YOLO person</span>
-                    <span className="red">Kalman + 95 %</span>
-                    <span className="cyan">crop</span>
+                    <span className="red">Kalman + RTS · 95 %</span>
+                    <span className="cyan">Butterworth camera crop</span>
                   </div>
                 )}
               </div>

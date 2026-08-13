@@ -225,6 +225,8 @@ class VideoScenarioRunner:
                             "size_reduction_ratio": processed.reduction_ratio,
                             "output_width_px": self.post_processor.config.output_width_px,
                             "output_height_px": self.post_processor.config.output_height_px,
+                            "state_estimator": "kalman_rts_smoother",
+                            "camera_path": "zero_phase_butterworth",
                         },
                     ),
                     (

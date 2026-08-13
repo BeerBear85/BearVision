@@ -85,15 +85,30 @@ the real bundled YOLOv8n model and deterministic 10 Hz RSSI/accelerometer data.
 YOLO detects the rider at approximately T+6.0 s; the resulting five-second clip
 window assigns `rider-video` using its whole-window BearTag evidence.
 
-The recorded-video camera then uses the packaged FFmpeg/FFprobe executables on
-the Edge computer to re-encode exactly T+6.0 through T+11.0. It validates the
-result before an atomic rename, uploads only the extracted file and leaves the
-source unchanged. Edge Control exposes the capture through a range-enabled,
-capture-directory-confined endpoint and lets the operator switch between the
-scenario source and extracted clip.
+The recorded-video camera uses the packaged FFmpeg/FFprobe executables on the
+Edge computer to re-encode exactly T+6.0 through T+11.0. It validates the raw
+result before an atomic rename and leaves the source unchanged.
+
+Before upload, the virtual-cameraman processor runs person detection across the
+whole extracted clip. A forward two-dimensional position/velocity Kalman pass
+performs normalized-innovation gating, and a Rauch--Tung--Striebel backward pass
+uses later detections to improve earlier states and covariances. A separate
+second-order Butterworth path runs forward and backward to create a zero-phase,
+low-jitter crop trajectory. It publishes three additional artefacts:
+
+- `*.virtual-cameraman.mp4`: the smaller H.264/AAC upload file;
+- `*.tracking-debug.mp4`: green YOLO boxes, red Kalman + RTS estimate plus a
+  conservative circular 95% region, and the cyan Butterworth crop window;
+- `*.tracking.json`: frame-level measurements, estimates, covariance and crop.
+
+The current video scenario uploads only the processed file. Edge Control lets
+the operator switch among source, raw extracted clip, upload clip and tracking
+view. A green box means a detected person; rider identity still comes from the
+separate BearTag assignment.
 
 Node only serves scenario metadata/media and supervises Python. Python remains
-the owner of synchronization, YOLO, capture and rider assignment.
+the owner of synchronization, YOLO, capture, tracking, crop and rider
+assignment.
 
 Schema 3.1 additionally supports explicit synthetic BearTag samples. The
 Blender generator samples rider motion at the configured BearTag rate, converts
