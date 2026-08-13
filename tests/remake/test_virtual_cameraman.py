@@ -8,6 +8,7 @@ from bearvision.processing import (
     PositionMeasurement,
     VirtualCameramanConfig,
     ZeroPhaseButterworthCameraSmoother,
+    calculate_length_adjustment,
 )
 
 
@@ -31,6 +32,38 @@ def test_kalman_tracker_reports_finite_95_percent_position_region() -> None:
 def test_virtual_cameraman_output_requires_even_h264_dimensions() -> None:
     with pytest.raises(ValueError, match="must be even"):
         VirtualCameramanConfig(output_width_px=161)
+
+
+def test_length_adjustment_keeps_one_second_around_in_frame_trajectory() -> None:
+    positions = [(-1.0, 50.0)] * 20 + [(50.0, 50.0)] * 50 + [(101.0, 50.0)] * 30
+
+    adjustment = calculate_length_adjustment(
+        positions,
+        frame_width_px=100,
+        frame_height_px=100,
+        fps=10.0,
+    )
+
+    assert adjustment.source_start_frame_idx == 10
+    assert adjustment.source_end_frame_idx_exclusive == 80
+    assert adjustment.source_start_s == pytest.approx(1.0)
+    assert adjustment.source_end_s == pytest.approx(8.0)
+    assert adjustment.output_duration_s == pytest.approx(7.0)
+    assert adjustment.adjusted
+
+
+def test_length_adjustment_does_not_extend_past_source_boundaries() -> None:
+    adjustment = calculate_length_adjustment(
+        [(50.0, 50.0)] * 20,
+        frame_width_px=100,
+        frame_height_px=100,
+        fps=10.0,
+    )
+
+    assert adjustment.source_start_frame_idx == 0
+    assert adjustment.source_end_frame_idx_exclusive == 20
+    assert adjustment.output_duration_s == pytest.approx(2.0)
+    assert not adjustment.adjusted
 
 
 def test_rts_smoother_uses_future_measurement_to_improve_past_state() -> None:
@@ -68,6 +101,44 @@ def test_rts_smoother_rejects_implausible_measurement() -> None:
 
     assert trajectory[1].measurement is None
     assert trajectory[1].state[0, 0] < 100.0
+
+
+def test_rts_smoother_bootstraps_fast_plausible_rider_velocity() -> None:
+    smoother = KalmanRtsSmoother(
+        process_noise_acceleration_px_s2=45.0,
+        innovation_gate_chi2=9.210340371976184,
+    )
+    trajectory = smoother.smooth(
+        frame_count=19,
+        dt_s=1 / 60,
+        measurements_by_frame={
+            0: (PositionMeasurement(121.5, 716.0, 12.0),),
+            6: (PositionMeasurement(243.5, 711.5, 12.0),),
+            12: (PositionMeasurement(352.0, 698.0, 12.0),),
+            18: (PositionMeasurement(433.0, 688.0, 12.0),),
+        },
+    )
+
+    assert trajectory[6].measurement is not None
+    assert trajectory[12].measurement is not None
+    assert trajectory[18].measurement is not None
+    assert trajectory[18].state[0, 0] == pytest.approx(433.0, abs=20.0)
+
+
+def test_rts_smoother_reacquires_plausible_rider_after_detection_gap() -> None:
+    smoother = KalmanRtsSmoother(maximum_bootstrap_speed_px_s=1_000.0)
+    trajectory = smoother.smooth(
+        frame_count=6,
+        dt_s=0.1,
+        measurements_by_frame={
+            0: (PositionMeasurement(0.0, 0.0, 2.0),),
+            1: (PositionMeasurement(50.0, 0.0, 2.0),),
+            5: (PositionMeasurement(250.0, 100.0, 2.0),),
+        },
+    )
+
+    assert trajectory[5].measurement is not None
+    assert trajectory[5].state[0, 0] > 200.0
 
 
 def test_camera_smoother_is_zero_phase_and_reduces_jitter() -> None:

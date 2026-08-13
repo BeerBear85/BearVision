@@ -21,7 +21,7 @@ import math
 import os
 from pathlib import Path
 import subprocess
-from typing import Any
+from typing import Any, Sequence
 
 from bearvision.contracts import BoundingBox, MediaAsset, PersonDetection
 from bearvision.ports import CapturedMedia, Detector, InvalidComponentData, VideoFrame
@@ -38,10 +38,13 @@ class VirtualCameramanConfig:
     crop_width_ratio: float = 0.5
     output_width_px: int = 160
     output_height_px: int = 90
-    process_noise_acceleration_px_s2: float = 45.0
+    process_noise_acceleration_px_s2: float = 800.0
+    velocity_damping_time_constant_s: float = 5.0
     minimum_measurement_std_px: float = 2.0
     innovation_gate_chi2: float = 9.210340371976184
+    maximum_bootstrap_speed_px_s: float = 3_000.0
     camera_cutoff_hz: float = 1.25
+    length_adjustment_padding_s: float = 1.0
     output_crf: int = 24
 
     def __post_init__(self) -> None:
@@ -55,18 +58,121 @@ class VirtualCameramanConfig:
             raise ValueError("H.264 output dimensions must be even")
         if self.process_noise_acceleration_px_s2 <= 0:
             raise ValueError("process noise must be positive")
+        if self.velocity_damping_time_constant_s <= 0:
+            raise ValueError("velocity damping time constant must be positive")
         if self.minimum_measurement_std_px <= 0:
             raise ValueError("measurement standard deviation must be positive")
         if self.innovation_gate_chi2 <= 0:
             raise ValueError("innovation gate must be positive")
+        if self.maximum_bootstrap_speed_px_s <= 0:
+            raise ValueError("maximum bootstrap speed must be positive")
         if self.camera_cutoff_hz <= 0:
             raise ValueError("camera cutoff must be positive")
+        if self.length_adjustment_padding_s < 0:
+            raise ValueError("length adjustment padding must not be negative")
+
+
+@dataclass(frozen=True, slots=True)
+class ClipLengthAdjustment:
+    """Frame window selected around the rider's in-frame trajectory."""
+
+    source_start_frame_idx: int
+    source_end_frame_idx_exclusive: int
+    first_visible_frame_idx: int
+    last_visible_frame_idx: int
+    source_frame_count: int
+    fps: float
+    padding_s: float
+
+    @property
+    def source_start_s(self) -> float:
+        return self.source_start_frame_idx / self.fps
+
+    @property
+    def source_end_s(self) -> float:
+        return self.source_end_frame_idx_exclusive / self.fps
+
+    @property
+    def output_duration_s(self) -> float:
+        return (
+            self.source_end_frame_idx_exclusive - self.source_start_frame_idx
+        ) / self.fps
+
+    @property
+    def source_duration_s(self) -> float:
+        return self.source_frame_count / self.fps
+
+    @property
+    def adjusted(self) -> bool:
+        return (
+            self.source_start_frame_idx > 0
+            or self.source_end_frame_idx_exclusive < self.source_frame_count
+        )
+
+    def to_dict(self) -> dict[str, int | float | bool]:
+        return {
+            "padding_s": self.padding_s,
+            "source_start_frame_idx": self.source_start_frame_idx,
+            "source_end_frame_idx_exclusive": self.source_end_frame_idx_exclusive,
+            "first_visible_frame_idx": self.first_visible_frame_idx,
+            "last_visible_frame_idx": self.last_visible_frame_idx,
+            "source_start_s": self.source_start_s,
+            "source_end_s": self.source_end_s,
+            "source_duration_s": self.source_duration_s,
+            "output_duration_s": self.output_duration_s,
+            "adjusted": self.adjusted,
+        }
+
+def calculate_length_adjustment(
+    rider_positions: Sequence[tuple[float, float]],
+    *,
+    frame_width_px: int,
+    frame_height_px: int,
+    fps: float,
+    padding_s: float = 1.0,
+) -> ClipLengthAdjustment:
+    """Keep at most ``padding_s`` before and after the in-frame rider path."""
+
+    if not rider_positions:
+        raise ValueError("rider positions must not be empty")
+    if frame_width_px <= 0 or frame_height_px <= 0:
+        raise ValueError("frame dimensions must be positive")
+    if fps <= 0:
+        raise ValueError("fps must be positive")
+    if padding_s < 0:
+        raise ValueError("padding must not be negative")
+
+    visible = [
+        index
+        for index, (x_px, y_px) in enumerate(rider_positions)
+        if 0.0 <= x_px < frame_width_px and 0.0 <= y_px < frame_height_px
+    ]
+    if not visible:
+        raise InvalidComponentData("estimated rider position never enters the image")
+
+    # Never retain more than the configured padding because of frame rounding.
+    padding_frames = math.floor(padding_s * fps)
+    first_visible = visible[0]
+    last_visible = visible[-1]
+    return ClipLengthAdjustment(
+        source_start_frame_idx=max(0, first_visible - padding_frames),
+        source_end_frame_idx_exclusive=min(
+            len(rider_positions), last_visible + 1 + padding_frames
+        ),
+        first_visible_frame_idx=first_visible,
+        last_visible_frame_idx=last_visible,
+        source_frame_count=len(rider_positions),
+        fps=fps,
+        padding_s=padding_s,
+    )
 
 
 @dataclass(frozen=True, slots=True)
 class TrackingFrame:
     frame_idx: int
     at_s: float
+    source_frame_idx: int
+    source_at_s: float
     estimate_x_px: float
     estimate_y_px: float
     confidence_radius_95_px: float
@@ -82,6 +188,8 @@ class TrackingFrame:
         return {
             "frame_idx": self.frame_idx,
             "at_s": self.at_s,
+            "source_frame_idx": self.source_frame_idx,
+            "source_at_s": self.source_at_s,
             "estimate": {
                 "x_px": self.estimate_x_px,
                 "y_px": self.estimate_y_px,
@@ -110,6 +218,7 @@ class ProcessedClip:
     source_width_px: int
     source_height_px: int
     tracking_frames: tuple[TrackingFrame, ...]
+    length_adjustment: ClipLengthAdjustment
 
     @property
     def reduction_ratio(self) -> float:
@@ -147,7 +256,7 @@ class KalmanPositionTracker:
         process_noise_acceleration_px_s2: float = 45.0,
         initial_position_std_px: float = 8.0,
         initial_velocity_std_px_s: float = 80.0,
-        velocity_damping_time_constant_s: float = 0.35,
+        velocity_damping_time_constant_s: float = 2.0,
     ) -> None:
         import numpy as np
 
@@ -193,6 +302,23 @@ class KalmanPositionTracker:
             [position_variance, position_variance, velocity_variance, velocity_variance]
         )
         self.initialized = True
+
+    def initialize_kinematics(
+        self,
+        x_px: float,
+        y_px: float,
+        velocity_x_px_s: float,
+        velocity_y_px_s: float,
+        measurement_std_px: float,
+        velocity_std_px_s: float,
+    ) -> None:
+        """Initialize position and velocity from two plausible measurements."""
+        self.initialize(x_px, y_px, measurement_std_px)
+        self.state[2, 0] = velocity_x_px_s
+        self.state[3, 0] = velocity_y_px_s
+        velocity_variance = max(velocity_std_px_s, 1.0) ** 2
+        self.covariance[2, 2] = velocity_variance
+        self.covariance[3, 3] = velocity_variance
 
     def predict(self, dt_s: float) -> tuple[float, float]:
         if not self.initialized:
@@ -267,11 +393,19 @@ class KalmanRtsSmoother:
         *,
         process_noise_acceleration_px_s2: float = 45.0,
         innovation_gate_chi2: float = 9.210340371976184,
+        maximum_bootstrap_speed_px_s: float = 3_000.0,
+        velocity_damping_time_constant_s: float = 2.0,
     ) -> None:
         if innovation_gate_chi2 <= 0:
             raise ValueError("innovation gate must be positive")
+        if maximum_bootstrap_speed_px_s <= 0:
+            raise ValueError("maximum bootstrap speed must be positive")
+        if velocity_damping_time_constant_s <= 0:
+            raise ValueError("velocity damping time constant must be positive")
         self.process_noise_acceleration_px_s2 = process_noise_acceleration_px_s2
         self.innovation_gate_chi2 = innovation_gate_chi2
+        self.maximum_bootstrap_speed_px_s = maximum_bootstrap_speed_px_s
+        self.velocity_damping_time_constant_s = velocity_damping_time_constant_s
 
     def smooth(
         self,
@@ -289,7 +423,8 @@ class KalmanRtsSmoother:
         first_index = available[0]
         first = max(measurements_by_frame[first_index], key=lambda item: item.confidence)
         tracker = KalmanPositionTracker(
-            process_noise_acceleration_px_s2=self.process_noise_acceleration_px_s2
+            process_noise_acceleration_px_s2=self.process_noise_acceleration_px_s2,
+            velocity_damping_time_constant_s=self.velocity_damping_time_constant_s,
         )
         tracker.initialize(first.x_px, first.y_px, first.standard_deviation_px)
 
@@ -302,6 +437,9 @@ class KalmanRtsSmoother:
         filtered_states[first_index] = tracker.state.copy()
         filtered_covariances[first_index] = tracker.covariance.copy()
         selected[first_index] = first
+        accepted_measurement_count = 1
+        last_measurement = first
+        last_measurement_index = first_index
 
         for index in range(first_index + 1, frame_count):
             transition, _ = tracker.model(dt_s)
@@ -310,23 +448,91 @@ class KalmanRtsSmoother:
             predicted_states[index] = tracker.state.copy()
             predicted_covariances[index] = tracker.covariance.copy()
             candidates = measurements_by_frame.get(index, ())
-            accepted: list[tuple[float, PositionMeasurement]] = []
-            for candidate in candidates:
-                distance = tracker.innovation_distance_squared(
-                    candidate.x_px,
-                    candidate.y_px,
-                    candidate.standard_deviation_px,
-                )
-                if distance <= self.innovation_gate_chi2:
-                    accepted.append((distance, candidate))
-            if accepted:
-                _, measurement = min(accepted, key=lambda item: (item[0], -item[1].confidence))
-                tracker.update(
-                    measurement.x_px,
-                    measurement.y_px,
-                    measurement.standard_deviation_px,
-                )
-                selected[index] = measurement
+            if candidates and accepted_measurement_count == 1:
+                elapsed_s = (index - first_index) * dt_s
+                plausible_bootstrap = [
+                    candidate
+                    for candidate in candidates
+                    if math.hypot(
+                        candidate.x_px - first.x_px,
+                        candidate.y_px - first.y_px,
+                    ) / elapsed_s <= self.maximum_bootstrap_speed_px_s
+                ]
+                if plausible_bootstrap:
+                    measurement = max(
+                        plausible_bootstrap, key=lambda item: item.confidence
+                    )
+                    velocity_x = (measurement.x_px - first.x_px) / elapsed_s
+                    velocity_y = (measurement.y_px - first.y_px) / elapsed_s
+                    velocity_std = math.hypot(
+                        first.standard_deviation_px,
+                        measurement.standard_deviation_px,
+                    ) / elapsed_s
+                    tracker.initialize_kinematics(
+                        measurement.x_px,
+                        measurement.y_px,
+                        velocity_x,
+                        velocity_y,
+                        measurement.standard_deviation_px,
+                        velocity_std,
+                    )
+                    selected[index] = measurement
+                    accepted_measurement_count += 1
+                    last_measurement = measurement
+                    last_measurement_index = index
+            else:
+                accepted: list[tuple[float, PositionMeasurement]] = []
+                for candidate in candidates:
+                    distance = tracker.innovation_distance_squared(
+                        candidate.x_px,
+                        candidate.y_px,
+                        candidate.standard_deviation_px,
+                    )
+                    if distance <= self.innovation_gate_chi2:
+                        accepted.append((distance, candidate))
+                if accepted:
+                    _, measurement = min(
+                        accepted, key=lambda item: (item[0], -item[1].confidence)
+                    )
+                    tracker.update(
+                        measurement.x_px,
+                        measurement.y_px,
+                        measurement.standard_deviation_px,
+                    )
+                    selected[index] = measurement
+                    accepted_measurement_count += 1
+                    last_measurement = measurement
+                    last_measurement_index = index
+                elif candidates:
+                    elapsed_s = (index - last_measurement_index) * dt_s
+                    plausible_reacquisition = [
+                        candidate
+                        for candidate in candidates
+                        if math.hypot(
+                            candidate.x_px - last_measurement.x_px,
+                            candidate.y_px - last_measurement.y_px,
+                        ) / elapsed_s <= self.maximum_bootstrap_speed_px_s
+                    ]
+                    if plausible_reacquisition:
+                        measurement = min(
+                            plausible_reacquisition,
+                            key=lambda item: (
+                                math.hypot(
+                                    item.x_px - tracker.position[0],
+                                    item.y_px - tracker.position[1],
+                                ),
+                                -item.confidence,
+                            ),
+                        )
+                        tracker.update(
+                            measurement.x_px,
+                            measurement.y_px,
+                            measurement.standard_deviation_px,
+                        )
+                        selected[index] = measurement
+                        accepted_measurement_count += 1
+                        last_measurement = measurement
+                        last_measurement_index = index
             filtered_states[index] = tracker.state.copy()
             filtered_covariances[index] = tracker.covariance.copy()
 
@@ -517,8 +723,27 @@ class VirtualCameramanProcessor:
         smoother = KalmanRtsSmoother(
             process_noise_acceleration_px_s2=self.config.process_noise_acceleration_px_s2,
             innovation_gate_chi2=self.config.innovation_gate_chi2,
+            maximum_bootstrap_speed_px_s=self.config.maximum_bootstrap_speed_px_s,
+            velocity_damping_time_constant_s=(
+                self.config.velocity_damping_time_constant_s
+            ),
         )
         smoothed = smoother.smooth(len(frames), 1.0 / fps, measurements_by_frame)
+        length_adjustment = calculate_length_adjustment(
+            [(float(item.state[0, 0]), float(item.state[1, 0])) for item in smoothed],
+            frame_width_px=width,
+            frame_height_px=height,
+            fps=fps,
+            padding_s=self.config.length_adjustment_padding_s,
+        )
+        frames = frames[
+            length_adjustment.source_start_frame_idx:
+            length_adjustment.source_end_frame_idx_exclusive
+        ]
+        smoothed = smoothed[
+            length_adjustment.source_start_frame_idx:
+            length_adjustment.source_end_frame_idx_exclusive
+        ]
         rider_x = [float(item.state[0, 0]) for item in smoothed]
         rider_y = [float(item.state[1, 0]) for item in smoothed]
         camera_smoother = ZeroPhaseButterworthCameraSmoother(self.config.camera_cutoff_hz)
@@ -528,6 +753,7 @@ class VirtualCameramanProcessor:
         crop_width, crop_height = self._crop_dimensions(width, height)
         tracking: list[TrackingFrame] = []
         for index, item in enumerate(smoothed):
+            source_index = length_adjustment.source_start_frame_idx + index
             x_px, y_px = float(item.state[0, 0]), float(item.state[1, 0])
             x_px = min(float(width), max(0.0, x_px))
             y_px = min(float(height), max(0.0, y_px))
@@ -543,6 +769,8 @@ class VirtualCameramanProcessor:
                 TrackingFrame(
                     frame_idx=index,
                     at_s=index / fps,
+                    source_frame_idx=source_index,
+                    source_at_s=source_index / fps,
                     estimate_x_px=x_px,
                     estimate_y_px=y_px,
                     confidence_radius_95_px=confidence_radius,
@@ -574,8 +802,16 @@ class VirtualCameramanProcessor:
             height,
         )
         try:
-            await asyncio.to_thread(self._encode_with_source_audio, silent_crop, source, processed_path)
-            await asyncio.to_thread(self._encode_with_source_audio, silent_debug, source, debug_path)
+            await asyncio.to_thread(
+                self._encode_video,
+                silent_crop,
+                processed_path,
+            )
+            await asyncio.to_thread(
+                self._encode_video,
+                silent_debug,
+                debug_path,
+            )
         finally:
             silent_crop.unlink(missing_ok=True)
             silent_debug.unlink(missing_ok=True)
@@ -597,6 +833,7 @@ class VirtualCameramanProcessor:
                 "cutoff_hz": self.config.camera_cutoff_hz,
                 "zero_phase": True,
             },
+            "length_adjustment": length_adjustment.to_dict(),
             "crop_output": {
                 "width_px": self.config.output_width_px,
                 "height_px": self.config.output_height_px,
@@ -625,6 +862,7 @@ class VirtualCameramanProcessor:
             source_width_px=width,
             source_height_px=height,
             tracking_frames=tuple(tracking),
+            length_adjustment=length_adjustment,
         )
 
     def _measurement_std(self, detection: PersonDetection) -> float:
@@ -723,15 +961,18 @@ class VirtualCameramanProcessor:
             crop_writer.release()
             debug_writer.release()
 
-    def _encode_with_source_audio(self, video_path: Path, source: Path, destination: Path) -> None:
+    def _encode_video(
+        self,
+        video_path: Path,
+        destination: Path,
+    ) -> None:
         partial = destination.with_name(f"{destination.stem}.partial{destination.suffix}")
         partial.unlink(missing_ok=True)
         command = [
             self.ffmpeg_path, "-hide_banner", "-loglevel", "error", "-y",
-            "-i", str(video_path), "-i", str(source),
-            "-map", "0:v:0", "-map", "1:a?", "-c:v", "libx264",
+            "-i", str(video_path), "-map", "0:v:0", "-c:v", "libx264",
             "-preset", "veryfast", "-crf", str(self.config.output_crf),
-            "-c:a", "aac", "-movflags", "+faststart", "-shortest", str(partial),
+            "-an", "-movflags", "+faststart", str(partial),
         ]
         try:
             completed = subprocess.run(
