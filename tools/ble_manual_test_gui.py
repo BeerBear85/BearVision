@@ -278,7 +278,7 @@ class BleManualTestGUI(QMainWindow):
         
         # Instructions
         instructions = QLabel(
-            "Instructions: Click 'Start Logging' to begin scanning for KBPro BLE tags. "
+            "Instructions: Click 'Start Logging' to begin scanning for bear_tag BLE tags. "
             "Real-time data will appear above. Click 'Stop Logging' to stop."
         )
         instructions.setWordWrap(True)

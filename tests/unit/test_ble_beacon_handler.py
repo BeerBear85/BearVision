@@ -52,16 +52,32 @@ def test_decode_sensor_data():
 def test_discovery_callback_parses_advertisement():
     data = create_advertisement_bytes()
     handler = BleBeaconHandler()
-    device = SimpleNamespace(address="AA", name="KBPro-test")
+    device = SimpleNamespace(address="AA", name="bear_tag_test")
     adv = SimpleNamespace(rssi=-42, tx_power=-10, service_data={"0000": data})
     asyncio.run(handler.discovery_callback(device, adv))
 
     assert handler.advertisement_queue.qsize() == 1
     item = asyncio.run(handler.advertisement_queue.get())
+    assert item["tag_id"] == "bear_tag_test"
     assert item["address"] == "AA"
-    assert item["name"] == "KBPro-test"
+    assert item["name"] == "bear_tag_test"
     assert item["rssi"] == -42
     assert item["tx_power"] == -10
     acc = item["acc_sensor"]
     assert pytest.approx(acc.x, rel=1e-5) == 1.0
     assert pytest.approx(acc.z, rel=1e-5) == -1.0
+
+
+@pytest.mark.parametrize("name", ["KBPro-test", "other_bear_tag", "Bear_Tag_test", None])
+def test_discovery_callback_rejects_non_bear_tag_prefixes(name):
+    handler = BleBeaconHandler()
+    device = SimpleNamespace(address="AA", name=name)
+    adv = SimpleNamespace(
+        rssi=-42,
+        tx_power=-10,
+        service_data={"0000": create_advertisement_bytes()},
+    )
+
+    asyncio.run(handler.discovery_callback(device, adv))
+
+    assert handler.advertisement_queue.empty()

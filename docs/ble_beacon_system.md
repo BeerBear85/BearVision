@@ -6,7 +6,7 @@ The BLE Beacon System consists of two main components:
 1. **BleBeaconHandler** (`code/modules/ble_beacon_handler.py`) - Core BLE scanning and data processing module
 2. **BleManualTestGUI** (`tools/ble_manual_test_gui.py`) - PySide6-based GUI for manual testing and real-time data visualization
 
-This system is designed to scan for KBPro BLE beacons, decode their sensor data (accelerometer and battery), and provide real-time monitoring capabilities for the BearVision wakeboard detection system.
+This system scans for BLE devices whose advertised names start with `bear_tag`, decodes their KSensor-format data (accelerometer and battery), and provides real-time monitoring for BearVision.
 
 ## Architecture Overview
 
@@ -15,7 +15,7 @@ graph TB
     A[BleManualTestGUI] --> B[BleWorker Thread]
     B --> C[BleBeaconHandler]
     C --> D[BLE Scanner]
-    D --> E[KBPro Beacons]
+    D --> E[bear_tag devices]
     
     C --> F[Advertisement Queue]
     F --> G[Data Processing]
@@ -48,7 +48,7 @@ The `BleBeaconHandler` class provides asynchronous BLE beacon scanning and data 
 
 #### Key Features
 - **Asynchronous BLE scanning** using the `bleak` library
-- **KBPro beacon filtering** - Only processes beacons with "KBPro" in the name
+- **BearTag filtering** - Only processes devices whose advertised names start with `bear_tag`
 - **Sensor data decoding** - Extracts accelerometer and battery data from advertisement packets
 - **Movement detection** - Determines if the beacon is moving based on accelerometer readings
 - **RSSI to distance conversion** - Estimates distance using calibrated RSSI values
@@ -82,7 +82,7 @@ class AccSensorValue:
 ```python
 {
     'address': str,           # BLE device address
-    'name': str,             # Device name (e.g., "KBPro-1234")
+    'name': str,             # Device and tag ID (e.g., "bear_tag_666")
     'rssi': int,             # Signal strength (dBm)
     'tx_power': int,         # Transmission power
     'batteryLevel': int,     # Battery level (0-100)
@@ -222,7 +222,7 @@ sequenceDiagram
     participant GUI as BleManualTestGUI
     participant Worker as BleWorker
     participant Handler as BleBeaconHandler
-    participant Beacon as KBPro Beacon
+    participant Beacon as bear_tag device
     
     User->>GUI: Click "Start Logging"
     GUI->>Worker: Create and start worker thread
@@ -231,7 +231,7 @@ sequenceDiagram
     loop Continuous Scanning
         Handler->>Beacon: Scan for advertisements
         Beacon->>Handler: BLE advertisement data
-        Handler->>Handler: Filter KBPro beacons
+        Handler->>Handler: Filter bear_tag-prefixed devices
         Handler->>Handler: Decode sensor data
         Handler->>Worker: Queue advertisement data
         Worker->>GUI: Emit data_received signal
@@ -250,7 +250,7 @@ sequenceDiagram
 The GUI formats received data into human-readable log entries:
 
 ```
-[14:23:45.123] #0001 | ID: AA:BB:CC:DD:EE:FF | Name: KBPro-1234 | RSSI: -45 dBm | Dist: 2.31m | Batt: 85 | Acc: X:0.012g Y:0.045g Z:0.998g Norm:1.001g | Motion: STATIC
+[14:23:45.123] #0001 | ID: AA:BB:CC:DD:EE:FF | Name: bear_tag_666 | RSSI: -45 dBm | Dist: 2.31m | Batt: 85 | Acc: X:0.012g Y:0.045g Z:0.998g Norm:1.001g | Motion: STATIC
 ```
 
 ### Error Handling
@@ -275,7 +275,7 @@ The GUI formats received data into human-readable log entries:
 ### Prerequisites
 - Python 3.8+ with PySide6, bleak, PyYAML, scipy, numpy
 - BLE adapter (built-in or USB dongle)
-- KBPro BLE beacons in range
+- A `bear_tag`-prefixed BLE device in range
 
 ### Running the Application
 ```bash

@@ -16,6 +16,7 @@ SENSOR_MASK_VOLTAGE = 0x1
 SENSOR_MASK_ACC_AIX = 0x8
 
 MOVEMENT_THRESHOLD = 0.1  # [g]
+BEAR_TAG_NAME_PREFIX = 'bear_tag'
 
 DEFAULT_RSSI_CONFIG = Path(__file__).resolve().parents[2] / "rssi_distance.ini"
 
@@ -96,8 +97,9 @@ class BleBeaconHandler:
         return
     
     async def discovery_callback(self, device, advertisement_data):
-        if (device.name is not None) and ('KBPro' in device.name):
-            logger.debug('Device: %s, RSSI: %s' % (device.name, advertisement_data.rssi))
+        device_name = getattr(advertisement_data, 'local_name', None) or device.name
+        if (device_name is not None) and device_name.startswith(BEAR_TAG_NAME_PREFIX):
+            logger.debug('Device: %s, RSSI: %s' % (device_name, advertisement_data.rssi))
             #print(f'Service data: {hex(advertisement_data.service_data)}')
             beaconData = advertisement_data.service_data
 
@@ -112,8 +114,9 @@ class BleBeaconHandler:
             if acc_sensor is not None:
                 # make dict with relevant data
                 data_dict = {}
+                data_dict['tag_id'] = device_name
                 data_dict['address'] = device.address
-                data_dict['name'] = device.name
+                data_dict['name'] = device_name
                 data_dict['rssi'] = advertisement_data.rssi
                 data_dict['tx_power'] = advertisement_data.tx_power
                 data_dict['batteryLevel'] = battery_level

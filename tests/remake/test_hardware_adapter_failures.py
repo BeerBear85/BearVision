@@ -237,7 +237,11 @@ def test_bleak_source_filters_and_decodes_kbeacon_advertisements(
                 SimpleNamespace(service_data={"x": ksensor_packet()}, rssi=-80),
             )
             await self.callback(
-                SimpleNamespace(name="KBPro", address="tag-17"),
+                SimpleNamespace(name="KBPro", address="ignored-kbpro"),
+                SimpleNamespace(service_data={"sensor": ksensor_packet()}, rssi=-40),
+            )
+            await self.callback(
+                SimpleNamespace(name="bear_tag_17", address="physical-address"),
                 SimpleNamespace(
                     service_data={"invalid": b"\x00", "sensor": ksensor_packet()},
                     rssi=-52,
@@ -255,7 +259,8 @@ def test_bleak_source_filters_and_decodes_kbeacon_advertisements(
     asyncio.run(source.look_for_advertisements(timeout=0.001))
     raw = source.advertisement_queue.get_nowait()
 
-    assert raw["address"] == "tag-17"
+    assert raw["tag_id"] == "bear_tag_17"
+    assert raw["address"] == "physical-address"
     assert raw["batteryLevel"] == 3000
     assert raw["acc_sensor"].x == 1.0
     assert raw["acc_sensor"].y == -0.5

@@ -57,7 +57,7 @@ def test_full_flow(tmp_path):
     ble.RSSI_DISTANCE_FUNC = ble.load_rssi_distance_table(cfg)
 
     handler = ble.BleBeaconHandler()
-    device = SimpleNamespace(address="AA", name="KBPro-test")
+    device = SimpleNamespace(address="AA", name="bear_tag_test")
     adv = SimpleNamespace(rssi=-70, tx_power=-10, service_data={"0000": create_advertisement_bytes()})
     asyncio.run(handler.discovery_callback(device, adv))
 

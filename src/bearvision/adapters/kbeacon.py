@@ -17,6 +17,7 @@ STANDARD_GRAVITY_MPS2 = 9.80665
 KSENSOR_TYPE = 0x21
 SENSOR_MASK_VOLTAGE = 0x1
 SENSOR_MASK_ACC_AXIS = 0x8
+BEAR_TAG_NAME_PREFIX = "bear_tag"
 
 
 class BleakKBeaconSource:
@@ -47,14 +48,17 @@ class BleakKBeaconSource:
             raise RuntimeError("bleak is required for KBeacon scanning") from exc
 
         async def callback(device: Any, advertisement: Any) -> None:
-            if not device.name or "KBPro" not in device.name:
+            name = getattr(advertisement, "local_name", None) or device.name
+            if not name or not name.startswith(BEAR_TAG_NAME_PREFIX):
                 return
             for data in advertisement.service_data.values():
                 voltage, acceleration = self._decode(bytes(data))
                 if acceleration is not None:
                     await self.advertisement_queue.put(
                         {
+                            "tag_id": name,
                             "address": device.address,
+                            "name": name,
                             "rssi": advertisement.rssi,
                             "batteryLevel": voltage,
                             "acc_sensor": acceleration,
@@ -90,7 +94,7 @@ class KBeaconTagScannerAdapter:
         acceleration = raw["acc_sensor"]
         battery = raw.get("batteryLevel")
         return TagObservation(
-            tag_id=str(raw["address"]),
+            tag_id=str(raw.get("tag_id", raw["address"])),
             observed_at_utc=self.clock.utc_now(),
             observed_at_monotonic_s=self.clock.monotonic(),
             rssi_dbm=int(raw["rssi"]),

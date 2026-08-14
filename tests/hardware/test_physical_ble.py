@@ -2,7 +2,7 @@
 Tests for real physical BLE tag communication.
 
 This test only runs when explicitly triggered with: pytest --run-physical-ble
-It requires a physical KBPro BLE tag to be available and powered on.
+It requires a physical or simulated bear_tag BLE device to be available and powered on.
 """
 
 import asyncio
@@ -92,7 +92,7 @@ def test_physical_ble_tag_data():
     """
     
     print("\n=== Physical BLE Tag Test ===")
-    print("Looking for KBPro BLE tags...")
+    print("Looking for bear_tag BLE devices...")
     print("Make sure a physical BLE tag is powered on and nearby.")
     
     ble_test = PhysicalBleTest()
@@ -101,11 +101,12 @@ def test_physical_ble_tag_data():
     success = asyncio.run(ble_test.collect_ble_data(timeout=10.0))
     
     # Test must fail if no data is received
-    assert success, "No BLE tag data was received. Ensure a physical KBPro tag is powered on and nearby."
+    assert success, "No BLE tag data was received. Ensure a bear_tag device is powered on and nearby."
     
     # Validate required data is present
     data = ble_test.received_data
     assert data is not None, "No advertisement data captured"
+    assert data.get("tag_id", "").startswith("bear_tag")
     
     # Validate Tag ID (address)
     tag_id = data.get('address')
