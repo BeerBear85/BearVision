@@ -16,6 +16,10 @@ jobs:
       cancel-in-progress: true
     steps:
       - uses: actions/checkout@v4
+        with:
+          lfs: false
+      - name: Materialize behavioural media fixture
+        run: git lfs pull --include="tests/data/preview_low.mp4"
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
