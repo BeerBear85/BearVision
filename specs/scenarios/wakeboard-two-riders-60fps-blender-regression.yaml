@@ -7,7 +7,9 @@ faults:
   camera_capture: false
   storage_upload: false
 expect:
-  rider_id: rider-wakeboard-two-riders-60fps-rider1
+  rider_ids:
+  - rider-wakeboard-two-riders-60fps-rider1
+  - rider-wakeboard-two-riders-60fps-rider2
   assignment_status: assigned
   capture_triggered: true
   clip_uploaded: true

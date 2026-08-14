@@ -167,7 +167,7 @@ def generate_blender_scenario(
     generated_series: list[dict[str, Any]] = []
     used_tag_ids: set[str] = set()
     scenario_duration_s = 0.0
-    expected_rider_id: str | None = None
+    expected_rider_ids: list[str] = []
 
     for rider_index, (motion_path, motion, _, duration_s, frame_start, frames) in enumerate(
         parsed, start=1
@@ -188,8 +188,7 @@ def generate_blender_scenario(
         if resolved_rider_id is None:
             suffix = "" if len(parsed) == 1 else f"-rider{rider_index}"
             resolved_rider_id = f"rider-{identity_suffix}{suffix}"
-        if expected_rider_id is None:
-            expected_rider_id = resolved_rider_id
+        expected_rider_ids.append(resolved_rider_id)
 
         last_time_s = float(frames[-1]["time_s"])
         sample_count = math.floor(last_time_s * sample_rate_hz + 1e-9) + 1
@@ -237,7 +236,12 @@ def generate_blender_scenario(
             }
         )
 
-    assert expected_rider_id is not None
+    assert expected_rider_ids
+    rider_expectation = (
+        {"rider_id": expected_rider_ids[0]}
+        if len(expected_rider_ids) == 1
+        else {"rider_ids": expected_rider_ids}
+    )
     motion_provenance = (
         {"motion_path": _repository_path(motion_paths[0], root)}
         if len(motion_paths) == 1
@@ -253,7 +257,7 @@ def generate_blender_scenario(
             "timeline": [],
             "faults": {},
             "expect": {
-                "rider_id": expected_rider_id,
+                **rider_expectation,
                 "assignment_status": "assigned",
                 "capture_triggered": True,
                 "clip_uploaded": True,

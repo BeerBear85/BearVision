@@ -69,7 +69,14 @@ def evaluate_expectations(
     expected = scenario.expect
     failures: list[str] = []
     first = assignments[0] if assignments else None
-    if evaluate_server and expected.rider_id is not None:
+    if evaluate_server and expected.rider_ids:
+        expected_user_ids = tuple(_scenario_user_id(rider) for rider in expected.rider_ids)
+        actual_user_ids = tuple(item.selected_user_id for item in assignments)
+        if actual_user_ids != expected_user_ids:
+            failures.append(
+                f"expected rider_ids={expected.rider_ids!r}, got {actual_user_ids!r}"
+            )
+    elif evaluate_server and expected.rider_id is not None:
         expected_user_id = _scenario_user_id(expected.rider_id)
         if first is None or first.selected_user_id != expected_user_id:
             actual = first.selected_user_id if first is not None else None

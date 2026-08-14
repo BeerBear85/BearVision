@@ -66,7 +66,7 @@ def test_blender_video_and_synthetic_bear_tag_assign_the_rider(tmp_path: Path) -
         capture.release()
 
 
-def test_two_rider_blender_video_assigns_the_first_riders_bear_tag(
+def test_two_rider_blender_video_assigns_both_riders_bear_tags(
     tmp_path: Path,
 ) -> None:
     if not MODEL.is_file() or MODEL.stat().st_size < 1_000_000:
@@ -84,12 +84,16 @@ def test_two_rider_blender_video_assigns_the_first_riders_bear_tag(
 
     assert result.failures == ()
     assert result.expectation_failures == ()
-    assignment = result.assignments[0]
-    assert assignment.selected_bear_tag_id == "bear_tag_666"
-    assert assignment.selected_user_id is not None
-    assert [candidate.bear_tag_id for candidate in assignment.candidates] == [
-        "bear_tag_666"
+    assert [assignment.selected_bear_tag_id for assignment in result.assignments] == [
+        "bear_tag_666",
+        "bear_tag_123",
     ]
+    assert all(assignment.selected_user_id is not None for assignment in result.assignments)
+    assert result.assignments[0].selected_user_id != result.assignments[1].selected_user_id
     detected = [entry for entry in result.trace if entry.kind == "person_detected"]
     assert detected[0].at_s == pytest.approx(2.1, abs=0.11)
-    assert result.uploads[0].object_key == "input-queue/ready/capture-video-frame-126"
+    assert any(entry.at_s == pytest.approx(11.8, abs=0.11) for entry in detected)
+    assert [upload.object_key for upload in result.uploads] == [
+        "input-queue/ready/capture-video-frame-126",
+        "input-queue/ready/capture-video-frame-708",
+    ]

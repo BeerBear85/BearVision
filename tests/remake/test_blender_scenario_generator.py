@@ -103,6 +103,8 @@ def test_generator_preserves_two_rider_bear_tags_and_video_timing(
     assert rider1.samples[0].source_frame == 1
     assert rider2.samples[0].source_frame == 380
     assert rider2.samples[0].at_s == pytest.approx(379 / 60)
+    assert scenario.expect.rider_id is None
+    assert scenario.expect.rider_ids == (rider1.rider_id, rider2.rider_id)
     assert scenario.generated_from is not None
     assert scenario.generated_from.motion_path is None
     assert len(scenario.generated_from.motion_paths) == 2

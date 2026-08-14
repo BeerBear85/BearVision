@@ -213,7 +213,6 @@ class VideoScenarioRunner:
                         )
                     )
                     results.setdefault(result.request_id, result)
-                    break
         except Exception as exc:
             failures.append({"component": "video_scenario", "error": str(exc)})
         finally:
