@@ -27,10 +27,10 @@ def test_video_scenario_generates_deterministic_ten_hertz_bear_tag_data() -> Non
         VirtualClock(),
     )
 
-    assert len(observations) == 131
+    assert len(observations) == 153
     assert registry[0].tag_id == "bear_tag_666"
     assert registry[0].rider_id == "rider-video"
     active = [item for item in observations if 6.0 <= item.observed_at_monotonic_s <= 11.0]
     assert len(active) == 51
-    assert all(item.rssi_dbm == -50 for item in active)
-    assert all(item.acceleration_mps2.z == 19 for item in active)
+    assert all(item.rssi_dbm == -72 for item in active)
+    assert all(item.acceleration_mps2.z == 18.8 for item in active)

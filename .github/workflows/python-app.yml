@@ -27,7 +27,7 @@ jobs:
         uses: astral-sh/setup-uv@v6
       - run: uv sync --locked --extra edge --extra dev
       - name: Lint active package
-        run: uv run ruff check src tests/remake tests/vision
+        run: uv run ruff check src tests/remake tests/vision tests/end2end
       - name: Type-check active package
         run: uv run mypy
       - name: Verify local Edge-to-server package handoff
@@ -48,7 +48,7 @@ jobs:
         with:
           lfs: false
       - name: Materialize only required vision assets
-        run: git lfs pull --include="code/dnn_models/yolov8n.onnx,test/images/*.jpg,tests/images/*.jpg,tests/data/preview_low.mp4"
+        run: git lfs pull --include="code/dnn_models/yolov8n.onnx,tests/end2end/images/*.jpg,tests/data/*.mp4,tests/end2end/input_video/*.avi"
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -58,7 +58,7 @@ jobs:
         run: |
           uv run coverage erase
           uv run coverage run --parallel-mode -m pytest
-          uv run coverage run --parallel-mode -m pytest tests/vision -q
+          uv run coverage run --parallel-mode -m pytest tests/vision tests/end2end -q
           uv run coverage combine
           uv run coverage report
           uv run coverage xml -o coverage-${{ matrix.os }}.xml

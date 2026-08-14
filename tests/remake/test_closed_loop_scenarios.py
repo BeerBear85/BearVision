@@ -223,9 +223,13 @@ def test_declared_scenario_expectations_are_executable() -> None:
                 "payload": {"confidence": 0.9},
             }
         ],
-        expect={"rider_id": "rider-that-was-not-observed"},
+        expect={
+            "rider_id": "rider-that-was-not-observed",
+            "bear_tag_id": "bear_tag_666",
+        },
     )
     result = ClosedLoopScenarioRunner.from_scenario(definition).run()
     assert result.expectation_failures == (
         "expected rider_id='rider-that-was-not-observed', got None",
+        "expected bear_tag_id='bear_tag_666', got None",
     )

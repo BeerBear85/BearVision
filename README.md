@@ -37,7 +37,7 @@ Python 3.12 and `uv` are the reference development environment.
 ```bash
 uv sync --locked --extra dev
 uv run pytest
-uv run ruff check src tests/remake
+uv run ruff check src tests/remake tests/vision tests/end2end
 uv run mypy
 ```
 
@@ -49,7 +49,7 @@ Edge extra:
 ```bash
 uv run coverage erase
 uv run coverage run --parallel-mode -m pytest
-uv run coverage run --parallel-mode -m pytest tests/vision -q
+uv run coverage run --parallel-mode -m pytest tests/vision tests/end2end -q
 uv run coverage combine
 uv run coverage report
 ```
@@ -74,7 +74,7 @@ video timeline using `timing.frame_start`:
 
 ```bash
 uv run bearvision-generate-blender-scenario \
-  test/blender_scenes/wakeboard_fs360_60fps --force
+  tests/end2end/blender_scenes/wakeboard_fs360_60fps --force
 ```
 
 The generated YAML is written under `specs/scenarios`, where Edge Control

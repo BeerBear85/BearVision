@@ -25,7 +25,13 @@ from PostProcessingPipeline import PostProcessingPipeline
 
 
 # Test video path (same as trajectory regression tests)
-TEST_VIDEO = Path(__file__).resolve().parents[2] / 'test' / 'input_video' / 'TestMovie3.avi'
+TEST_VIDEO = (
+    Path(__file__).resolve().parents[2]
+    / 'tests'
+    / 'end2end'
+    / 'input_video'
+    / 'TestMovie3.avi'
+)
 
 
 @pytest.mark.skipif(not TEST_VIDEO.exists(), reason="Test video not found")

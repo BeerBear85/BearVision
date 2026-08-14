@@ -28,6 +28,8 @@ class ScenarioExpectation(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
     rider_id: str | None = None
     rider_ids: tuple[str, ...] | None = None
+    bear_tag_id: str | None = None
+    bear_tag_ids: tuple[str, ...] | None = None
     assignment_status: Literal["assigned", "unassigned", "ambiguous"] | None = None
     capture_triggered: bool | None = None
     clip_uploaded: bool | None = None
@@ -40,6 +42,12 @@ class ScenarioExpectation(BaseModel):
             raise ValueError("expectation must declare rider_id or rider_ids, not both")
         if self.rider_ids and len(set(self.rider_ids)) != len(self.rider_ids):
             raise ValueError("expected rider_ids must be unique")
+        if self.bear_tag_id is not None and self.bear_tag_ids:
+            raise ValueError("expectation must declare bear_tag_id or bear_tag_ids, not both")
+        if self.bear_tag_ids and len(set(self.bear_tag_ids)) != len(self.bear_tag_ids):
+            raise ValueError("expected bear_tag_ids must be unique")
+        if self.rider_ids and self.bear_tag_ids and len(self.rider_ids) != len(self.bear_tag_ids):
+            raise ValueError("expected rider_ids and bear_tag_ids must have equal lengths")
         if self.first_detection_between_s is not None:
             start_s, end_s = self.first_detection_between_s
             if start_s < 0 or end_s < start_s:

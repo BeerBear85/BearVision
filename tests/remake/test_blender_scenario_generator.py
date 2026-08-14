@@ -13,8 +13,8 @@ from bearvision.simulation.blender_scenario import (
 
 
 ROOT = Path(__file__).resolve().parents[2]
-SCENE = ROOT / "test/blender_scenes/wakeboard_fs360_60fps"
-TWO_RIDER_SCENE = ROOT / "test/blender_scenes/wakeboard_two_riders_fs360_60fps"
+SCENE = ROOT / "tests/end2end/blender_scenes/wakeboard_fs360_60fps"
+TWO_RIDER_SCENE = ROOT / "tests/end2end/blender_scenes/wakeboard_two_riders_fs360_60fps"
 GENERATED = ROOT / "specs/scenarios/wakeboard-fs360-60fps-blender-regression.yaml"
 TWO_RIDER_GENERATED = (
     ROOT / "specs/scenarios/wakeboard-two-riders-60fps-blender-regression.yaml"

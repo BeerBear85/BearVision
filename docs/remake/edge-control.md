@@ -137,7 +137,7 @@ assumptions, not measured BearTag calibration values.
 
 ```powershell
 uv run bearvision-generate-blender-scenario `
-  test/blender_scenes/wakeboard_fs360_60fps --force
+  tests/end2end/blender_scenes/wakeboard_fs360_60fps --force
 ```
 
 Generated files under `specs/scenarios` appear in Edge Control's Simulation

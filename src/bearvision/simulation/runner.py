@@ -81,6 +81,18 @@ def evaluate_expectations(
         if first is None or first.selected_user_id != expected_user_id:
             actual = first.selected_user_id if first is not None else None
             failures.append(f"expected rider_id={expected.rider_id!r}, got {actual!r}")
+    if evaluate_server and expected.bear_tag_ids:
+        actual_tag_ids = tuple(item.selected_bear_tag_id for item in assignments)
+        if actual_tag_ids != expected.bear_tag_ids:
+            failures.append(
+                f"expected bear_tag_ids={expected.bear_tag_ids!r}, got {actual_tag_ids!r}"
+            )
+    elif evaluate_server and expected.bear_tag_id is not None:
+        actual_tag_id = first.selected_bear_tag_id if first is not None else None
+        if actual_tag_id != expected.bear_tag_id:
+            failures.append(
+                f"expected bear_tag_id={expected.bear_tag_id!r}, got {actual_tag_id!r}"
+            )
     if evaluate_server and expected.assignment_status is not None:
         actual_status: str | None = None
         if first is not None:

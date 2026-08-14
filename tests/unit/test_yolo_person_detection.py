@@ -10,7 +10,7 @@ from DnnHandler import DnnHandler
 
 
 def test_highgrade_yolo_person_detection():
-    img_path = Path('test/images/test_image_1.jpg')
+    img_path = Path('tests/end2end/images/test_image_1.jpg')
     frame = cv2.imread(str(img_path))
     handler = DnnHandler('yolov8x')
     with mock.patch.object(handler, 'init', return_value=None), \

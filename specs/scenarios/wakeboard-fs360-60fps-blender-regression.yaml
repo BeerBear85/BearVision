@@ -19,7 +19,7 @@ components:
   camera: recorded_video
   storage: memory
 video:
-  path: test/blender_scenes/wakeboard_fs360_60fps/wakeboard_fs360_60fps.mp4
+  path: tests/end2end/blender_scenes/wakeboard_fs360_60fps/wakeboard_fs360_60fps.mp4
   sample_fps: 10.0
 detector:
   model: yolov8n
@@ -903,8 +903,8 @@ synthetic_bear_tags:
     source_distance_m: 39.288325
 generated_from:
   generator: blender-motion-v1
-  motion_path: test/blender_scenes/wakeboard_fs360_60fps/wakeboard_fs360_60fps_rider1_motion.json
-  camera_path: test/blender_scenes/wakeboard_fs360_60fps/wakeboard_fs360_60fps_camera_info.yaml
+  motion_path: tests/end2end/blender_scenes/wakeboard_fs360_60fps/wakeboard_fs360_60fps_rider1_motion.json
+  camera_path: tests/end2end/blender_scenes/wakeboard_fs360_60fps/wakeboard_fs360_60fps_camera_info.yaml
   reference_rssi_dbm_at_1m: -50
   path_loss_exponent: 2.0
   gravity_mps2: 9.80665

@@ -72,7 +72,7 @@ logger = logging.getLogger(__name__)
 
 
 # Default paths
-DEFAULT_VIDEO = os.path.join("test", "input_video", "TestMovie3.avi")
+DEFAULT_VIDEO = os.path.join("tests", "end2end", "input_video", "TestMovie3.avi")
 DEFAULT_OUTPUT_DIR = os.path.join("output", "post_processing_gui")
 
 

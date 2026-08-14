@@ -1,7 +1,7 @@
 scenario_schema_version: "3.0"
-name: wakeboard-video-yolo
+name: wakeboard-testmovie3-yolo
 seed: 42
-duration_s: 15.3
+duration_s: 14.448
 
 components:
   frames: video
@@ -11,7 +11,7 @@ components:
   storage: memory
 
 video:
-  path: tests/data/preview_low.mp4
+  path: tests/end2end/input_video/TestMovie3.avi
   sample_fps: 5
 
 detector:
@@ -19,34 +19,34 @@ detector:
   confidence_threshold: 0.6
 
 synthetic_bear_tags:
-  # Video-derived synthetic estimate, not measured BLE telemetry. RSSI assumes
-  # roughly 10-25 m camera distance; acceleration includes gravity.
+  # The rider remains in motion across both detection clusters. RSSI assumes a
+  # somewhat shorter camera distance than TestMovie1; acceleration includes g.
   - tag_id: bear_tag_666
-    rider_id: rider-video
+    rider_id: rider-testmovie3
     start_s: 0
-    end_s: 15.2
+    end_s: 14.4
     sample_rate_hz: 10
-    rssi_dbm: -78
+    rssi_dbm: -74
     baseline_acceleration_mps2:
       x: 0
       y: 0
       z: 9.80665
     motion_windows:
-      - start_s: 3.8
-        end_s: 11.4
-        rssi_dbm: -72
+      - start_s: 2.5
+        end_s: 13.2
+        rssi_dbm: -66
         acceleration_mps2:
-          x: 4.2
-          y: 2.1
-          z: 18.8
+          x: 3.8
+          y: 2.4
+          z: 18.5
 
 timeline: []
 faults: {}
 expect:
-  rider_id: rider-video
+  rider_id: rider-testmovie3
   bear_tag_id: bear_tag_666
   assignment_status: assigned
   capture_triggered: true
   clip_uploaded: true
-  minimum_person_detections: 1
-  first_detection_between_s: [5.8, 6.3]
+  minimum_person_detections: 2
+  first_detection_between_s: [3.2, 3.4]

@@ -196,7 +196,7 @@ The integration test suite validates:
 ### Test Video
 
 Tests use the same regression test video as Part 1:
-- **Path**: `test/input_video/TestMovie3.avi`
+- **Path**: `tests/end2end/input_video/TestMovie3.avi`
 - **Size**: ~11 MB
 - **Duration**: Several seconds
 - **Content**: Wakeboard action footage

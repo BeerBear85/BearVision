@@ -291,7 +291,7 @@ pytest tests/unit/test_bounding_box_processor.py
 Use the existing trajectory regression test video:
 ```bash
 # Test with TestMovie3.avi (existing test video)
-python run_post_processing.py test/input_video/TestMovie3.avi output.json --verbose
+python run_post_processing.py tests/end2end/input_video/TestMovie3.avi output.json --verbose
 
 # Verify output JSON
 python -c "import json; print(json.load(open('output.json'))['metadata'])"
@@ -391,7 +391,7 @@ The following features are planned for Part 2:
 
 - GitHub Issue #165: Virtual Cameraman - Part 1
 - Existing trajectory test: `tests/integration/test_trajectory_gap_detection.py`
-- Test video: `test/input_video/TestMovie3.avi`
+- Test video: `tests/end2end/input_video/TestMovie3.avi`
 - YOLO documentation: https://docs.ultralytics.com/
 
 ## API Documentation

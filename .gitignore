@@ -1,8 +1,8 @@
 *.log
 *.pkl
 .idea
-test/debug.log
-test/blender_scenes/**/*.mp4
+tests/end2end/debug.log
+tests/end2end/blender_scenes/**/*.mp4
 __pycache__
 .venv/
 node_modules/

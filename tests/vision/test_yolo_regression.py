@@ -25,12 +25,12 @@ def detector():
 @pytest.mark.parametrize(
     ("relative_path", "minimum_people"),
     [
-        ("test/images/test_image_1.jpg", 1),
-        ("test/images/test_image_2.jpg", 1),
-        ("test/images/test_image_3.jpg", 1),
-        ("test/images/test_image_4.jpg", 2),
-        ("test/images/test_image_5.jpg", 1),
-        ("test/images/test_image_easy.jpg", 1),
+        ("tests/end2end/images/test_image_1.jpg", 1),
+        ("tests/end2end/images/test_image_2.jpg", 1),
+        ("tests/end2end/images/test_image_3.jpg", 1),
+        ("tests/end2end/images/test_image_4.jpg", 2),
+        ("tests/end2end/images/test_image_5.jpg", 1),
+        ("tests/end2end/images/test_image_easy.jpg", 1),
     ],
 )
 def test_checked_in_images_still_detect_people(
@@ -48,7 +48,7 @@ def test_checked_in_images_still_detect_people(
 
 
 def test_easy_reference_image_remains_high_confidence(detector) -> None:
-    image = cv2.imread(str(ROOT / "test/images/test_image_easy.jpg"))
+    image = cv2.imread(str(ROOT / "tests/end2end/images/test_image_easy.jpg"))
 
     _, confidences = detector.find_person(image)
 
