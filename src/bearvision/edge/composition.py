@@ -16,7 +16,6 @@ from bearvision.adapters import (
     YoloDetectorAdapter,
 )
 from bearvision.config import AssignmentConfig, EdgeConfig
-from bearvision.config.models import ClipExtractionConfig
 from bearvision.ports import Camera, ClipProcessor, Clock, Detector, FrameSource, JobQueue, TagScanner
 from bearvision.contracts import ScenarioDefinition
 from bearvision.processing import VirtualCameramanJobProcessor, VirtualCameramanProcessor
@@ -42,6 +41,7 @@ def build_behavioral_system(
     scenario: ScenarioDefinition,
     server_assignment_policy: AssignmentConfig | None = None,
     *,
+    edge_config: EdgeConfig | None = None,
     capture_dir: Path | None = None,
     job_queue: JobQueue | None = None,
     process_server: bool = True,
@@ -52,6 +52,7 @@ def build_behavioral_system(
         return VideoScenarioRunner.from_scenario(
             scenario,
             assignment_policy=server_assignment_policy,
+            edge_config=edge_config,
             capture_dir=capture_dir,
             job_queue=job_queue,
             process_server=process_server,
@@ -120,9 +121,14 @@ def build_real_system(
     detector = YoloDetectorAdapter(legacy_detector)
     from bearvision.adapters import FfmpegVideoClipper
 
-    ffmpeg_path = FfmpegVideoClipper(ClipExtractionConfig()).ffmpeg_path
+    ffmpeg_path = FfmpegVideoClipper(config.clip_extraction).ffmpeg_path
     clip_processor = VirtualCameramanJobProcessor(
-        VirtualCameramanProcessor(detector, clock, ffmpeg_path=ffmpeg_path),
+        VirtualCameramanProcessor(
+            detector,
+            clock,
+            config=config.virtual_cameraman,
+            ffmpeg_path=ffmpeg_path,
+        ),
         capture_dir,
     )
     return RealEdgeComponents(

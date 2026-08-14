@@ -1,5 +1,7 @@
 """Edge-side media post-processing."""
 
+from bearvision.config import VirtualCameramanConfig
+
 from .job_processor import VirtualCameramanJobProcessor
 
 from .virtual_cameraman import (
@@ -10,7 +12,6 @@ from .virtual_cameraman import (
     ProcessedClip,
     SmoothedPosition,
     TrackingFrame,
-    VirtualCameramanConfig,
     VirtualCameramanProcessor,
     ZeroPhaseButterworthCameraSmoother,
     calculate_length_adjustment,

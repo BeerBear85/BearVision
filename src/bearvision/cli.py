@@ -40,6 +40,7 @@ def edge_main() -> int:
 def simulate_main() -> int:
     parser = argparse.ArgumentParser(description="Run a BearVision behavioural scenario")
     parser.add_argument("scenario", type=Path)
+    parser.add_argument("--config", type=Path, default=Path("config/edge.yaml"))
     parser.add_argument(
         "--realtime",
         action="store_true",
@@ -54,7 +55,10 @@ def simulate_main() -> int:
     args = parser.parse_args()
     if args.speed <= 0:
         parser.error("--speed must be positive")
-    result = build_behavioral_system(load_scenario(args.scenario)).run()
+    result = build_behavioral_system(
+        load_scenario(args.scenario),
+        edge_config=load_edge_config(args.config),
+    ).run()
     previous_at_s = 0.0
     for entry in result.trace:
         if args.realtime:

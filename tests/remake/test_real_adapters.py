@@ -163,6 +163,7 @@ def test_real_composition_wraps_existing_implementations(tmp_path: Path) -> None
     assert isinstance(components.detector, YoloDetectorAdapter)
     assert isinstance(components.job_queue, BoxJobQueue)
     assert isinstance(components.clip_processor, VirtualCameramanJobProcessor)
+    assert components.clip_processor.processor.config == config.virtual_cameraman
 
     orchestrator = build_real_orchestrator(
         config,

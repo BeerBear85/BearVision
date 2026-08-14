@@ -28,6 +28,29 @@ class ClipExtractionConfig(StrictConfigModel):
     crf: int = Field(default=20, ge=0, le=51)
 
 
+class VirtualCameramanConfig(StrictConfigModel):
+    """Tracking, crop and output-quality policy for processed Edge clips."""
+
+    sample_fps: float = Field(default=10.0, gt=0, le=120)
+    crop_width_ratio: float = Field(default=0.5, gt=0, le=1)
+    output_width_px: int = Field(default=960, gt=0)
+    output_height_px: int = Field(default=540, gt=0)
+    process_noise_acceleration_px_s2: float = Field(default=800.0, gt=0)
+    velocity_damping_time_constant_s: float = Field(default=5.0, gt=0)
+    minimum_measurement_std_px: float = Field(default=2.0, gt=0)
+    innovation_gate_chi2: float = Field(default=9.210340371976184, gt=0)
+    maximum_bootstrap_speed_px_s: float = Field(default=3_000.0, gt=0)
+    camera_cutoff_hz: float = Field(default=1.25, gt=0)
+    length_adjustment_padding_s: float = Field(default=1.0, ge=0)
+    output_crf: int = Field(default=18, ge=0, le=51)
+
+    @model_validator(mode="after")
+    def validate_h264_dimensions(self) -> "VirtualCameramanConfig":
+        if self.output_width_px % 2 or self.output_height_px % 2:
+            raise ValueError("H.264 output dimensions must be even")
+        return self
+
+
 class DetectionConfig(StrictConfigModel):
     enabled: bool = True
     model: str = Field(default="yolov8n", min_length=1)
@@ -99,6 +122,9 @@ class EdgeConfig(StrictConfigModel):
     config_kind: Literal["bearvision-edge"]
     recording: RecordingConfig = Field(default_factory=RecordingConfig)
     clip_extraction: ClipExtractionConfig = Field(default_factory=ClipExtractionConfig)
+    virtual_cameraman: VirtualCameramanConfig = Field(
+        default_factory=VirtualCameramanConfig
+    )
     detection: DetectionConfig = Field(default_factory=DetectionConfig)
     performance: PerformanceConfig = Field(default_factory=PerformanceConfig)
     error_recovery: ErrorRecoveryConfig = Field(default_factory=ErrorRecoveryConfig)

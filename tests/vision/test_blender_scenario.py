@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from bearvision.config import load_edge_config
 from bearvision.contracts import load_scenario
 from bearvision.edge import build_behavioral_system
 
@@ -12,6 +13,7 @@ cv2 = pytest.importorskip("cv2")
 
 ROOT = Path(__file__).resolve().parents[2]
 MODEL = ROOT / "code/dnn_models/yolov8n.onnx"
+EDGE_CONFIG = load_edge_config(ROOT / "config/edge.yaml")
 SCENARIO = ROOT / "specs/scenarios/wakeboard-fs360-60fps-blender-regression.yaml"
 TWO_RIDER_SCENARIO = (
     ROOT / "specs/scenarios/wakeboard-two-riders-60fps-blender-regression.yaml"
@@ -26,7 +28,11 @@ def test_blender_video_and_synthetic_bear_tag_assign_the_rider(tmp_path: Path) -
     if not (ROOT / scenario.video.path).is_file():
         pytest.skip("local ignored Blender MP4 is not available")
 
-    result = build_behavioral_system(scenario, capture_dir=tmp_path).run()
+    result = build_behavioral_system(
+        scenario,
+        edge_config=EDGE_CONFIG,
+        capture_dir=tmp_path,
+    ).run()
 
     assert result.failures == ()
     assert result.expectation_failures == ()
@@ -61,7 +67,10 @@ def test_blender_video_and_synthetic_bear_tag_assign_the_rider(tmp_path: Path) -
         assert int(capture.get(cv2.CAP_PROP_FRAME_COUNT)) > 0
         ok, frame = capture.read()
         assert ok
-        assert frame.shape[:2] == (90, 160)
+        assert frame.shape[:2] == (
+            EDGE_CONFIG.virtual_cameraman.output_height_px,
+            EDGE_CONFIG.virtual_cameraman.output_width_px,
+        )
     finally:
         capture.release()
 
@@ -80,7 +89,11 @@ def test_two_rider_blender_video_assigns_both_riders_bear_tags(
         "bear_tag_123",
     ]
 
-    result = build_behavioral_system(scenario, capture_dir=tmp_path).run()
+    result = build_behavioral_system(
+        scenario,
+        edge_config=EDGE_CONFIG,
+        capture_dir=tmp_path,
+    ).run()
 
     assert result.failures == ()
     assert result.expectation_failures == ()
@@ -97,3 +110,17 @@ def test_two_rider_blender_video_assigns_both_riders_bear_tags(
         "input-queue/ready/capture-video-frame-126",
         "input-queue/ready/capture-video-frame-708",
     ]
+    for frame_id in (126, 708):
+        capture = cv2.VideoCapture(
+            str(tmp_path / f"capture-video-frame-{frame_id}.virtual-cameraman.mp4")
+        )
+        try:
+            assert capture.isOpened()
+            ok, frame = capture.read()
+            assert ok
+            assert frame.shape[:2] == (
+                EDGE_CONFIG.virtual_cameraman.output_height_px,
+                EDGE_CONFIG.virtual_cameraman.output_width_px,
+            )
+        finally:
+            capture.release()

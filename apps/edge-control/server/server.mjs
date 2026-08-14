@@ -158,7 +158,7 @@ function startRuntime(mode, scenarioName = null) {
   const args = mode === "simulation"
     ? [
       "-m", "bearvision.control", "simulate", safeScenario(scenarioName),
-      "--realtime", "--local-queue-root", localQueueRoot,
+      "--realtime", "--local-queue-root", localQueueRoot, "--config", configPath,
     ]
     : ["-m", "bearvision.control", "hardware", "--config", configPath];
   child = spawn(pythonCommand(), args, { cwd: repoRoot, env: process.env, stdio: ["ignore", "pipe", "pipe"] });

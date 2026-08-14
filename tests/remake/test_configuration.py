@@ -20,6 +20,10 @@ def test_active_edge_config_is_versioned_and_valid() -> None:
     assert not hasattr(config, "assignment")
     assert config.clip_extraction.engine == "ffmpeg"
     assert config.clip_extraction.crf == 20
+    assert config.virtual_cameraman.crop_width_ratio == 0.5
+    assert config.virtual_cameraman.output_width_px == 960
+    assert config.virtual_cameraman.output_height_px == 540
+    assert config.virtual_cameraman.output_crf == 18
 
 
 def test_assignment_fusion_weights_must_sum_to_one() -> None:

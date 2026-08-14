@@ -36,12 +36,14 @@ def simulate(
     realtime: bool,
     speed: float,
     local_queue_root: Path | None = None,
+    config_path: Path = Path("config/edge.yaml"),
 ) -> int:
     if speed <= 0:
         raise ValueError("speed must be positive")
     queue = FileSystemJobQueue(local_queue_root) if local_queue_root else None
     result = build_behavioral_system(
         load_scenario(path),
+        edge_config=load_edge_config(config_path),
         job_queue=queue,
         process_server=queue is None,
     ).run()
@@ -87,6 +89,7 @@ def main() -> int:
     simulation.add_argument("--realtime", action="store_true")
     simulation.add_argument("--speed", type=float, default=1.0)
     simulation.add_argument("--local-queue-root", type=Path)
+    simulation.add_argument("--config", type=Path, default=Path("config/edge.yaml"))
     real = commands.add_parser("hardware")
     real.add_argument("--config", type=Path, default=Path("config/edge.yaml"))
     args = parser.parse_args()
@@ -96,6 +99,7 @@ def main() -> int:
             realtime=args.realtime,
             speed=args.speed,
             local_queue_root=args.local_queue_root,
+            config_path=args.config,
         )
     return asyncio.run(hardware(args.config))
 

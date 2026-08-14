@@ -8,7 +8,7 @@ import hashlib
 from pathlib import Path
 
 from bearvision.adapters import FfmpegVideoClipper, YoloDetectorAdapter
-from bearvision.config import AssignmentConfig
+from bearvision.config import AssignmentConfig, EdgeConfig, VirtualCameramanConfig
 from bearvision.config.models import ClipExtractionConfig
 from bearvision.contracts import ScenarioDefinition, StorageReceipt
 from bearvision.edge.job_package import build_edge_job
@@ -66,6 +66,7 @@ class VideoScenarioRunner:
         scenario: ScenarioDefinition,
         *,
         assignment_policy: AssignmentConfig | None = None,
+        edge_config: EdgeConfig | None = None,
         recording_duration_s: float = 5.0,
         repository_root: Path | None = None,
         capture_dir: Path | None = None,
@@ -95,7 +96,9 @@ class VideoScenarioRunner:
         handler = DnnHandler(scenario.detector.model)
         handler.confidence_threshold = scenario.detector.confidence_threshold
         handler.init()
-        clipper = FfmpegVideoClipper(ClipExtractionConfig())
+        clipper = FfmpegVideoClipper(
+            edge_config.clip_extraction if edge_config else ClipExtractionConfig()
+        )
         camera = RecordedVideoCamera(
             video_path,
             clock,
@@ -151,6 +154,11 @@ class VideoScenarioRunner:
         post_processor = VirtualCameramanProcessor(
             YoloDetectorAdapter(post_handler),
             clock,
+            config=(
+                edge_config.virtual_cameraman
+                if edge_config
+                else VirtualCameramanConfig()
+            ),
             ffmpeg_path=clipper.ffmpeg_path,
         )
         for observation in observations:

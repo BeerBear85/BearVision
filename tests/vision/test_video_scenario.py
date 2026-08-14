@@ -8,6 +8,7 @@ from uuid import NAMESPACE_URL, uuid5
 import pytest
 
 from bearvision.adapters import FfmpegVideoClipper
+from bearvision.config import load_edge_config
 from bearvision.config.models import ClipExtractionConfig
 from bearvision.contracts import load_scenario
 from bearvision.edge import build_behavioral_system
@@ -27,6 +28,7 @@ cv2 = pytest.importorskip("cv2")
 
 ROOT = Path(__file__).resolve().parents[2]
 MODEL = ROOT / "code/dnn_models/yolov8n.onnx"
+EDGE_CONFIG = load_edge_config(ROOT / "config/edge.yaml")
 
 
 def test_recorded_video_drives_real_yolo_capture_and_rider_assignment(
@@ -42,6 +44,7 @@ def test_recorded_video_drives_real_yolo_capture_and_rider_assignment(
 
     result = build_behavioral_system(
         scenario,
+        edge_config=EDGE_CONFIG,
         capture_dir=capture_dir,
         job_queue=queue,
         process_server=False,
@@ -85,7 +88,7 @@ def test_recorded_video_drives_real_yolo_capture_and_rider_assignment(
     debug = capture_dir / "capture-video-frame-180.tracking-debug.mp4"
     assert tracking.is_file()
     assert debug.is_file()
-    assert output.stat().st_size < extracted.stat().st_size
+    assert output.stat().st_size > 0
     assert any(entry.kind == "virtual_cameraman_completed" for entry in result.trace)
     tracking_events = [entry for entry in result.trace if entry.kind == "tracking_observation"]
     assert tracking_events
@@ -130,7 +133,10 @@ def test_recorded_video_drives_real_yolo_capture_and_rider_assignment(
             source_frame.astype("float32") - extracted_frame.astype("float32")
         ).mean()
         assert mean_absolute_error < 12
-        assert processed_frame.shape[:2] == (90, 160)
+        assert processed_frame.shape[:2] == (
+            EDGE_CONFIG.virtual_cameraman.output_height_px,
+            EDGE_CONFIG.virtual_cameraman.output_width_px,
+        )
     finally:
         output_capture.release()
         extracted_capture.release()

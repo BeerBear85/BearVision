@@ -108,7 +108,7 @@ uses later detections to improve earlier states and covariances. A separate
 second-order Butterworth path runs forward and backward to create a zero-phase,
 low-jitter crop trajectory. It publishes three additional artefacts:
 
-- `*.virtual-cameraman.mp4`: the smaller H.264/AAC upload file;
+- `*.virtual-cameraman.mp4`: the cropped, silent H.264 upload file;
 - `*.tracking-debug.mp4`: green YOLO boxes, red Kalman + RTS estimate plus a
   conservative circular 95% region, and the cyan Butterworth crop window;
 - `*.tracking.json`: frame-level measurements, estimates, covariance and crop.
@@ -117,6 +117,11 @@ The current video scenario packages only the processed file. Edge Control lets
 the operator switch among source, raw extracted clip, upload clip and tracking
 view. A green box means a detected person; rider identity comes later from the
 server worker.
+
+Crop ratio, sampling rate, output dimensions and final H.264 CRF are configured
+under `virtual_cameraman` in `config/edge.yaml`. The active 1080p policy uses a
+50% width crop and writes `960x540` at CRF 18, preserving the crop's native
+pixel dimensions instead of reducing it to a low-resolution preview.
 
 Edge Control only serves scenario metadata/media and supervises Edge Python.
 The separate Server Control app supervises the Python worker; only that worker
@@ -155,6 +160,7 @@ are not required. Explicit `BEARVISION_FFMPEG` and `BEARVISION_FFPROBE` paths
 override the packaged binaries when deployment policy requires managed tools.
 
 Encoding policy is independently versioned in `config/edge.yaml` under
-`clip_extraction`. The current correctness-first default is H.264/AAC,
-`veryfast`, CRF 20. Mini-PC throughput still needs measurement on the selected
-production hardware; CI proves correctness, not performance.
+`clip_extraction` and `virtual_cameraman`. The raw extraction uses H.264/AAC,
+`veryfast`, CRF 20; the final crop uses H.264 at CRF 18. Mini-PC throughput still
+needs measurement on the selected production hardware; CI proves correctness,
+not performance.

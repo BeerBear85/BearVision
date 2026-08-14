@@ -23,53 +23,12 @@ from pathlib import Path
 import subprocess
 from typing import Any, Sequence
 
+from bearvision.config import VirtualCameramanConfig
 from bearvision.contracts import BoundingBox, MediaAsset, PersonDetection
 from bearvision.ports import CapturedMedia, Detector, InvalidComponentData, VideoFrame
 
 
 CHI_SQUARE_2D_95 = 5.991464547107979
-
-
-@dataclass(frozen=True, slots=True)
-class VirtualCameramanConfig:
-    """Version-local policy for the coarse crop pass."""
-
-    sample_fps: float = 10.0
-    crop_width_ratio: float = 0.5
-    output_width_px: int = 160
-    output_height_px: int = 90
-    process_noise_acceleration_px_s2: float = 800.0
-    velocity_damping_time_constant_s: float = 5.0
-    minimum_measurement_std_px: float = 2.0
-    innovation_gate_chi2: float = 9.210340371976184
-    maximum_bootstrap_speed_px_s: float = 3_000.0
-    camera_cutoff_hz: float = 1.25
-    length_adjustment_padding_s: float = 1.0
-    output_crf: int = 24
-
-    def __post_init__(self) -> None:
-        if self.sample_fps <= 0:
-            raise ValueError("sample_fps must be positive")
-        if not 0 < self.crop_width_ratio <= 1:
-            raise ValueError("crop_width_ratio must be in (0, 1]")
-        if self.output_width_px <= 0 or self.output_height_px <= 0:
-            raise ValueError("output dimensions must be positive")
-        if self.output_width_px % 2 or self.output_height_px % 2:
-            raise ValueError("H.264 output dimensions must be even")
-        if self.process_noise_acceleration_px_s2 <= 0:
-            raise ValueError("process noise must be positive")
-        if self.velocity_damping_time_constant_s <= 0:
-            raise ValueError("velocity damping time constant must be positive")
-        if self.minimum_measurement_std_px <= 0:
-            raise ValueError("measurement standard deviation must be positive")
-        if self.innovation_gate_chi2 <= 0:
-            raise ValueError("innovation gate must be positive")
-        if self.maximum_bootstrap_speed_px_s <= 0:
-            raise ValueError("maximum bootstrap speed must be positive")
-        if self.camera_cutoff_hz <= 0:
-            raise ValueError("camera cutoff must be positive")
-        if self.length_adjustment_padding_s < 0:
-            raise ValueError("length adjustment padding must not be negative")
 
 
 @dataclass(frozen=True, slots=True)

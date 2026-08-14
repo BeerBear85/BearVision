@@ -9,6 +9,12 @@ clip_extraction:
   audio_codec: aac
   preset: veryfast
   crf: 20
+virtual_cameraman:
+  sample_fps: 10.0
+  crop_width_ratio: 0.5
+  output_width_px: 960
+  output_height_px: 540
+  output_crf: 18
 detection:
   enabled: true
   model: yolov8n
