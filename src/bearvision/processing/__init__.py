@@ -1,5 +1,7 @@
 """Edge-side media post-processing."""
 
+from .job_processor import VirtualCameramanJobProcessor
+
 from .virtual_cameraman import (
     ClipLengthAdjustment,
     KalmanPositionTracker,
@@ -23,6 +25,7 @@ __all__ = [
     "SmoothedPosition",
     "TrackingFrame",
     "VirtualCameramanConfig",
+    "VirtualCameramanJobProcessor",
     "VirtualCameramanProcessor",
     "ZeroPhaseButterworthCameraSmoother",
     "calculate_length_adjustment",

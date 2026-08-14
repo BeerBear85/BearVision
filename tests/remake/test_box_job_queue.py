@@ -1,0 +1,98 @@
+import asyncio
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
+from bearvision.adapters import BoxJobQueue
+from bearvision.contracts import MediaAsset, TagObservation, Vector3
+from bearvision.edge.job_package import build_edge_job
+from bearvision.ports import CapturedMedia
+
+
+class MemoryBoxFolders:
+    def __init__(self) -> None:
+        self.files: dict[str, bytes] = {}
+
+    def upload_file(self, local_path, remote_path, overwrite=False):
+        if remote_path in self.files and not overwrite:
+            raise FileExistsError(remote_path)
+        self.files[remote_path] = Path(local_path).read_bytes()
+
+    def download_file(self, remote_path, local_path):
+        Path(local_path).write_bytes(self.files[remote_path])
+
+    def folder_exists(self, path):
+        prefix = path.strip("/") + "/"
+        return any(item.startswith(prefix) for item in self.files)
+
+    def file_exists(self, path):
+        return path.strip("/") in self.files
+
+    def list_folders(self, path=""):
+        prefix = path.strip("/")
+        prefix = f"{prefix}/" if prefix else ""
+        return sorted(
+            {
+                item.removeprefix(prefix).split("/", 1)[0]
+                for item in self.files
+                if item.startswith(prefix) and "/" in item.removeprefix(prefix)
+            }
+        )
+
+    def move_folder(self, source, destination):
+        source_prefix = source.strip("/") + "/"
+        destination_prefix = destination.strip("/") + "/"
+        moving = {key: value for key, value in self.files.items() if key.startswith(source_prefix)}
+        if not moving:
+            raise FileNotFoundError(source)
+        for key in moving:
+            del self.files[key]
+        for key, value in moving.items():
+            self.files[destination_prefix + key.removeprefix(source_prefix)] = value
+
+
+def test_box_queue_commits_with_ready_then_claims_complete_folder(tmp_path: Path) -> None:
+    now = datetime(2026, 7, 1, tzinfo=timezone.utc)
+    video = CapturedMedia(
+        asset=MediaAsset(
+            asset_id="asset-1",
+            filename="video.mp4",
+            content_type="video/mp4",
+            size_bytes=5,
+            created_at_utc=now,
+        ),
+        content=b"video",
+    )
+    source_observation = TagObservation(
+        tag_id="BearTag-1",
+        observed_at_utc=now + timedelta(seconds=1),
+        observed_at_monotonic_s=1,
+        rssi_dbm=-50,
+        acceleration_mps2=Vector3(x=1, y=2, z=3),
+    )
+    manifest, observations = build_edge_job(
+        job_id="job-1",
+        edge_device_id="edge-1",
+        created_at=now,
+        capture_started_at=now,
+        capture_ended_at=now + timedelta(seconds=5),
+        clip_start_monotonic_s=0,
+        video=video,
+        observations=(source_observation,),
+    )
+    handler = MemoryBoxFolders()
+    queue = BoxJobQueue(handler, tmp_path)
+
+    # A previous transient upload can be resumed and committed.
+    handler.files["input-queue/uploading/job-1/video.mp4"] = b"partial"
+
+    assert asyncio.run(queue.publish(manifest, video, observations))
+    assert "input-queue/ready/job-1/READY" in handler.files
+    assert not any(key.startswith("input-queue/uploading") for key in handler.files)
+    assert asyncio.run(queue.acquire_next()) == "job-1"
+    assert asyncio.run(queue.read("job-1", "video.mp4")) == b"video"
+    assert not asyncio.run(queue.publish(manifest, video, observations))
+    assert queue.admin_list_jobs() == [{"jobId": "job-1", "status": "processing"}]
+    assert asyncio.run(queue.admin_read("job-1", "manifest.json"))
+    downloaded = tmp_path / "downloaded.mp4"
+    asyncio.run(queue.admin_download("job-1", "video.mp4", downloaded))
+    assert downloaded.read_bytes() == b"video"

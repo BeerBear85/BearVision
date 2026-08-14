@@ -12,7 +12,7 @@ function eventMessage(event) {
     runtime_failed: "Runtime failed",
     person_detected: "Vision detected a person",
     capture_started: "GoPro capture started",
-    rider_assignment: "Rider assignment completed",
+    server_assignment: "Server assignment completed",
     capture_completed: "Capture completed",
     clip_uploaded: "Clip uploaded",
     tag_observed: "BearTag observation received",
@@ -126,7 +126,7 @@ function App() {
   const current = events[0];
   const selected = scenarios.find((scenario) => scenario.name === selectedScenario);
   const lastAssignment = useMemo(
-    () => events.find((event) => event.kind === "rider_assignment"),
+    () => events.find((event) => event.kind === "server_assignment"),
     [events],
   );
 

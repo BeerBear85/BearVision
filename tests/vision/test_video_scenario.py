@@ -4,6 +4,8 @@ import json
 
 import pytest
 
+from bearvision.adapters import FfmpegVideoClipper
+from bearvision.config.models import ClipExtractionConfig
 from bearvision.contracts import load_scenario
 from bearvision.edge import build_behavioral_system
 
@@ -27,13 +29,11 @@ def test_recorded_video_drives_real_yolo_capture_and_rider_assignment(
 
     assert result.failures == ()
     assert result.expectation_failures == ()
-    assert result.assignments[0].rider_id == "rider-video"
+    assert result.assignments[0].selected_user_email == "rider-video@scenario.invalid"
     detected = [entry for entry in result.trace if entry.kind == "person_detected"]
     assert detected[0].at_s == pytest.approx(6.006, abs=0.01)
     assert result.captures
-    assert result.uploads[0].object_key == (
-        "rider-video/capture-video-frame-180.virtual-cameraman.mp4"
-    )
+    assert result.uploads[0].object_key == "input-queue/ready/capture-video-frame-180"
     output = tmp_path / "capture-video-frame-180.virtual-cameraman.mp4"
     assert output.is_file()
     extracted = tmp_path / "capture-video-frame-180.mp4"
@@ -53,7 +53,12 @@ def test_recorded_video_drives_real_yolo_capture_and_rider_assignment(
     assert tracking_metadata["tracking_schema_version"] == "2.0"
     assert "rts_smoother" in tracking_metadata["state_estimator"]
     assert tracking_metadata["camera_path"]["zero_phase"] is True
+    assert (
+        tracking_metadata["length_adjustment"]["output_duration_s"]
+        <= tracking_metadata["length_adjustment"]["source_duration_s"]
+    )
     assert hashlib.sha256(source.read_bytes()).hexdigest() == source_hash
+    assert FfmpegVideoClipper(ClipExtractionConfig())._probe(output)["has_audio"] is False
 
     output_capture = cv2.VideoCapture(str(output))
     extracted_capture = cv2.VideoCapture(str(extracted))
@@ -64,12 +69,20 @@ def test_recorded_video_drives_real_yolo_capture_and_rider_assignment(
         ) / extracted_capture.get(
             cv2.CAP_PROP_FPS
         )
+        processed_duration = output_capture.get(
+            cv2.CAP_PROP_FRAME_COUNT
+        ) / output_capture.get(
+            cv2.CAP_PROP_FPS
+        )
         source_capture.set(cv2.CAP_PROP_POS_MSEC, detected[0].at_s * 1000)
         source_ok, source_frame = source_capture.read()
         extracted_ok, extracted_frame = extracted_capture.read()
         processed_ok, processed_frame = output_capture.read()
         assert source_ok and extracted_ok and processed_ok
         assert output_duration == pytest.approx(5.0, abs=0.1)
+        assert processed_duration == pytest.approx(
+            tracking_metadata["length_adjustment"]["output_duration_s"], abs=0.1
+        )
         mean_absolute_error = abs(
             source_frame.astype("float32") - extracted_frame.astype("float32")
         ).mean()

@@ -6,6 +6,7 @@ test/blender_scenes/**/*.mp4
 __pycache__
 .venv/
 node_modules/
+.pnpm-store/
 *.egg-info/
 code/dnn_models/yolov3_608.weights
 android_app/.gradle/
@@ -16,6 +17,7 @@ last_used_config.ini
 .claude/settings.local.json
 temp/*
 .test-temp/
+data/server/user-registry.json
 code/obsolite_junk_box/GPMD2CSV_extract_gopro_sensor_data/gopro2json.exe
 code/obsolite_junk_box/GPMD2CSV_extract_gopro_sensor_data/gpmdinfo.exe
 simulation/out/

@@ -1,12 +1,10 @@
 # Contract rules
 
-All serialized domain contracts use `contract_schema_version: "2.0"`, reject
-unknown fields and declare units in field names. UTC timestamps must include a
-timezone. Monotonic timestamps are seconds from the current process or virtual
-scenario origin.
+In-process domain contracts use `contract_schema_version: "2.0"`. The Box job
+contract independently uses `schemaVersion: 1`. Both reject unknown fields and
+declare units in field names. UTC timestamps must include a timezone.
 
-Vision triggers a fixed-duration person clip but does not provide rider identity
-or a jump timestamp. Identity is assigned exclusively from acceleration and RSSI
-evidence recorded by registered BearTags during the complete clip. A tag must
-pass sample-count, mean-motion and RSSI gates. When no tag qualifies, or competing
-combined scores are too close, callers retain `unassigned` or `ambiguous`.
+Edge serializes observation times as non-negative `offsetMs` from
+`captureStartedAt`; process-local monotonic values never cross machines. The
+server reconstructs clip-relative values only for scoring. `validFrom` is
+inclusive and `validTo` exclusive.

@@ -15,6 +15,13 @@ from .models import (
     StorageReceipt,
     Vector3,
 )
+from .jobs import (
+    BearTagJobObservation,
+    CandidateScore,
+    EdgeJobManifest,
+    JobResultManifest,
+    JobVideo,
+)
 from .scenario import (
     GeneratedScenarioSource,
     ScenarioDefinition,
@@ -31,11 +38,16 @@ from .scenario import (
 )
 
 __all__ = [
+    "BearTagJobObservation",
     "BoundingBox",
     "CaptureRequest",
     "CaptureResult",
+    "CandidateScore",
     "CaptureStatus",
+    "EdgeJobManifest",
     "GeneratedScenarioSource",
+    "JobResultManifest",
+    "JobVideo",
     "MediaAsset",
     "PersonDetection",
     "RiderAssignment",

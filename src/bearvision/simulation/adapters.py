@@ -7,7 +7,10 @@ from collections.abc import Iterable
 from datetime import datetime, timedelta, timezone
 
 from bearvision.contracts import (
+    BearTagJobObservation,
     CaptureRequest,
+    EdgeJobManifest,
+    JobResultManifest,
     MediaAsset,
     PersonDetection,
     StorageReceipt,
@@ -141,6 +144,85 @@ class InMemoryStorage:
 
     async def delete(self, object_key: str) -> None:
         self.objects.pop(object_key, None)
+
+
+class InMemoryJobQueue:
+    """Durable-state semantics without Box or filesystem I/O."""
+
+    def __init__(self, *, fail_publish: bool = False) -> None:
+        self.fail_publish = fail_publish
+        self.packages: dict[str, dict[str, bytes]] = {}
+        self.states: dict[str, str] = {}
+        self.results: dict[str, JobResultManifest] = {}
+
+    async def publish(
+        self,
+        manifest: EdgeJobManifest,
+        video: CapturedMedia,
+        observations: tuple[BearTagJobObservation, ...],
+    ) -> bool:
+        if self.fail_publish:
+            raise ComponentUnavailable("injected job queue publish failure")
+        if manifest.job_id in self.states:
+            return False
+        if video.content is not None:
+            content = video.content
+        else:
+            assert video.local_path is not None
+            content = video.local_path.read_bytes()
+        ndjson = "".join(
+            item.model_dump_json(by_alias=True) + "\n" for item in observations
+        ).encode()
+        self.packages[manifest.job_id] = {
+            "manifest.json": manifest.model_dump_json(by_alias=True).encode(),
+            manifest.video.filename: content,
+            manifest.observations_filename: ndjson,
+            "READY": b"",
+        }
+        self.states[manifest.job_id] = "ready"
+        return True
+
+    async def acquire_next(self) -> str | None:
+        processing = sorted(job_id for job_id, state in self.states.items() if state == "processing")
+        if processing:
+            return processing[0]
+        ready = sorted(job_id for job_id, state in self.states.items() if state == "ready")
+        if not ready:
+            return None
+        self.states[ready[0]] = "processing"
+        return ready[0]
+
+    async def read(self, job_id: str, filename: str) -> bytes:
+        return self.packages[job_id][filename]
+
+    async def finish(
+        self, job_id: str, result: JobResultManifest, user_email: str | None = None
+    ) -> None:
+        self.results[job_id] = result
+        self.packages[job_id]["result.json"] = result.model_dump_json(by_alias=True).encode()
+        self.states[job_id] = (
+            f"processed/{user_email}" if result.status == "processed" else result.status
+        )
+
+    async def requeue(self, job_id: str) -> bool:
+        if self.states.get(job_id) not in {"failed", "unresolved"}:
+            return False
+        self.states[job_id] = "ready"
+        self.results.pop(job_id, None)
+        self.packages[job_id].pop("result.json", None)
+        return True
+
+    def snapshot(self) -> dict:
+        counts = {state: 0 for state in ("ready", "processing", "processed", "unresolved", "failed")}
+        for state in self.states.values():
+            counts[state.split("/", 1)[0]] += 1
+        return {
+            "counts": counts,
+            "jobs": [
+                {"jobId": job_id, "status": state}
+                for job_id, state in sorted(self.states.items())
+            ],
+        }
 
 
 class InMemoryTagRegistry:

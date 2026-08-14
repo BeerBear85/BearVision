@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 
 from bearvision.adapters import (
+    BoxJobQueue,
     BoxStorageAdapter,
     GoProCameraAdapter,
     KBeaconTagScannerAdapter,
@@ -18,6 +19,7 @@ from bearvision.contracts import (
 )
 from bearvision.ports import VideoFrame
 from bearvision.simulation import VirtualClock
+from bearvision.processing import VirtualCameramanJobProcessor
 from bearvision.testing import check_camera, check_detector, check_scanner, check_storage
 
 
@@ -159,8 +161,8 @@ def test_real_composition_wraps_existing_implementations(tmp_path: Path) -> None
     assert isinstance(components.camera, GoProCameraAdapter)
     assert isinstance(components.scanner, KBeaconTagScannerAdapter)
     assert isinstance(components.detector, YoloDetectorAdapter)
-    assert isinstance(components.storage, BoxStorageAdapter)
-    assert components.assignment_policy.motion_weight == 0.7
+    assert isinstance(components.job_queue, BoxJobQueue)
+    assert isinstance(components.clip_processor, VirtualCameramanJobProcessor)
 
     orchestrator = build_real_orchestrator(
         config,

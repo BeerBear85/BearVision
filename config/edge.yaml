@@ -1,4 +1,4 @@
-config_schema_version: "2.1"
+config_schema_version: "3.0"
 config_kind: bearvision-edge
 recording:
   post_detection_duration_s: 5.0
@@ -14,16 +14,6 @@ detection:
   model: yolov8n
   confidence_threshold: 0.5
   cooldown_s: 2.0
-assignment:
-  # Initial values: calibrate against labelled rider clips before production use.
-  minimum_observation_count: 2
-  minimum_motion_delta_mps2: 2.0
-  motion_full_scale_mps2: 12.0
-  minimum_rssi_dbm: -85
-  rssi_full_scale_dbm: -40
-  motion_weight: 0.7
-  rssi_weight: 0.3
-  minimum_score_margin: 0.12
 performance:
   max_fps: 30
   buffer_drain: true
@@ -41,4 +31,4 @@ storage:
   secondary_credential_env: STORAGE_CREDENTIALS_B64_2
 system:
   log_level: DEBUG
-tag_registry: []
+  device_id: edge-1

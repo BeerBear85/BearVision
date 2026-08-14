@@ -8,14 +8,17 @@ from pathlib import Path
 from typing import Protocol, runtime_checkable
 
 from bearvision.contracts import (
+    BearTagJobObservation,
     CaptureRequest,
+    EdgeJobManifest,
+    JobResultManifest,
     PersonDetection,
     StorageReceipt,
     TagObservation,
     TagRegistryEntry,
 )
 
-from .models import CapturedMedia, ExtractedClip, VideoFrame
+from .models import CapturedMedia, ExtractedClip, PreparedClip, VideoFrame
 
 
 @runtime_checkable
@@ -74,6 +77,13 @@ class Detector(Protocol):
 
 
 @runtime_checkable
+class ClipProcessor(Protocol):
+    """Reduce a captured clip before it enters the cloud job package."""
+
+    async def process(self, media: CapturedMedia) -> PreparedClip: ...
+
+
+@runtime_checkable
 class Storage(Protocol):
     async def upload(
         self, media: CapturedMedia, object_key: str, *, overwrite: bool = False
@@ -82,6 +92,43 @@ class Storage(Protocol):
     async def download(self, object_key: str) -> bytes: ...
 
     async def delete(self, object_key: str) -> None: ...
+
+
+@runtime_checkable
+class JobQueue(Protocol):
+    """Durable provider-neutral state transitions for cloud job packages."""
+
+    async def publish(
+        self,
+        manifest: EdgeJobManifest,
+        video: CapturedMedia,
+        observations: tuple[BearTagJobObservation, ...],
+    ) -> bool: ...
+
+    async def acquire_next(self) -> str | None: ...
+
+    async def read(self, job_id: str, filename: str) -> bytes: ...
+
+    async def finish(
+        self, job_id: str, result: JobResultManifest, user_email: str | None = None
+    ) -> None: ...
+
+    async def requeue(self, job_id: str) -> bool: ...
+
+    def snapshot(self) -> dict: ...
+
+
+@runtime_checkable
+class ManagedJobQueue(JobQueue, Protocol):
+    """Job queue capabilities used by the local administrative read model."""
+
+    def admin_list_jobs(self) -> list[dict[str, str]]: ...
+
+    async def admin_read(self, job_id: str, filename: str) -> bytes: ...
+
+    async def admin_download(
+        self, job_id: str, filename: str, destination: Path
+    ) -> None: ...
 
 
 @runtime_checkable

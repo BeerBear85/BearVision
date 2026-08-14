@@ -311,3 +311,48 @@ class BoxHandler:
         if folder_id is None:
             return []
         return [item.name for item in self.client.folder(folder_id).get_items() if item.type == "file"]
+
+    def list_folders(self, remote_path: str = "") -> list[str]:
+        """List direct child folder names without creating the requested path."""
+
+        self.connect()
+        folder_id = self._find_folder_id(remote_path.strip("/"))
+        if folder_id is None:
+            return []
+        return [
+            item.name
+            for item in self.client.folder(folder_id).get_items()
+            if item.type == "folder"
+        ]
+
+    def folder_exists(self, remote_path: str) -> bool:
+        """Return whether a folder exists without mutating Box."""
+
+        return self._find_folder_id(remote_path.strip("/")) is not None
+
+    def file_exists(self, remote_path: str) -> bool:
+        """Return whether a file exists without creating missing folders."""
+
+        self.connect()
+        remote_path = remote_path.strip("/")
+        folder_id = self._find_folder_id(os.path.dirname(remote_path))
+        return folder_id is not None and self._find_file(folder_id, os.path.basename(remote_path)) is not None
+
+    def move_folder(self, source_path: str, destination_path: str) -> None:
+        """Move/rename one complete job folder as a single Box operation."""
+
+        self.connect()
+        source_path = source_path.strip("/")
+        destination_path = destination_path.strip("/")
+        source_id = self._find_folder_id(source_path)
+        if source_id is None:
+            raise FileNotFoundError(source_path)
+        if self._find_folder_id(destination_path) is not None:
+            raise FileExistsError(destination_path)
+        destination_parent = os.path.dirname(destination_path)
+        destination_name = os.path.basename(destination_path)
+        parent_id = self._get_folder_id(destination_parent)
+        self.client.folder(source_id).move(
+            self.client.folder(parent_id),
+            name=destination_name,
+        )

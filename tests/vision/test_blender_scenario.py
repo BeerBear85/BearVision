@@ -31,7 +31,7 @@ def test_blender_video_and_synthetic_bear_tag_assign_the_rider(tmp_path: Path) -
         result.assignments[0].selected_user_email
         == "rider-wakeboard-fs360-60fps@scenario.invalid"
     )
-    evidence = result.assignments[0].evidence[0]
+    evidence = result.assignments[0].candidates[0]
     assert evidence.observation_count >= 30
     assert evidence.median_rssi_dbm == pytest.approx(-79)
     assert evidence.qualifies

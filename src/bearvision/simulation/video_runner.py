@@ -3,18 +3,29 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import timedelta
+import hashlib
 from pathlib import Path
 
 from bearvision.adapters import FfmpegVideoClipper, YoloDetectorAdapter
 from bearvision.config import AssignmentConfig
 from bearvision.config.models import ClipExtractionConfig
-from bearvision.contracts import ScenarioDefinition
+from bearvision.contracts import ScenarioDefinition, StorageReceipt
+from bearvision.edge.job_package import build_edge_job
 from bearvision.edge.orchestrator import BearVisionOrchestrator, OrchestrationResult
 from bearvision.processing import VirtualCameramanProcessor
 
-from .adapters import InMemoryStorage, InMemoryTagRegistry, SimulatedTagScanner, VirtualClock
+from bearvision.server import (
+    BearTagAssignment,
+    BearTagRecord,
+    InMemoryUserRegistry,
+    RegistryData,
+    ServerWorker,
+    UserRecord,
+)
+from .adapters import InMemoryJobQueue, SimulatedTagScanner, VirtualClock
 from .engine import TraceEntry
-from .runner import ScenarioRunResult, evaluate_expectations
+from .runner import ScenarioRunResult, _scenario_email, evaluate_expectations
 from .scenario_inputs import generate_bear_tag_series
 from .video import RecordedVideoCamera, RecordedVideoFrameSource
 
@@ -30,7 +41,8 @@ class VideoScenarioRunner:
         clock: VirtualClock,
         camera: RecordedVideoCamera,
         frame_source: RecordedVideoFrameSource,
-        storage: InMemoryStorage,
+        queue: InMemoryJobQueue,
+        worker: ServerWorker,
         post_processor: VirtualCameramanProcessor,
     ) -> None:
         self.scenario = scenario
@@ -38,7 +50,8 @@ class VideoScenarioRunner:
         self.clock = clock
         self.camera = camera
         self.frame_source = frame_source
-        self.storage = storage
+        self.queue = queue
+        self.worker = worker
         self.post_processor = post_processor
 
     @classmethod
@@ -82,15 +95,34 @@ class VideoScenarioRunner:
             capture_dir=capture_dir or root / "temp/captures",
         )
         frame_source = RecordedVideoFrameSource(sample_fps=scenario.video.sample_fps)
-        storage = InMemoryStorage(clock)
+        queue = InMemoryJobQueue()
+        users = tuple(
+            UserRecord(id=_scenario_email(item.rider_id), displayName=item.rider_id)
+            for item in registry
+        )
+        server_registry = InMemoryUserRegistry(
+            RegistryData(
+                users=users,
+                bearTags=tuple(BearTagRecord(id=item.tag_id) for item in registry),
+                assignments=tuple(
+                    BearTagAssignment(
+                        id=f"scenario-{item.tag_id}",
+                        userId=_scenario_email(item.rider_id),
+                        bearTagId=item.tag_id,
+                        validFrom=clock.start_utc - timedelta(days=1),
+                        validTo=clock.start_utc + timedelta(days=1),
+                    )
+                    for item in registry
+                ),
+            )
+        )
         orchestrator = BearVisionOrchestrator(
             clock=clock,
             camera=camera,
             scanner=SimulatedTagScanner(()),
             detector=YoloDetectorAdapter(handler),
-            storage=storage,
-            registry=InMemoryTagRegistry(registry),
-            assignment_policy=assignment_policy or AssignmentConfig(),
+            job_queue=queue,
+            edge_device_id="scenario-video-edge",
             recording_duration_s=recording_duration_s,
             observation_retention_s=max(30.0, scenario.duration_s + recording_duration_s),
             frame_source=frame_source,
@@ -117,7 +149,8 @@ class VideoScenarioRunner:
             clock=clock,
             camera=camera,
             frame_source=frame_source,
-            storage=storage,
+            queue=queue,
+            worker=ServerWorker(queue, server_registry, clock, assignment_policy),
             post_processor=post_processor,
         )
 
@@ -129,6 +162,7 @@ class VideoScenarioRunner:
         results: dict[str, OrchestrationResult] = {}
         detection_times_s: list[float] = []
         failures: list[dict[str, str]] = []
+        receipts: list[StorageReceipt] = []
         await self.orchestrator.start()
         try:
             async for frame in self.frame_source.frames():
@@ -173,11 +207,41 @@ class VideoScenarioRunner:
                 result.media,
                 result.media.local_path.parent if result.media.local_path else Path("temp/captures"),
             )
-            owner = result.assignment.rider_id or result.assignment.status.value
-            receipt = await self.storage.upload(
-                processed.media,
-                f"{owner}/{processed.media.asset.filename}",
+            assert processed.media.local_path is not None
+            processed_content = processed.media.local_path.read_bytes()
+            adjusted_start_s = (
+                result.clip_start_monotonic_s + processed.length_adjustment.source_start_s
             )
+            adjusted_end_s = adjusted_start_s + processed.length_adjustment.output_duration_s
+            manifest, packaged_observations = build_edge_job(
+                job_id=result.request_id,
+                edge_device_id=result.manifest.edge_device_id,
+                created_at=result.manifest.created_at,
+                capture_started_at=(
+                    result.manifest.capture_started_at
+                    + timedelta(seconds=processed.length_adjustment.source_start_s)
+                ),
+                capture_ended_at=(
+                    result.manifest.capture_started_at
+                    + timedelta(seconds=processed.length_adjustment.source_end_s)
+                ),
+                clip_start_monotonic_s=adjusted_start_s,
+                video=processed.media,
+                observations=self.orchestrator.observations.between(
+                    adjusted_start_s, adjusted_end_s
+                ),
+            )
+            assert manifest.video.sha256 == hashlib.sha256(processed_content).hexdigest()
+            await self.queue.publish(manifest, processed.media, packaged_observations)
+            server_result = await self.worker.run_once()
+            assert server_result is not None
+            receipt = StorageReceipt(
+                asset_id=processed.media.asset.asset_id,
+                object_key=f"input-queue/ready/{manifest.job_id}",
+                stored_at_utc=manifest.created_at,
+                checksum_sha256=manifest.video.sha256,
+            )
+            receipts.append(receipt)
             trace_events.extend(
                 [
                     (
@@ -195,8 +259,8 @@ class VideoScenarioRunner:
                     ),
                     (
                         result.clip_end_monotonic_s,
-                        "rider_assignment",
-                        result.assignment.model_dump(mode="json"),
+                        "server_assignment",
+                        server_result.model_dump(mode="json", by_alias=True),
                     ),
                     (
                         result.clip_end_monotonic_s,
@@ -227,6 +291,7 @@ class VideoScenarioRunner:
                             "output_height_px": self.post_processor.config.output_height_px,
                             "state_estimator": "kalman_rts_smoother",
                             "camera_path": "zero_phase_butterworth",
+                            "length_adjustment": processed.length_adjustment.to_dict(),
                         },
                     ),
                     (
@@ -242,7 +307,7 @@ class VideoScenarioRunner:
             for tracking_frame in processed.tracking_frames:
                 trace_events.append(
                     (
-                        result.clip_start_monotonic_s + tracking_frame.at_s,
+                        result.clip_start_monotonic_s + tracking_frame.source_at_s,
                         "tracking_observation",
                         {
                             **tracking_frame.to_dict(),
@@ -259,9 +324,9 @@ class VideoScenarioRunner:
             TraceEntry(at_s=at_s, sequence=sequence, kind=kind, payload=payload)
             for sequence, (_, (at_s, kind, payload)) in enumerate(ordered)
         )
-        assignments = tuple(result.assignment for result in results.values())
+        assignments = tuple(self.queue.results.values())
         captures = tuple(media.asset.asset_id for media in self.camera.captures.values())
-        uploads = tuple(receipt for _, receipt in self.storage.objects.values())
+        uploads = tuple(receipts)
         expectation_failures = evaluate_expectations(
             self.scenario,
             assignments,

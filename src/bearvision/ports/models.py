@@ -59,3 +59,18 @@ class ExtractedClip:
             raise ValueError("clip duration must be positive")
         if self.width_px <= 0 or self.height_px <= 0:
             raise ValueError("clip dimensions must be positive")
+
+
+@dataclass(frozen=True, slots=True)
+class PreparedClip:
+    """Processed media and its retained interval within the source clip."""
+
+    media: CapturedMedia
+    source_start_offset_s: float
+    duration_s: float
+
+    def __post_init__(self) -> None:
+        if self.source_start_offset_s < 0:
+            raise ValueError("source_start_offset_s must not be negative")
+        if self.duration_s <= 0:
+            raise ValueError("duration_s must be positive")

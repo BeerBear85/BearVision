@@ -4,11 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from collections.abc import Iterable
 from typing import Any, Callable, TYPE_CHECKING
 
 from bearvision.adapters import (
-    BoxStorageAdapter,
+    BoxJobQueue,
     BleakKBeaconSource,
     GoProCameraAdapter,
     KBeaconTagScannerAdapter,
@@ -17,26 +16,15 @@ from bearvision.adapters import (
     YoloDetectorAdapter,
 )
 from bearvision.config import AssignmentConfig, EdgeConfig
-from bearvision.ports import Camera, Clock, Detector, Storage, TagRegistry, TagScanner
-from bearvision.ports import FrameSource
-from bearvision.contracts import ScenarioDefinition, TagRegistryEntry
+from bearvision.config.models import ClipExtractionConfig
+from bearvision.ports import Camera, ClipProcessor, Clock, Detector, FrameSource, JobQueue, TagScanner
+from bearvision.contracts import ScenarioDefinition
+from bearvision.processing import VirtualCameramanJobProcessor, VirtualCameramanProcessor
 from .orchestrator import BearVisionOrchestrator
 
 if TYPE_CHECKING:
     from bearvision.simulation.runner import ClosedLoopScenarioRunner
     from bearvision.simulation.video_runner import VideoScenarioRunner
-
-
-class ConfiguredTagRegistry:
-    def __init__(self, entries: Iterable[TagRegistryEntry]) -> None:
-        self._entries = {entry.tag_id: entry for entry in entries}
-
-    def resolve(self, tag_id: str) -> TagRegistryEntry | None:
-        entry = self._entries.get(tag_id)
-        return entry if entry is not None and entry.enabled else None
-
-    def entries(self) -> tuple[TagRegistryEntry, ...]:
-        return tuple(self._entries.values())
 
 
 @dataclass(frozen=True, slots=True)
@@ -45,15 +33,14 @@ class RealEdgeComponents:
     camera: Camera
     scanner: TagScanner
     detector: Detector
-    storage: Storage
-    registry: TagRegistry
-    assignment_policy: AssignmentConfig
+    job_queue: JobQueue
+    clip_processor: ClipProcessor
     frame_source: FrameSource
 
 
 def build_behavioral_system(
     scenario: ScenarioDefinition,
-    assignment_policy: AssignmentConfig | None = None,
+    server_assignment_policy: AssignmentConfig | None = None,
     *,
     capture_dir: Path | None = None,
 ) -> "ClosedLoopScenarioRunner | VideoScenarioRunner":
@@ -62,7 +49,7 @@ def build_behavioral_system(
 
         return VideoScenarioRunner.from_scenario(
             scenario,
-            assignment_policy=assignment_policy,
+            assignment_policy=server_assignment_policy,
             capture_dir=capture_dir,
         )
     supported_synthetic = (
@@ -81,7 +68,7 @@ def build_behavioral_system(
 
     return ClosedLoopScenarioRunner.from_scenario(
         scenario,
-        assignment_policy=assignment_policy,
+        assignment_policy=server_assignment_policy,
     )
 
 
@@ -123,9 +110,14 @@ def build_real_system(
         "BOX": {"root_folder": config.storage.root_folder},
     }
     clock = SystemClock()
-    registry = ConfiguredTagRegistry(
-        TagRegistryEntry(tag_id=item.tag_id, rider_id=item.rider_id, enabled=item.enabled)
-        for item in config.tag_registry
+    box_handler = box_factory(box_config)
+    detector = YoloDetectorAdapter(legacy_detector)
+    from bearvision.adapters import FfmpegVideoClipper
+
+    ffmpeg_path = FfmpegVideoClipper(ClipExtractionConfig()).ffmpeg_path
+    clip_processor = VirtualCameramanJobProcessor(
+        VirtualCameramanProcessor(detector, clock, ffmpeg_path=ffmpeg_path),
+        capture_dir,
     )
     return RealEdgeComponents(
         clock=clock,
@@ -136,10 +128,9 @@ def build_real_system(
             hindsight_enabled=config.recording.hindsight_enabled,
         ),
         scanner=KBeaconTagScannerAdapter(beacon_factory(), clock),
-        detector=YoloDetectorAdapter(legacy_detector),
-        storage=BoxStorageAdapter(box_factory(box_config), clock, scratch_dir),
-        registry=registry,
-        assignment_policy=config.assignment,
+        detector=detector,
+        job_queue=BoxJobQueue(box_handler, scratch_dir),
+        clip_processor=clip_processor,
         frame_source=OpenCvPreviewFrameSource(
             clock,
             max_fps=config.performance.max_fps,
@@ -175,10 +166,10 @@ def build_real_orchestrator(
         camera=components.camera,
         scanner=components.scanner,
         detector=components.detector,
-        storage=components.storage,
-        registry=components.registry,
-        assignment_policy=components.assignment_policy,
+        job_queue=components.job_queue,
+        edge_device_id=config.system.device_id,
         recording_duration_s=config.recording.post_detection_duration_s,
+        clip_processor=components.clip_processor,
         observation_retention_s=max(30.0, config.recording.post_detection_duration_s),
         frame_source=components.frame_source,
         detection_enabled=config.detection.enabled,

@@ -1,25 +1,17 @@
-# ADR 0004: Whole-clip BearTag rider identity
+# ADR 0004: Server-side whole-clip BearTag identity
 
 Status: accepted
 
-BearVision 3 assigns rider identity only from registered BearTag observations.
-Each BearTag supplies RSSI and three-axis acceleration at approximately 10 Hz.
-Vision triggers a fixed-duration clip when it detects a person; it is not
-required to determine the jump timestamp or rider identity.
+Edge captures every RSSI and acceleration observation in the clip interval and
+publishes them anonymously. It does not contain a tag-to-user registry, score a
+BearTag, select a winner or construct a user path.
 
-For the complete interval from detection until the configured clip end, the
-assignment policy:
+The Python server implementation is authoritative. It retains the established
+algorithm: orientation-independent mean `abs(norm(a) - g)`, median RSSI,
+sample/motion/RSSI gates, 70/30 default weighting, score margin and deterministic
+tag-id ordering. Unassigned and ambiguous selections become `unresolved`.
 
-1. Computes orientation-independent activity for every observation as the
-   acceleration magnitude's deviation from standard gravity.
-2. Averages all activity measurements from the clip for each tag. Signed X/Y/Z
-   axes are not averaged because motion in opposite directions would cancel.
-3. Uses median RSSI over the same clip to reduce single-packet radio noise.
-4. Requires a configurable minimum sample count plus motion and RSSI gates.
-5. Ranks qualifying tags using a configurable weighted score, initially 70%
-   motion and 30% RSSI.
-6. Returns `ambiguous` when the leading scores are inside the configured margin.
-
-Capture begins immediately on detection. Assignment and upload happen after the
-clip closes, when all BearTag observations from that clip are available. The
-initial thresholds and weights remain configurable assumptions.
+After exactly one tag wins, the server requires one historical assignment to
+cover the complete half-open UTC clip interval. Crossing an assignment boundary
+is unresolved. User identity and processed folder names are normalized e-mail
+addresses; Gmail dots and `+alias` are never rewritten.

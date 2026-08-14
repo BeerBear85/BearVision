@@ -1,6 +1,7 @@
 """Deterministic behavioural simulation primitives."""
 
 from .adapters import (
+    InMemoryJobQueue,
     InMemoryStorage,
     InMemoryTagRegistry,
     SimulatedCamera,
@@ -16,6 +17,7 @@ __all__ = [
     "BehavioralSimulation",
     "ClosedLoopScenarioRunner",
     "Event",
+    "InMemoryJobQueue",
     "InMemoryStorage",
     "InMemoryTagRegistry",
     "SimulatedCamera",

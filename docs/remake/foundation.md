@@ -19,19 +19,21 @@ flowchart LR
     Real[GoPro / BLE / YOLO / Box] --> Core[BearVisionOrchestrator]
     Sim --> Core
     Frames --> Core
-    Core --> Result[Capture, assignment and optional upload]
+    Core --> Queue[Anonymous complete Box job]
+    Queue --> Worker[Python server worker]
+    Worker --> Result[Processed, unresolved or failed]
 ```
 
 Vision triggers a fixed-duration clip but never supplies rider identity or a
-jump timestamp. The policy evaluates every registered BearTag accelerometer
-sample recorded during the clip together with median RSSI. Thresholds and the
-70/30 motion/RSSI weights are calibration starting points, not physical facts.
+jump timestamp. Edge uploads every BearTag sample in the UTC clip interval but
+has no user registry and performs no scoring. The server evaluates each known
+BearTag's acceleration and median RSSI, then resolves the winner against the
+historical UTC registry. Thresholds and weights are calibration starting points.
 
 ## Configuration
 
-The edge configuration is schema version 2.0. Only options consumed by the
-runtime belong in it. Training, annotation and BLE tooling have independent
-versioned configurations.
+The Edge configuration is schema version 3.0. Score policy and the historical
+registry live only in the independently versioned server configuration.
 
 ## Quality gate
 

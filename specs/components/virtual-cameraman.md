@@ -3,8 +3,8 @@
 ## Responsibility
 
 Reduce an extracted clip before cloud upload while keeping the rider inside a
-stable crop. The processor runs on Edge after rider assignment and before the
-storage port is called.
+stable crop. The processor runs on Edge before the anonymous job package is
+committed; it has no assignment or user identity input.
 
 ## Observable layers
 
@@ -19,14 +19,26 @@ storage port is called.
 ## Current implementation
 
 - Detector sampling: 10 Hz over the whole extracted clip.
-- State: image `x`, `y`, `vx`, `vy` with damped constant velocity.
+- State: image `x`, `y`, `vx`, `vy` with damped constant velocity. The process
+  noise permits rapid image-plane acceleration, while the default five-second
+  velocity damping time constant preserves fast cross-frame motion and still
+  brings stale tracks gradually to rest.
 - Estimation: Kalman forward pass with normalized-innovation gating, followed
   by an RTS backward pass that uses future detections to refine past states.
+- Track acquisition: the first two plausible measurements initialize image
+  velocity before normal innovation gating. This prevents a fast rider from
+  being rejected solely because the initial velocity starts at zero. After a
+  detection gap, a measurement within the configured maximum image-plane speed
+  can reacquire the track when the covariance gate alone rejects it.
+- Length adjustment: after estimating the rider path for the complete source
+  clip, retain at most one second before its first in-frame position and one
+  second after its last in-frame position. This happens before crop rendering.
 - Camera motion: second-order Butterworth filtering forward and backward, so
   smoothing introduces no phase delay.
-- Output: 160 x 90 H.264/AAC for the 320 x 180 recorded-video scenario.
+- Output: silent 160 x 90 H.264 for the 320 x 180 recorded-video scenario.
 - Engineering artefacts: annotated video and frame-level JSON.
-- Upload ordering: raw extraction, tracking/crop, validation, then storage.
+- Upload ordering: raw extraction, tracking/crop, validation, job packaging,
+  then READY commit to the cloud queue.
 
 ## Limits
 

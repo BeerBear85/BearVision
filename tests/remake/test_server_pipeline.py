@@ -1,0 +1,181 @@
+import asyncio
+from datetime import datetime, timedelta, timezone
+import json
+from pathlib import Path
+
+import pytest
+
+from bearvision.contracts import MediaAsset, TagObservation, Vector3
+from bearvision.edge.job_package import build_edge_job
+from bearvision.ports import CapturedMedia
+from bearvision.server import (
+    BearTagAssignment,
+    FileSystemJobQueue,
+    FileUserRegistry,
+    ServerWorker,
+    normalize_user_email,
+)
+from bearvision.simulation import VirtualClock
+
+
+START = datetime(2026, 7, 1, 12, tzinfo=timezone.utc)
+
+
+def media(job_id: str) -> CapturedMedia:
+    content = f"video:{job_id}".encode()
+    return CapturedMedia(
+        asset=MediaAsset(
+            asset_id=f"asset-{job_id}",
+            filename="video.mp4",
+            content_type="video/mp4",
+            size_bytes=len(content),
+            created_at_utc=START,
+        ),
+        content=content,
+    )
+
+
+def observation(tag_id: str, offset_s: float, *, rssi: int = -50) -> TagObservation:
+    return TagObservation(
+        tag_id=tag_id,
+        observed_at_utc=START + timedelta(seconds=offset_s),
+        observed_at_monotonic_s=offset_s,
+        rssi_dbm=rssi,
+        acceleration_mps2=Vector3(x=0, y=0, z=20),
+    )
+
+
+async def publish(queue: FileSystemJobQueue, job_id: str = "job-1") -> bool:
+    clip = media(job_id)
+    manifest, observations = build_edge_job(
+        job_id=job_id,
+        edge_device_id="edge-1",
+        created_at=START + timedelta(seconds=5),
+        capture_started_at=START,
+        capture_ended_at=START + timedelta(seconds=5),
+        clip_start_monotonic_s=0,
+        video=clip,
+        observations=(observation("BearTag-666", 1), observation("BearTag-666", 4)),
+    )
+    return await queue.publish(manifest, clip, observations)
+
+
+def registry(path: Path, *, valid_to: datetime | None = None) -> FileUserRegistry:
+    store = FileUserRegistry(path)
+    store.create_user(" Bear.Eskildsen@GMAIL.com ", "Bear Eskildsen")
+    store.create_bear_tag("BearTag-666")
+    store.create_assignment(
+        BearTagAssignment(
+            id="assignment-1",
+            userId="bear.eskildsen@gmail.com",
+            bearTagId="BearTag-666",
+            validFrom=START - timedelta(days=1),
+            validTo=valid_to or START + timedelta(days=1),
+        )
+    )
+    return store
+
+
+def test_complete_job_is_scored_and_moved_to_normalized_user(tmp_path: Path) -> None:
+    queue = FileSystemJobQueue(tmp_path / "BearVision")
+    store = registry(tmp_path / "registry.json")
+    assert asyncio.run(publish(queue))
+
+    result = asyncio.run(ServerWorker(queue, store, VirtualClock(START)).run_once())
+
+    assert result is not None and result.status == "processed"
+    assert result.selected_bear_tag_id == "BearTag-666"
+    assert result.selected_user_email == "bear.eskildsen@gmail.com"
+    result_path = (
+        tmp_path
+        / "BearVision/processed/bear.eskildsen@gmail.com/job-1/result.json"
+    )
+    persisted = json.loads(result_path.read_text(encoding="utf-8"))
+    assert persisted["assignmentId"] == "assignment-1"
+    assert persisted["candidates"][0]["medianRssiDbm"] == -50
+    assert queue.snapshot()["counts"]["processed"] == 1
+
+
+def test_missing_assignment_and_boundary_are_unresolved(tmp_path: Path) -> None:
+    for name, store, code in (
+        ("missing", FileUserRegistry(tmp_path / "missing.json"), "NO_VALID_ASSIGNMENT"),
+        (
+            "boundary",
+            registry(tmp_path / "boundary.json", valid_to=START + timedelta(seconds=2)),
+            "ASSIGNMENT_BOUNDARY",
+        ),
+    ):
+        queue = FileSystemJobQueue(tmp_path / name / "BearVision")
+        if name == "missing":
+            store.create_bear_tag("BearTag-666")
+        asyncio.run(publish(queue, f"job-{name}"))
+        result = asyncio.run(ServerWorker(queue, store, VirtualClock(START)).run_once())
+        assert result is not None and result.status == "unresolved"
+        assert result.error_code == code
+
+
+def test_overlapping_assignment_is_rejected_without_partial_write(tmp_path: Path) -> None:
+    store = registry(tmp_path / "registry.json")
+    original = (tmp_path / "registry.json").read_bytes()
+
+    with pytest.raises(ValueError, match="overlapping assignments"):
+        store.create_assignment(
+            BearTagAssignment(
+                id="assignment-2",
+                userId="bear.eskildsen@gmail.com",
+                bearTagId="BearTag-666",
+                validFrom=START,
+                validTo=START + timedelta(hours=1),
+            )
+        )
+
+    assert (tmp_path / "registry.json").read_bytes() == original
+
+
+def test_assignment_can_be_preflighted_without_writing_registry(tmp_path: Path) -> None:
+    store = registry(tmp_path / "registry.json")
+    store.create_bear_tag("BearTag-2")
+    original = (tmp_path / "registry.json").read_bytes()
+
+    proposed, _ = store.validate_assignment(
+        BearTagAssignment(
+            id="assignment-preview",
+            userId="bear.eskildsen@gmail.com",
+            bearTagId="BearTag-2",
+            validFrom=START,
+            validTo=START + timedelta(hours=1),
+        )
+    )
+
+    assert proposed.id == "assignment-preview"
+    assert len(store.load().assignments) == 1
+    assert (tmp_path / "registry.json").read_bytes() == original
+
+
+def test_incomplete_and_duplicate_jobs_are_not_processed(tmp_path: Path) -> None:
+    queue = FileSystemJobQueue(tmp_path / "BearVision")
+    incomplete = tmp_path / "BearVision/input-queue/ready/incomplete"
+    incomplete.mkdir()
+    (incomplete / "manifest.json").write_text("{}", encoding="utf-8")
+    assert asyncio.run(queue.acquire_next()) is None
+
+    assert asyncio.run(publish(queue))
+    assert not asyncio.run(publish(queue))
+
+
+def test_processing_job_survives_queue_and_worker_restart(tmp_path: Path) -> None:
+    queue_root = tmp_path / "BearVision"
+    queue = FileSystemJobQueue(queue_root)
+    store = registry(tmp_path / "registry.json")
+    asyncio.run(publish(queue))
+    assert asyncio.run(queue.acquire_next()) == "job-1"
+
+    result = asyncio.run(
+        ServerWorker(FileSystemJobQueue(queue_root), store, VirtualClock(START)).run_once()
+    )
+
+    assert result is not None and result.status == "processed"
+
+
+def test_email_normalization_preserves_gmail_alias_semantics() -> None:
+    assert normalize_user_email(" Bear.Name+Cable@GMAIL.com ") == "bear.name+cable@gmail.com"

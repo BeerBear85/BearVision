@@ -1,4 +1,4 @@
-"""Behavioural scenarios executed through the production orchestrator."""
+"""Closed-loop Edge queue and server-worker behavioural scenarios."""
 
 from __future__ import annotations
 
@@ -9,20 +9,27 @@ from datetime import timedelta
 from bearvision.config import AssignmentConfig
 from bearvision.contracts import (
     BoundingBox,
+    JobResultManifest,
     PersonDetection,
-    RiderAssignment,
     ScenarioDefinition,
     StorageReceipt,
     TagObservation,
-    TagRegistryEntry,
     Vector3,
 )
 from bearvision.edge.orchestrator import BearVisionOrchestrator, OrchestrationResult
 from bearvision.ports import ComponentError, VideoFrame
+from bearvision.server import (
+    BearTagAssignment,
+    BearTagRecord,
+    InMemoryUserRegistry,
+    RegistryData,
+    ServerWorker,
+    UserRecord,
+    normalize_user_email,
+)
 
 from .adapters import (
-    InMemoryStorage,
-    InMemoryTagRegistry,
+    InMemoryJobQueue,
     SimulatedCamera,
     SimulatedDetector,
     SimulatedTagScanner,
@@ -31,10 +38,14 @@ from .adapters import (
 from .engine import TraceEntry
 
 
+def _scenario_email(rider_id: str) -> str:
+    return normalize_user_email(rider_id if "@" in rider_id else f"{rider_id}@scenario.invalid")
+
+
 @dataclass(frozen=True, slots=True)
 class ScenarioRunResult:
     trace: tuple[TraceEntry, ...]
-    assignments: tuple[RiderAssignment, ...]
+    assignments: tuple[JobResultManifest, ...]
     captures: tuple[str, ...]
     uploads: tuple[StorageReceipt, ...]
     failures: tuple[dict[str, str], ...]
@@ -43,27 +54,33 @@ class ScenarioRunResult:
 
 def evaluate_expectations(
     scenario: ScenarioDefinition,
-    assignments: tuple[RiderAssignment, ...],
+    assignments: tuple[JobResultManifest, ...],
     captures: tuple[str, ...],
     uploads: tuple[StorageReceipt, ...],
     *,
     detection_times_s: tuple[float, ...] = (),
 ) -> tuple[str, ...]:
-    """Evaluate shared declared outcomes for synthetic and video scenarios."""
-
     expected = scenario.expect
     failures: list[str] = []
     first = assignments[0] if assignments else None
-    if expected.rider_id is not None and (first is None or first.rider_id != expected.rider_id):
-        actual = first.rider_id if first is not None else None
-        failures.append(f"expected rider_id={expected.rider_id!r}, got {actual!r}")
-    if expected.assignment_status is not None and (
-        first is None or first.status.value != expected.assignment_status
-    ):
-        actual = first.status.value if first is not None else None
-        failures.append(
-            f"expected assignment_status={expected.assignment_status!r}, got {actual!r}"
-        )
+    if expected.rider_id is not None:
+        expected_email = _scenario_email(expected.rider_id)
+        if first is None or first.selected_user_email != expected_email:
+            actual = first.selected_user_email if first is not None else None
+            failures.append(f"expected rider_id={expected.rider_id!r}, got {actual!r}")
+    if expected.assignment_status is not None:
+        actual = None
+        if first is not None:
+            if first.status == "processed":
+                actual = "assigned"
+            elif first.error_code == "AMBIGUOUS_BEARTAG":
+                actual = "ambiguous"
+            else:
+                actual = "unassigned"
+        if actual != expected.assignment_status:
+            failures.append(
+                f"expected assignment_status={expected.assignment_status!r}, got {actual!r}"
+            )
     if expected.capture_triggered is not None and bool(captures) != expected.capture_triggered:
         failures.append(
             f"expected capture_triggered={expected.capture_triggered}, got {bool(captures)}"
@@ -75,39 +92,36 @@ def evaluate_expectations(
         and len(detection_times_s) < expected.minimum_person_detections
     ):
         failures.append(
-            "expected at least "
-            f"{expected.minimum_person_detections} person detections, got {len(detection_times_s)}"
+            f"expected at least {expected.minimum_person_detections} person detections, "
+            f"got {len(detection_times_s)}"
         )
     if expected.first_detection_between_s is not None:
-        window_start, window_end = expected.first_detection_between_s
-        first_detection = detection_times_s[0] if detection_times_s else None
-        if first_detection is None or not window_start <= first_detection <= window_end:
-            failures.append(
-                f"expected first detection in [{window_start}, {window_end}], "
-                f"got {first_detection!r}"
-            )
+        start, end = expected.first_detection_between_s
+        detection_at = detection_times_s[0] if detection_times_s else None
+        if detection_at is None or not start <= detection_at <= end:
+            failures.append(f"expected first detection in [{start}, {end}], got {detection_at!r}")
     return tuple(failures)
 
 
 class ClosedLoopScenarioRunner:
-    """Drive the exact same orchestration core used by the edge service."""
-
     def __init__(
         self,
         scenario: ScenarioDefinition,
         *,
         orchestrator: BearVisionOrchestrator,
+        worker: ServerWorker,
         clock: VirtualClock,
         observations: tuple[TagObservation, ...],
         camera: SimulatedCamera,
-        storage: InMemoryStorage,
+        queue: InMemoryJobQueue,
     ) -> None:
         self.scenario = scenario
         self.orchestrator = orchestrator
+        self.worker = worker
         self.clock = clock
         self.observations = observations
         self.camera = camera
-        self.storage = storage
+        self.queue = queue
 
     @classmethod
     def from_scenario(
@@ -121,14 +135,13 @@ class ClosedLoopScenarioRunner:
             raise ValueError("recording_duration_s must be positive")
         clock = VirtualClock()
         observations: list[TagObservation] = []
-        entries: dict[str, TagRegistryEntry] = {}
+        riders_by_tag: dict[str, str] = {}
         detections: dict[str, tuple[PersonDetection, ...]] = {}
         for index, item in enumerate(scenario.timeline):
             if item.event in {"tag_enters_range", "tag_observation"}:
                 tag_id = str(item.payload["tag_id"])
-                rider_id = item.payload.get("rider_id")
-                if rider_id is not None:
-                    entries[tag_id] = TagRegistryEntry(tag_id=tag_id, rider_id=str(rider_id))
+                if item.payload.get("rider_id") is not None:
+                    riders_by_tag[tag_id] = str(item.payload["rider_id"])
                 acceleration = item.payload.get("acceleration_mps2", {})
                 observations.append(
                     TagObservation(
@@ -151,25 +164,38 @@ class ClosedLoopScenarioRunner:
                         frame_id=frame_id,
                         observed_at_monotonic_s=item.at_s,
                         bounding_box=BoundingBox(
-                            x_px=100,
-                            y_px=100,
-                            width_px=400,
-                            height_px=700,
+                            x_px=100, y_px=100, width_px=400, height_px=700
                         ),
                         confidence=float(item.payload.get("confidence", 0.9)),
                     ),
                 )
-
+        users = tuple(
+            UserRecord(id=_scenario_email(rider), displayName=rider)
+            for rider in sorted(set(riders_by_tag.values()))
+        )
+        tags = tuple(BearTagRecord(id=tag_id) for tag_id in sorted(riders_by_tag))
+        assignments = tuple(
+            BearTagAssignment(
+                id=f"scenario-{tag_id}",
+                userId=_scenario_email(rider),
+                bearTagId=tag_id,
+                validFrom=clock.start_utc - timedelta(days=1),
+                validTo=clock.start_utc + timedelta(days=1),
+            )
+            for tag_id, rider in sorted(riders_by_tag.items())
+        )
+        registry = InMemoryUserRegistry(
+            RegistryData(users=users, bearTags=tags, assignments=assignments)
+        )
         camera = SimulatedCamera(clock, fail_capture=scenario.faults.camera_capture)
-        storage = InMemoryStorage(clock, fail_upload=scenario.faults.storage_upload)
+        queue = InMemoryJobQueue(fail_publish=scenario.faults.storage_upload)
         orchestrator = BearVisionOrchestrator(
             clock=clock,
             camera=camera,
             scanner=SimulatedTagScanner(()),
             detector=SimulatedDetector(detections),
-            storage=storage,
-            registry=InMemoryTagRegistry(entries.values()),
-            assignment_policy=assignment_policy or AssignmentConfig(),
+            job_queue=queue,
+            edge_device_id="scenario-edge",
             recording_duration_s=recording_duration_s,
             observation_retention_s=max(30.0, scenario.duration_s + recording_duration_s),
             ble_logging_enabled=False,
@@ -177,10 +203,11 @@ class ClosedLoopScenarioRunner:
         return cls(
             scenario,
             orchestrator=orchestrator,
+            worker=ServerWorker(queue, registry, clock, assignment_policy),
             clock=clock,
             observations=tuple(sorted(observations, key=lambda item: item.observed_at_monotonic_s)),
             camera=camera,
-            storage=storage,
+            queue=queue,
         )
 
     def run(self) -> ScenarioRunResult:
@@ -188,9 +215,9 @@ class ClosedLoopScenarioRunner:
 
     async def _run(self) -> ScenarioRunResult:
         trace_events: list[tuple[float, str, dict]] = []
-        results: dict[str, OrchestrationResult] = {}
+        edge_results: dict[str, OrchestrationResult] = {}
         failures: list[dict[str, str]] = []
-
+        detection_times: list[float] = []
         for observation in self.observations:
             self.orchestrator.add_tag_observation(observation)
         await self.orchestrator.start()
@@ -200,98 +227,82 @@ class ClosedLoopScenarioRunner:
             ):
                 trace_events.append((item.at_s, item.event, dict(item.payload)))
                 if item.event in {"tag_enters_range", "tag_observation"}:
-                    trace_events.append(
-                        (
-                            item.at_s,
-                            "tag_observed",
-                            {
-                                "tag_id": str(item.payload["tag_id"]),
-                                "rssi_dbm": int(item.payload.get("rssi_dbm", -60)),
-                                "acceleration_mps2": item.payload.get("acceleration_mps2", {}),
-                            },
-                        )
-                    )
                     continue
-
-                frame_id = f"frame-{index}"
                 if self.clock.monotonic() < item.at_s:
                     self.clock.advance_to(item.at_s)
-                frame = VideoFrame(frame_id, item.at_s, 1920, 1080, b"simulated-frame")
+                frame = VideoFrame(f"frame-{index}", item.at_s, 1920, 1080, b"simulated-frame")
+                detection_times.append(item.at_s)
                 try:
                     result = await self.orchestrator.process_frame(frame)
                 except ComponentError as exc:
-                    component = "storage" if self.scenario.faults.storage_upload else "camera"
-                    failure = {"component": component, "error": str(exc)}
-                    failures.append(failure)
-                    trace_events.append((self.clock.monotonic(), "component_failed", failure))
+                    component = "job_queue" if self.scenario.faults.storage_upload else "camera"
+                    failures.append({"component": component, "error": str(exc)})
                     continue
                 if result is not None:
-                    results.setdefault(result.request_id, result)
+                    edge_results.setdefault(result.request_id, result)
         finally:
             await self.orchestrator.stop()
 
-        for result in results.values():
+        server_results: list[JobResultManifest] = []
+        while True:
+            processed_result = await self.worker.run_once()
+            if processed_result is None:
+                break
+            server_results.append(processed_result)
+        for edge_result in edge_results.values():
             trace_events.extend(
                 [
                     (
-                        result.clip_start_monotonic_s,
+                        edge_result.clip_start_monotonic_s,
                         "capture_started",
-                        {
-                            "asset_id": result.media.asset.asset_id,
-                            "clip_end_s": result.clip_end_monotonic_s,
-                        },
+                        {"job_id": edge_result.request_id},
                     ),
                     (
-                        result.clip_end_monotonic_s,
-                        "finalize_clip",
-                        {"request_id": result.request_id},
+                        edge_result.clip_end_monotonic_s,
+                        "job_published",
+                        edge_result.manifest.model_dump(mode="json", by_alias=True),
                     ),
                     (
-                        result.clip_end_monotonic_s,
-                        "rider_assignment",
-                        result.assignment.model_dump(mode="json"),
-                    ),
-                    (
-                        result.clip_end_monotonic_s,
+                        edge_result.clip_end_monotonic_s,
                         "capture_completed",
-                        {"asset_id": result.media.asset.asset_id},
+                        {"asset_id": edge_result.media.asset.asset_id},
                     ),
                 ]
             )
-            if result.upload is not None:
-                trace_events.append(
-                    (
-                        result.clip_end_monotonic_s,
-                        "clip_uploaded",
-                        {
-                            "asset_id": result.upload.asset_id,
-                            "object_key": result.upload.object_key,
-                        },
-                    )
+        for server_result in server_results:
+            trace_events.append(
+                (
+                    self.clock.monotonic(),
+                    "server_assignment",
+                    server_result.model_dump(mode="json", by_alias=True),
                 )
-
+            )
         ordered = sorted(enumerate(trace_events), key=lambda item: (item[1][0], item[0]))
         trace = tuple(
             TraceEntry(at_s=at_s, sequence=sequence, kind=kind, payload=payload)
             for sequence, (_, (at_s, kind, payload)) in enumerate(ordered)
         )
-        assignments = tuple(result.assignment for result in results.values())
-        # SimulatedCamera stores by request id; expose stable asset ids.
         captures = tuple(media.asset.asset_id for media in self.camera.captures.values())
-        uploads = tuple(receipt for _, receipt in self.storage.objects.values())
-        detection_times_s = tuple(
-            entry.at_s for entry in trace if entry.kind == "person_detected"
+        uploads = tuple(
+            StorageReceipt(
+                asset_id=result.media.asset.asset_id,
+                object_key=f"input-queue/ready/{result.request_id}",
+                stored_at_utc=result.manifest.created_at,
+                checksum_sha256=result.manifest.video.sha256,
+            )
+            for result in edge_results.values()
+            if result.published
         )
         expectation_failures = evaluate_expectations(
             self.scenario,
-            assignments,
+            tuple(server_results),
             captures,
             uploads,
-            detection_times_s=detection_times_s,
+            detection_times_s=tuple(detection_times),
         )
         return ScenarioRunResult(
             trace=trace,
-            assignments=assignments,
+            assignments=tuple(server_results),
             captures=captures,
             uploads=uploads,
             failures=tuple(failures),

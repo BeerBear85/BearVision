@@ -1,9 +1,10 @@
 # BearVision 3
 
 BearVision creates hands-free wakeboard clips. Vision detects a person and
-starts a fixed-duration GoPro clip. Rider identity is selected afterwards from
-whole-clip BearTag accelerometer activity and RSSI; vision does not identify the
-rider or determine a jump timestamp.
+starts a fixed-duration GoPro clip. Edge publishes an anonymous Box job with the
+reduced clip and all whole-clip BearTag observations. A Python server worker
+selects identity from accelerometer activity, RSSI and the historical user
+registry; vision does not identify the rider or determine a jump timestamp.
 
 ## Active architecture
 
@@ -15,12 +16,16 @@ and the edge service execute the same `BearVisionOrchestrator`.
 GoPro preview -> FrameSource -> Detector -> BearVisionOrchestrator
 BearTag BLE -------------------------------> |
 GoPro capture <----------------------------- |
-Box storage <------------------------------- |
+Box input queue <--------------------------- |
+
+Box input queue -> Python server worker -> processed/<normalized-email>
+                                      \----> unresolved / failed
 
 Scenario events -> simulated adapters -> same orchestrator
 ```
 
-The current production storage provider is Box. The active Android application,
+Edge and server communicate only through Box. The current production storage
+provider is Box. The active Android application,
 Google Drive integration and previous physical simulation are outside the 3.0
 runtime and have been moved to a separate local archive.
 
@@ -88,6 +93,22 @@ component sources and events. After capture it can also play the frame-accurate
 five-second clip produced locally by the Windows Edge media runtime. Physical
 hardware preview proxying is not yet implemented.
 
+Run the local server worker/admin GUI:
+
+```bash
+cd apps/server-control
+corepack pnpm install
+corepack pnpm build
+corepack pnpm serve
+```
+
+Open `http://127.0.0.1:4320`. It binds only to loopback. The admin UI includes
+a paginated video library, assignment evidence, queue operations and
+user/BearTag history. Node remains a thin HTTP and process shell: Python owns
+the read models, registry validation, Box downloads, checksum verification and
+FFmpeg thumbnail generation. Node only streams cached media with HTTP byte
+ranges so browser seeking works.
+
 Install edge dependencies and start the production service:
 
 ```bash
@@ -100,7 +121,7 @@ extraction; no system-wide installation or administrator access is required.
 Override them with `BEARVISION_FFMPEG` and `BEARVISION_FFPROBE` if needed.
 
 Real operation additionally requires a supported GoPro, BLE hardware, valid Box
-credentials and a populated `tag_registry` in `config/edge.yaml`.
+credentials and a populated server user registry.
 
 ## Training, annotation and post-processing
 

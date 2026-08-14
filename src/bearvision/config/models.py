@@ -83,6 +83,7 @@ class StorageConfig(StrictConfigModel):
 
 class SystemConfig(StrictConfigModel):
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
+    device_id: str = Field(default="edge-1", min_length=1, max_length=128)
 
 
 class TagRegistration(StrictConfigModel):
@@ -94,18 +95,38 @@ class TagRegistration(StrictConfigModel):
 class EdgeConfig(StrictConfigModel):
     """Complete edge configuration; versioned separately from the application."""
 
-    config_schema_version: Literal["2.0", "2.1"]
+    config_schema_version: Literal["3.0"]
     config_kind: Literal["bearvision-edge"]
     recording: RecordingConfig = Field(default_factory=RecordingConfig)
     clip_extraction: ClipExtractionConfig = Field(default_factory=ClipExtractionConfig)
     detection: DetectionConfig = Field(default_factory=DetectionConfig)
-    assignment: AssignmentConfig = Field(default_factory=AssignmentConfig)
     performance: PerformanceConfig = Field(default_factory=PerformanceConfig)
     error_recovery: ErrorRecoveryConfig = Field(default_factory=ErrorRecoveryConfig)
     features: FeatureConfig = Field(default_factory=FeatureConfig)
     storage: StorageConfig = Field(default_factory=StorageConfig)
     system: SystemConfig = Field(default_factory=SystemConfig)
-    tag_registry: tuple[TagRegistration, ...] = ()
+
+
+class WorkerConfig(StrictConfigModel):
+    poll_interval_s: float = Field(default=5.0, ge=0.1, le=3600)
+    retry_delay_s: float = Field(default=2.0, ge=0, le=600)
+
+
+class AdminConfig(StrictConfigModel):
+    host: Literal["127.0.0.1"] = "127.0.0.1"
+    port: int = Field(default=4320, ge=1024, le=65535)
+
+
+class ServerConfig(StrictConfigModel):
+    config_schema_version: Literal["1.0"]
+    config_kind: Literal["bearvision-server"]
+    assignment: AssignmentConfig = Field(default_factory=AssignmentConfig)
+    worker: WorkerConfig = Field(default_factory=WorkerConfig)
+    admin: AdminConfig = Field(default_factory=AdminConfig)
+    storage: StorageConfig = Field(default_factory=StorageConfig)
+    registry_path: Path = Path("data/server/user-registry.json")
+    scratch_dir: Path = Path("temp/server-box")
+    local_queue_root: Path | None = None
 
 
 def load_edge_config(path: str | Path) -> EdgeConfig:
@@ -114,3 +135,9 @@ def load_edge_config(path: str | Path) -> EdgeConfig:
     with Path(path).open(encoding="utf-8") as stream:
         data = yaml.safe_load(stream)
     return EdgeConfig.model_validate(data)
+
+
+def load_server_config(path: str | Path) -> ServerConfig:
+    with Path(path).open(encoding="utf-8") as stream:
+        data = yaml.safe_load(stream)
+    return ServerConfig.model_validate(data)

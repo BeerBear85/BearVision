@@ -37,6 +37,7 @@ bearvision-edge = "bearvision.cli:edge_main"
 bearvision-simulate = "bearvision.cli:simulate_main"
 bearvision-migrate-config = "bearvision.config.migrate:main"
 bearvision-generate-blender-scenario = "bearvision.simulation.blender_scenario:main"
+bearvision-server = "bearvision.server.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

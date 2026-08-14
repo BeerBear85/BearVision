@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from bearvision.contracts import RiderAssignmentStatus, ScenarioDefinition, load_scenario
+from bearvision.contracts import ScenarioDefinition, load_scenario
 from bearvision.edge import build_behavioral_system
 from bearvision.simulation import ClosedLoopScenarioRunner
 
@@ -26,10 +26,10 @@ def test_single_rider_scenario_runs_closed_loop_deterministically() -> None:
     second = build_behavioral_system(definition).run()
 
     assert first.trace == second.trace
-    assert first.assignments[0].rider_id == "rider-17"
-    assert first.assignments[0].evidence[0].observation_count == 2
+    assert first.assignments[0].selected_user_email == "rider-17@scenario.invalid"
+    assert first.assignments[0].candidates[0].observation_count == 2
     assert len(first.captures) == 1
-    assert first.uploads[0].object_key.startswith("rider-17/")
+    assert first.uploads[0].object_key.startswith("input-queue/ready/")
     assert not first.failures
 
 
@@ -37,8 +37,8 @@ def test_no_tag_is_unassigned_but_detection_is_still_captured() -> None:
     result = ClosedLoopScenarioRunner.from_scenario(
         scenario([{"at_s": 2, "event": "person_detected", "payload": {"confidence": 0.9}}])
     ).run()
-    assert result.assignments[0].status is RiderAssignmentStatus.UNASSIGNED
-    assert result.uploads[0].object_key.startswith("unassigned/")
+    assert result.assignments[0].status == "unresolved"
+    assert result.assignments[0].error_code == "NO_QUALIFIED_BEARTAG"
 
 
 def test_two_tags_remain_ambiguous() -> None:
@@ -89,9 +89,9 @@ def test_two_tags_remain_ambiguous() -> None:
             ]
         )
     ).run()
-    assert result.assignments[0].status is RiderAssignmentStatus.AMBIGUOUS
-    assert result.assignments[0].rider_id is None
-    assert result.uploads[0].object_key.startswith("ambiguous/")
+    assert result.assignments[0].status == "unresolved"
+    assert result.assignments[0].error_code == "AMBIGUOUS_BEARTAG"
+    assert result.assignments[0].selected_user_email is None
 
 
 def test_active_rider_beats_stronger_stationary_nearby_tag_in_closed_loop() -> None:
@@ -142,8 +142,8 @@ def test_active_rider_beats_stronger_stationary_nearby_tag_in_closed_loop() -> N
             ]
         )
     ).run()
-    assert result.assignments[0].rider_id == "rider-active"
-    assert result.uploads[0].object_key.startswith("rider-active/")
+    assert result.assignments[0].selected_user_email == "rider-active@scenario.invalid"
+    assert result.uploads[0].object_key.startswith("input-queue/ready/")
 
 
 def test_assignment_uses_accelerometer_samples_from_entire_clip() -> None:
@@ -182,10 +182,9 @@ def test_assignment_uses_accelerometer_samples_from_entire_clip() -> None:
             ]
         )
     ).run()
-    assert result.assignments[0].rider_id == "rider-17"
-    assert result.assignments[0].assigned_at_monotonic_s == 8
-    assert result.assignments[0].evidence[0].observation_count == 2
-    assert any(item.kind == "finalize_clip" for item in result.trace)
+    assert result.assignments[0].selected_user_email == "rider-17@scenario.invalid"
+    assert result.assignments[0].candidates[0].observation_count == 2
+    assert any(item.kind == "server_assignment" for item in result.trace)
 
 
 def test_camera_failure_stops_before_upload() -> None:
@@ -209,7 +208,7 @@ def test_storage_failure_preserves_completed_capture() -> None:
     ).run()
     assert len(result.captures) == 1
     assert not result.uploads
-    assert result.failures[0]["component"] == "storage"
+    assert result.failures[0]["component"] == "job_queue"
 
 
 def test_declared_scenario_expectations_are_executable() -> None:

@@ -4,7 +4,7 @@ import pytest
 from pydantic import ValidationError
 import yaml
 
-from bearvision.config import load_edge_config
+from bearvision.config import load_edge_config, load_server_config
 from bearvision.config.models import AssignmentConfig
 from bearvision.config.migrate import add_version_header, migrate_edge_data, write_yaml
 from ConfigurationHandler import ConfigurationHandler
@@ -15,9 +15,9 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 def test_active_edge_config_is_versioned_and_valid() -> None:
     config = load_edge_config(REPO_ROOT / "config" / "edge.yaml")
-    assert config.config_schema_version == "2.1"
+    assert config.config_schema_version == "3.0"
     assert config.storage.provider == "box"
-    assert config.assignment.motion_weight == 0.7
+    assert not hasattr(config, "assignment")
     assert config.clip_extraction.engine == "ffmpeg"
     assert config.clip_extraction.crf == 20
 
@@ -27,9 +27,16 @@ def test_assignment_fusion_weights_must_sum_to_one() -> None:
         AssignmentConfig(motion_weight=0.8, rssi_weight=0.3)
 
 
+def test_server_owns_assignment_policy_and_local_admin_binding() -> None:
+    config = load_server_config(REPO_ROOT / "config" / "server.yaml")
+    assert config.assignment.motion_weight == 0.7
+    assert config.admin.host == "127.0.0.1"
+
+
 def test_all_active_configs_start_with_independent_version_header() -> None:
     expected_versions = {
-        "edge.yaml": "2.1",
+        "edge.yaml": "3.0",
+        "server.yaml": "1.0",
         "ble-test.yaml": "2.0",
         "training.yaml": "2.0",
         "annotation-example.yaml": "2.0",
@@ -56,7 +63,7 @@ def test_missing_or_unsupported_config_version_is_rejected(tmp_path: Path) -> No
         load_edge_config(path)
 
     path.write_text(
-        'config_schema_version: "3.0"\nconfig_kind: bearvision-edge\n',
+        'config_schema_version: "9.0"\nconfig_kind: bearvision-edge\n',
         encoding="utf-8",
     )
     with pytest.raises(ValidationError):
@@ -80,7 +87,7 @@ def test_legacy_edge_files_migrate_with_yaml_precedence(tmp_path: Path) -> None:
 
     migrated, warnings = migrate_edge_data(ini, legacy_yaml)
 
-    assert migrated["config_schema_version"] == "2.1"
+    assert migrated["config_schema_version"] == "3.0"
     assert migrated["recording"]["post_detection_duration_s"] == 5
     assert migrated["storage"]["root_folder"] == "clips"
     assert any("ANNOTATION_GUI" in warning for warning in warnings)

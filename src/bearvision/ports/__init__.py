@@ -7,12 +7,15 @@ from .errors import (
     InvalidComponentData,
     PermanentComponentError,
 )
-from .models import CapturedMedia, ExtractedClip, VideoFrame
+from .models import CapturedMedia, ExtractedClip, PreparedClip, VideoFrame
 from .protocols import (
     Camera,
+    ClipProcessor,
     Clock,
     Detector,
     FrameSource,
+    JobQueue,
+    ManagedJobQueue,
     Storage,
     TagRegistry,
     TagScanner,
@@ -22,6 +25,7 @@ from .protocols import (
 __all__ = [
     "Camera",
     "CapturedMedia",
+    "ClipProcessor",
     "Clock",
     "ComponentError",
     "ComponentTimeout",
@@ -30,7 +34,10 @@ __all__ = [
     "ExtractedClip",
     "FrameSource",
     "InvalidComponentData",
+    "JobQueue",
+    "ManagedJobQueue",
     "PermanentComponentError",
+    "PreparedClip",
     "Storage",
     "TagRegistry",
     "TagScanner",

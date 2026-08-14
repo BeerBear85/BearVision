@@ -26,9 +26,9 @@ flowchart LR
     ports -->|"Recorded source"| video["MP4 frames through real YOLO"]
 ```
 
-Node is deliberately a thin shell. Python owns the orchestrator, contracts and
-all decisions. The React GUI must never duplicate rider assignment or capture
-policy.
+Node is deliberately a thin shell. Edge Python owns capture and packaging;
+server Python separately owns BearTag scoring, historical lookup and terminal
+placement. Neither React GUI duplicates those policies.
 
 ## Behavioural scenario playback
 
@@ -82,8 +82,9 @@ fail explicitly instead of silently selecting the wrong adapter.
 
 `wakeboard-video-yolo.yaml` combines the checked-in 15.3-second preview video,
 the real bundled YOLOv8n model and deterministic 10 Hz RSSI/accelerometer data.
-YOLO detects the rider at approximately T+6.0 s; the resulting five-second clip
-window assigns `rider-video` using its whole-window BearTag evidence.
+YOLO detects the rider at approximately T+6.0 s; Edge publishes the resulting
+clip and whole-window evidence, after which the simulated server worker assigns
+`rider-video@scenario.invalid`.
 
 The recorded-video camera uses the packaged FFmpeg/FFprobe executables on the
 Edge computer to re-encode exactly T+6.0 through T+11.0. It validates the raw
@@ -101,14 +102,14 @@ low-jitter crop trajectory. It publishes three additional artefacts:
   conservative circular 95% region, and the cyan Butterworth crop window;
 - `*.tracking.json`: frame-level measurements, estimates, covariance and crop.
 
-The current video scenario uploads only the processed file. Edge Control lets
+The current video scenario packages only the processed file. Edge Control lets
 the operator switch among source, raw extracted clip, upload clip and tracking
-view. A green box means a detected person; rider identity still comes from the
-separate BearTag assignment.
+view. A green box means a detected person; rider identity comes later from the
+server worker.
 
-Node only serves scenario metadata/media and supervises Python. Python remains
-the owner of synchronization, YOLO, capture, tracking, crop and rider
-assignment.
+Edge Control only serves scenario metadata/media and supervises Edge Python.
+The separate Server Control app supervises the Python worker; only that worker
+owns scoring, registry lookup and rider assignment.
 
 Schema 3.1 additionally supports explicit synthetic BearTag samples. The
 Blender generator samples rider motion at the configured BearTag rate, converts

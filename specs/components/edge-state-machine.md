@@ -2,7 +2,7 @@
 
 ## States
 
-`initializing → monitoring → recording → assigning → uploading → monitoring`
+`initializing → monitoring → recording → packaging → uploading → monitoring`
 
 Any active state may enter `recovering` after a retryable component failure or
 `stopped` after a terminal failure or shutdown request.
@@ -14,11 +14,13 @@ Any active state may enter `recovering` after a retryable component failure or
   fixed duration.
 - `Camera.capture` returns a playable asset containing precisely the requested
   capture window. A recorded-video camera performs the cut locally on the Edge
-  computer before assignment and upload.
-- BearTag assignment fuses mean accelerometer activity and RSSI across the
-  complete clip; it may be assigned, unassigned or ambiguous.
+  computer before job packaging and upload.
+- Edge includes every BearTag observation from the complete clip as a relative
+  millisecond offset plus RSSI and acceleration in m/s².
+- Edge never receives the user registry, calculates scores or chooses a rider.
 - Repeated commands use stable request identifiers and must be idempotent.
 - All timeouts use monotonic time supplied by the configured clock.
-- Uploaded media remains provider-neutral outside the storage adapter.
+- READY is committed only after manifest, video and NDJSON have been uploaded.
+- Queue operations remain provider-neutral outside the queue adapter.
 - Source media is immutable. Clip output is committed atomically; failed
   partial output must be removed.
