@@ -68,6 +68,19 @@ def test_admin_cli_uses_authoritative_registry_and_queue_snapshot(
     assert main(["--config", str(config), "list-users"]) == 0
     assert json.loads(capsys.readouterr().out)["items"][0]["id"] == "bear@example.com"
 
+    assert main(
+        [
+            "--config",
+            str(config),
+            "list-user-videos",
+            "--user-id",
+            " Bear@Example.com ",
+        ]
+    ) == 0
+    user_videos = json.loads(capsys.readouterr().out)
+    assert user_videos["user"]["email"] == "bear@example.com"
+    assert user_videos["items"] == []
+
     assert main(["--config", str(config), "list-tags"]) == 0
     assert json.loads(capsys.readouterr().out)["items"][0]["id"] == "BearTag-1"
 

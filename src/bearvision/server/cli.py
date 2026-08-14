@@ -18,7 +18,7 @@ from bearvision.config import ServerConfig, load_server_config
 from bearvision.integrations.box_handler import BoxHandler
 from bearvision.ports import ComponentTimeout, ComponentUnavailable, ManagedJobQueue
 
-from .admin import AdminCatalog, AdminMediaService
+from .admin import AdminCatalog, AdminMediaService, UserVideoCatalog
 from .queue import FileSystemJobQueue
 from .registry import BearTagAssignment, FileUserRegistry
 from .worker import ServerWorker
@@ -145,6 +145,14 @@ def parser() -> argparse.ArgumentParser:
     media = commands.add_parser("materialize-media")
     media.add_argument("--job-id", required=True)
     media.add_argument("--kind", choices=("video", "thumbnail"), required=True)
+    user_videos = commands.add_parser("list-user-videos")
+    user_videos.add_argument("--user-id", required=True)
+    user_videos.add_argument("--page", type=int, default=1)
+    user_videos.add_argument("--page-size", type=int, default=50)
+    user_media = commands.add_parser("materialize-user-media")
+    user_media.add_argument("--user-id", required=True)
+    user_media.add_argument("--job-id", required=True)
+    user_media.add_argument("--kind", choices=("video", "thumbnail"), required=True)
     create_user = commands.add_parser("create-user")
     create_user.add_argument("--email", required=True)
     create_user.add_argument("--display-name", required=True)
@@ -172,6 +180,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         config, queue, registry = build_runtime(args.config)
         catalog = AdminCatalog(queue, registry)
+        user_catalog = UserVideoCatalog(queue, registry)
         output: object
         if args.command == "snapshot":
             output = snapshot(args.config, queue, registry)
@@ -204,6 +213,20 @@ def main(argv: list[str] | None = None) -> int:
                 queue, _resolve(base, config.scratch_dir) / "admin-media"
             )
             output = asyncio.run(media.materialize(args.job_id, args.kind))
+        elif args.command == "list-user-videos":
+            output = asyncio.run(
+                user_catalog.list_videos(
+                    args.user_id, page=args.page, page_size=args.page_size
+                )
+            )
+        elif args.command == "materialize-user-media":
+            base = args.config.resolve().parents[1]
+            media = AdminMediaService(
+                queue, _resolve(base, config.scratch_dir) / "app-media"
+            )
+            output = asyncio.run(
+                media.materialize_for_user(args.user_id, args.job_id, args.kind)
+            )
         elif args.command == "create-user":
             output = registry.create_user(args.email, args.display_name).model_dump(
                 mode="json", by_alias=True

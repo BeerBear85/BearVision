@@ -12,6 +12,9 @@ code/dnn_models/yolov3_608.weights
 android_app/.gradle/
 android_app/build/
 android_app/app/build/
+apps/android/.gradle/
+apps/android/build/
+apps/android/app/build/
 last_used_config.ini
 
 .claude/settings.local.json

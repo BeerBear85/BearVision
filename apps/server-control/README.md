@@ -11,6 +11,10 @@ corepack pnpm serve
 
 Open `http://127.0.0.1:4320`.
 
+The same process also starts the read-only Android prototype API on port
+`4321`, listening on the local network. The Android device must use the
+server computer's IPv4 address, for example `http://192.168.1.50:4321`.
+
 ## Responsibilities
 
 Python owns:

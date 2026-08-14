@@ -11,6 +11,8 @@ const distRoot = join(appRoot, "dist");
 const configPath = process.env.BEARVISION_SERVER_CONFIG ?? join(repoRoot, "config", "server.yaml");
 export const host = "127.0.0.1";
 const port = Number(process.env.BEARVISION_SERVER_CONTROL_PORT ?? 4320);
+export const appHost = process.env.BEARVISION_APP_HOST ?? "0.0.0.0";
+export const appPort = Number(process.env.BEARVISION_APP_PORT ?? 4321);
 let worker = null;
 
 const mimeTypes = {
@@ -56,6 +58,18 @@ export function adminArgs(command, body = {}) {
   ];
   if (command === "materialize-media") return [
     command, "--job-id", body.jobId, "--kind", body.kind,
+  ];
+  if (command === "list-user-videos") return [
+    command,
+    "--user-id", body.userId,
+    "--page", String(body.page ?? 1),
+    "--page-size", String(body.pageSize ?? 50),
+  ];
+  if (command === "materialize-user-media") return [
+    command,
+    "--user-id", body.userId,
+    "--job-id", body.jobId,
+    "--kind", body.kind,
   ];
   return [command];
 }
@@ -216,6 +230,48 @@ async function handle(request, response) {
   }
 }
 
+function requestUserEmail(request) {
+  const value = request.headers["x-bearvision-email"];
+  if (typeof value !== "string" || !value.trim()) {
+    throw new Error("x-bearvision-email header is required");
+  }
+  return value.trim();
+}
+
+async function handleApp(request, response) {
+  const url = new URL(request.url, "http://localhost");
+  try {
+    if (request.method === "GET" && url.pathname === "/api/app/health") {
+      writeJson(response, 200, { status: "ok", authentication: "prototype-email" });
+      return;
+    }
+    if (request.method === "GET" && url.pathname === "/api/app/videos") {
+      const query = queryParameters(url);
+      writeJson(response, 200, await runPython("list-user-videos", {
+        userId: requestUserEmail(request),
+        page: query.page,
+        pageSize: query.pageSize,
+      }));
+      return;
+    }
+    const mediaRoute = url.pathname.match(
+      /^\/api\/app\/videos\/([A-Za-z0-9._:-]+)\/(video|thumbnail)$/,
+    );
+    if (request.method === "GET" && mediaRoute) {
+      const media = await runPython("materialize-user-media", {
+        userId: requestUserEmail(request),
+        jobId: mediaRoute[1],
+        kind: mediaRoute[2],
+      });
+      serveMedia(request, response, media);
+      return;
+    }
+    writeJson(response, 404, { error: "not found" });
+  } catch (error) {
+    writeJson(response, 400, { error: error.message });
+  }
+}
+
 function startWorker() {
   const args = ["-m", "bearvision.server.cli", "--config", configPath, "worker"];
   worker = spawn(pythonCommand(), args, { cwd: repoRoot, windowsHide: true, stdio: "inherit" });
@@ -224,9 +280,19 @@ function startWorker() {
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   startWorker();
-  const server = createServer(handle);
-  server.listen(port, host, () => console.log(`BearVision Server Control: http://${host}:${port}`));
-  const stop = () => { if (worker) worker.kill(); server.close(); };
+  const adminServer = createServer(handle);
+  const appServer = createServer(handleApp);
+  adminServer.listen(port, host, () => {
+    console.log(`BearVision Server Control: http://${host}:${port}`);
+  });
+  appServer.listen(appPort, appHost, () => {
+    console.log(`BearVision Android API: http://${appHost}:${appPort}`);
+  });
+  const stop = () => {
+    if (worker) worker.kill();
+    adminServer.close();
+    appServer.close();
+  };
   process.on("SIGINT", stop);
   process.on("SIGTERM", stop);
 }

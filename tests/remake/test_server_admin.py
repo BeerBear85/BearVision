@@ -7,7 +7,7 @@ import pytest
 from bearvision.contracts import MediaAsset, TagObservation, Vector3
 from bearvision.edge.job_package import build_edge_job
 from bearvision.ports import CapturedMedia
-from bearvision.server.admin import AdminCatalog, AdminMediaService
+from bearvision.server.admin import AdminCatalog, AdminMediaService, UserVideoCatalog
 from bearvision.server.queue import FileSystemJobQueue
 from bearvision.server.registry import BearTagAssignment, FileUserRegistry
 from bearvision.server.worker import ServerWorker
@@ -106,6 +106,35 @@ def test_python_materializes_verified_video_and_thumbnail(tmp_path: Path) -> Non
     assert video["contentType"] == "video/mp4"
     assert Path(thumbnail["path"]).read_bytes() == b"jpeg"
     assert thumbnail["contentType"] == "image/jpeg"
+
+
+def test_user_catalog_exposes_only_public_video_fields(tmp_path: Path) -> None:
+    queue, registry, _ = asyncio.run(processed_fixture(tmp_path))
+
+    result = asyncio.run(
+        UserVideoCatalog(queue, registry).list_videos(" Bear@Example.com ")
+    )
+
+    assert result["user"] == {
+        "email": "bear@example.com",
+        "displayName": "Bear Rider",
+    }
+    assert result["total"] == 1
+    assert result["items"][0]["jobId"] == "job-20260813-001"
+    assert "selectedUserEmail" not in result["items"][0]
+    assert "selectedBearTagId" not in result["items"][0]
+
+
+def test_user_media_rejects_a_job_owned_by_someone_else(tmp_path: Path) -> None:
+    queue, _, _ = asyncio.run(processed_fixture(tmp_path))
+    service = StubThumbnailMediaService(queue, tmp_path / "cache")
+
+    with pytest.raises(FileNotFoundError, match="video not found for user"):
+        asyncio.run(
+            service.materialize_for_user(
+                "someone-else@example.com", "job-20260813-001", "video"
+            )
+        )
 
 
 def test_failed_job_with_broken_metadata_remains_visible(tmp_path: Path) -> None:

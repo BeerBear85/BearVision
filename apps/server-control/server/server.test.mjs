@@ -1,9 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { adminArgs, host, mediaRange } from "./server.mjs";
+import { adminArgs, appHost, appPort, host, mediaRange } from "./server.mjs";
 
 test("server is restricted to loopback", () => {
   assert.equal(host, "127.0.0.1");
+});
+
+test("Android API has a separate LAN listener", () => {
+  assert.equal(appHost, "0.0.0.0");
+  assert.equal(appPort, 4321);
 });
 
 test("job browsing is delegated to paginated Python read models", () => {
@@ -37,5 +42,20 @@ test("assignment mutation is delegated as an exact Python CLI command", () => {
     "create-assignment", "--id", "a-1", "--user-id", "bear@example.com",
     "--bear-tag-id", "tag-1", "--valid-from", "2026-01-01T00:00:00Z",
     "--valid-to", "2026-01-02T00:00:00Z",
+  ]);
+});
+
+test("user media commands always carry the claimed owner", () => {
+  assert.deepEqual(adminArgs("list-user-videos", {
+    userId: "bear@example.com", page: "2", pageSize: "12",
+  }), [
+    "list-user-videos", "--user-id", "bear@example.com",
+    "--page", "2", "--page-size", "12",
+  ]);
+  assert.deepEqual(adminArgs("materialize-user-media", {
+    userId: "bear@example.com", jobId: "job-1", kind: "video",
+  }), [
+    "materialize-user-media", "--user-id", "bear@example.com",
+    "--job-id", "job-1", "--kind", "video",
   ]);
 });

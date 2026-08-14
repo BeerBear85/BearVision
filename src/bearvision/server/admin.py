@@ -18,7 +18,7 @@ from bearvision.adapters.ffmpeg import FfmpegVideoClipper
 from bearvision.contracts import EdgeJobManifest, JobResultManifest
 from bearvision.ports import ComponentUnavailable, ManagedJobQueue
 
-from .registry import FileUserRegistry
+from .registry import FileUserRegistry, normalize_user_email
 
 
 TERMINAL_STATES = frozenset({"processed", "unresolved", "failed"})
@@ -242,6 +242,56 @@ class AdminCatalog:
         return payload
 
 
+class UserVideoCatalog:
+    """Minimal read model exposed to the passwordless LAN application."""
+
+    def __init__(self, queue: ManagedJobQueue, registry: FileUserRegistry) -> None:
+        self.queue = queue
+        self.registry = registry
+        self.admin_catalog = AdminCatalog(queue, registry)
+
+    async def list_videos(
+        self, user_email: str, *, page: int = 1, page_size: int = 50
+    ) -> dict[str, Any]:
+        normalized = normalize_user_email(user_email)
+        user = next(
+            (item for item in self.registry.load().users if item.id == normalized),
+            None,
+        )
+        if user is None:
+            raise FileNotFoundError("user not found")
+
+        jobs = await self.admin_catalog.list_jobs(
+            page=page,
+            page_size=page_size,
+            status="processed",
+            user_id=normalized,
+        )
+        items = []
+        for item in jobs["items"]:
+            public_item = {
+                key: item[key]
+                for key in (
+                    "jobId",
+                    "captureStartedAt",
+                    "captureEndedAt",
+                    "createdAt",
+                    "durationSeconds",
+                    "video",
+                )
+                if key in item
+            }
+            items.append(public_item)
+        return {
+            "user": {"email": user.id, "displayName": user.display_name},
+            "items": items,
+            "page": jobs["page"],
+            "pageSize": jobs["pageSize"],
+            "total": jobs["total"],
+            "pageCount": jobs["pageCount"],
+        }
+
+
 class AdminMediaService:
     """Download and verify media, then let Python generate cached thumbnails."""
 
@@ -281,6 +331,22 @@ class AdminMediaService:
             "contentType": "image/jpeg",
             "sizeBytes": thumbnail.stat().st_size,
         }
+
+    async def materialize_for_user(
+        self, user_email: str, job_id: str, kind: str
+    ) -> dict[str, Any]:
+        """Materialize media only when the processed job belongs to the user."""
+
+        normalized = normalize_user_email(user_email)
+        owns_job = any(
+            item.get("status") == "processed"
+            and item.get("userEmail") == normalized
+            and item.get("jobId") == job_id
+            for item in self.queue.admin_list_jobs()
+        )
+        if not owns_job:
+            raise FileNotFoundError("video not found for user")
+        return await self.materialize(job_id, kind)
 
     async def _materialize_video(
         self, job_id: str, manifest: EdgeJobManifest
