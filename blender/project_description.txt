@@ -1,0 +1,212 @@
+WAKEBOARD PARK — BLENDER-PROJEKT
+================================
+Fil:        D:/Blender/wakeboard_scene.blend
+Blender:    5.2.0 LTS
+Sidst opd.: august 2026
+
+
+1. FORMÅL
+---------
+En fotorealistisk animation af en cable-wakeboardpark, hvor ryttere
+kører ud på progressiv kant, rammer en kicker og lander igen.
+Vægten ligger på FYSISK KORREKT bevægelse, ikke kun på pænt billede.
+Ud over videoen leveres motion-filer med position og acceleration
+pr. frame, som kan bruges til analyse.
+
+
+2. SCENENS OPBYGNING
+--------------------
+2.1 Bane og kabel
+  Cable_Main    Poly-spline, 61 punkter, spænd 75 m (x = -37,5 .. +37,5)
+                Højde 10,0 m ved tårnene, 9,44 m midtspand
+                Nedhæng 0,562 m (skalerer med kvadratet på spændvidden)
+  Tower_A/B     x = -38,4 og +36,6
+  Carriage      Kører med KONSTANT 7,7 m/s. Dette er den styrende
+                begrænsning i hele animationen — se afsnit 4.
+  TowRope       18,5 m nominelt. Rebvinkel til vandet ~27 grader.
+                252 punkter, så det kan bøje. To Displace-modifiers
+                (Wobble_X/Z) med amplitude styret af den beregnede slæk.
+
+2.2 Kicker
+  Massiv kile, 500 x 240 x 130 cm, placeret på (-0,9, -4,0, 0).
+  Ingen ben eller stel — det er en solid kasse som på tegningen.
+  Centrum ligger 4,0 m lateralt fra kabellinjen (y = 0) og midt
+  mellem tårnene i køreretningen.
+  Lip-vinkel ~19 grader.
+
+2.3 Vand
+  Water         400 x 400 m, 231.361 punkter.
+                Modifier-stak i rækkefølge:
+                  WaterRes    Subdivision (SIMPLE, 1) -> 0,41 m mellem
+                              punkter. NØDVENDIG: uden den kan nettet
+                              ikke gengive bølger på 10-15 cm.
+                  WaveA       dønning, noise_scale 6,0
+                  WaveB       noise_scale 2,4
+                  Chop        noise_scale 1,1
+                  Ripple      noise_scale 0,45
+                  BoardCut    fordybning der følger bræt nr. 1
+                  LandingHit  udvidende forstyrrelse ved landing nr. 1
+                  BoardCut_R2 / LandingHit_R2  samme for rytter 2
+                Bølgebånd: 12,5 cm (2.-98. percentil), 22 cm top-til-bund.
+  Water_Far     6000 m, ligger under og bag hovedfladen.
+  WaveDrv_A/B/C Tomme objekter der driver teksturkoordinaterne, så
+                bølgerne bevæger sig. SKAL være keyframet helt til
+                slutframe, ellers fryser vandet synligt.
+  Wake_Trail    Genereret geometri langs rytterens bane. Bredden
+                skalerer med kantvinklen. Build-modifier afslører den
+                synkront. Alpha fader ud til sidst.
+
+2.4 Miljø
+  Forest_Near   900 nåletræer, 13-27 m, bank op til 9 m, y = 252-425
+  Forest_Far    700 nåletræer, 16-34 m, y = 890-1135
+                Fjerne træer bruger et lysere, blåligere materiale som
+                falsk luftperspektiv — EEVEE giver ikke dis gratis.
+  Sun           Vinkel 0,526 grader (solens rigtige tilsyneladende
+                størrelse), energi 3,2
+  World         Background strength 1,0, eksponering -0,5
+
+2.5 Ryttere
+  Hver rytter er en komplet enhed:
+    RiderRoot     tom, driver position og orientering — ALT hænger på den
+      rig         Rigify-armatur
+        Rider_Body, Rider_Vest, Rider_Helmet
+      Wakeboard, Bindings, SprayEmit
+      Handle_Bar, Handle_V  -> HandTgt.L/R, RopeLow
+    Carriage -> RopeTop
+    TowRope, BoardCut, SplashCtr, Wake_Trail
+  Rytter 2 er en fuld duplikat med suffikset _R2 og rødt tøj.
+
+
+3. HVAD DER SKER I KLIPPET
+--------------------------
+Total: 1174 frames ved 60 fps = 19,57 s.
+
+  Rytter 1 (blå)                     Rytter 2 (rød)
+  ------------------------------     ------------------------------
+  f1     start, x = -22,5            f380   glider ind, x = -50,9
+  f95    kommer ind i billedet       f700   kommer ind i billedet
+  f31-91 progressiv kant opbygges    f631-691 samme
+  f91-115 hårdeste kant              f691-715 samme
+  f115-139 retter op                 f715-739 samme
+  f139   ind på rampen               f739   ind på rampen
+  f178   afsæt, 7,7 m/s              f778   afsæt
+  f180-225 frontside 360 m/          f792-806 TAIL GRAB
+         handle pass                        næse 75 grader ned
+  f229   landing                     f829   landing
+  f274   ude af billedet             f874   ude af billedet
+  f303   parkeret ude af syne
+                                     f1174  slut (5 s efter udkørsel)
+
+De 600 frames mellem de to afsæt er præcis 10 sekunder.
+
+
+4. FYSIKKEN — DET VIGTIGSTE AFSNIT
+----------------------------------
+4.1 Rebet er begrænsningen, ikke rytteren
+  På et kabelanlæg kører vognen med konstant hastighed, og rytterens
+  position følger af reblængden. IKKE omvendt.
+  Et tidligt forsøg satte rytterens fart først og udledte vognen af
+  den. Det gav en vogn der svingede mellem 1,1 og 11,6 m/s og kørte
+  ud over kablets ende. Lav ikke den fejl igen.
+
+4.2 Luftfasen er ren kasteparabel
+  Fra afsæt til landing gælder:
+    - vandret hastighed KONSTANT (7,70 m/s)
+    - lodret acceleration PRÆCIS -9,81 m/s²
+    - oplevet g = 0,00 gennem hele svævet
+  En tidligere version udledte også x fra rebet under svævet. Det fik
+  rytteren til at accelerere fra 5,7 til 17 m/s i frit fald. Det er
+  umuligt og blev rettet ved at gen-bake luftfasen analytisk.
+
+4.3 Hastighed gennem klippet
+  Cruise      7,4-8,0 m/s
+  Hård kant   op til 11,1 m/s (39,9 km/t) — sideudsvinget giver fart
+  På rampen   8,0-8,2 m/s (rebet trækker stadig)
+  Ved lip     7,7 m/s
+  Svæv        7,7 m/s vandret
+  Maks. g     4,45 (ved landing)
+  Apex        1,657 m, altså 0,36 m over lippen
+
+4.4 Rebet må gerne slække
+  Når rytteren popper, stiger han mod kablet, og rebet bliver slapt —
+  op til 1,5 m. Det er fysisk korrekt. Wobble-amplituden er koblet til
+  den beregnede slæk, så rebet flagrer, når det er løst, og ligger
+  stramt under belastning.
+
+
+5. RYTTERENS HOLDNING
+---------------------
+Holdningen er research-baseret på cable-park-teknik, ikke bådkørsel.
+
+  Begge knæ      ~100-105 grader, forskel under 8 grader.
+                 Bagbenet må IKKE være dybt bøjet — det er den
+                 klassiske fejl, hvor rytteren "sætter sig ned".
+  Hænder         ~20 cm fra kroppen. Ikke trukket helt ind, ikke
+                 strakt helt ud.
+  Hældning       Kroppen hælder MERE end brættet, og hældningen
+                 skalerer med kantningen (op til 11 grader ud over
+                 brættets eget rul på 27 grader).
+  Landing        Knæ ned til 78 grader som affjedring.
+
+  KENDT MANGEL: skuldrene ligger præcis over hofterne i alle frames.
+  S-formen med hofterne frem og skuldrene tilbage findes ikke, fordi
+  chest- og hips-knoglerne i denne rig ikke flytter overkroppen —
+  kun torso gør, og den virker som én stiv enhed. Ifølge kilderne er
+  netop dén vægtstang vigtig i kantningen. Det er ikke løst.
+
+
+6. DE TO TRICKS
+---------------
+6.1 Frontside 360 med handle pass (rytter 1)
+  Håndtaget skal være VERDENSFAST, mens rytteren roterer omkring det.
+  Både position og orientering modroteres i RiderRoots lokale system.
+  Hvis kun orienteringen modroteres, KREDSER håndtaget om rytteren,
+  og så skærer rebet gennem kroppen. Det var en reel fejl i projektet.
+  Kontrolmål: håndtaget skal ligge på vognens side af rytteren i hver
+  eneste frame — måles til 12-19 cm.
+  Grebet: bagerste hånd slipper ALDRIG, før den forreste har fat.
+
+6.2 Tail grab (rytter 2)
+  Man bukker sig ikke ned efter halen. Man skubber næsen ned og løfter
+  halen op. Brættet vippes 75 grader næse-nedad, forbenet strækkes
+  (bones), bagerste knæ tuckes.
+  Resultat: forreste knæ 114 grader, bagerste 43 grader, greb 58 cm
+  ude på halen (spidsen er 71 cm).
+  Et tidligere forsøg brugte dybt sammenkrøb i stedet. Det gav 13
+  graders knævinkel og et greb kun 21 cm ude. Det så forkert ud.
+
+
+7. RENDER
+---------
+  Motor        EEVEE, 1920x1080, 60 fps
+  Kamera       Fast 50 mm på (-8,0, -30,5, 3,0), Track To mod CamTarget.
+               INGEN keyframes — rytteren krydser billedet.
+  Tid          ~2,9 s pr. frame. Fuld render ~70 minutter.
+  Motion blur  SLÅET FRA. Ved 7-11 m/s bliver hver frame et frys.
+               Det er den tydeligste rest af CG-udseende.
+
+  Fremgangsmåde: rendér PNG-sekvens til D:/Blender/seq/ i bidder,
+  og enkod bagefter via en midlertidig VSE-scene. Se instruction_file.txt.
+
+
+8. LEVERANCER
+-------------
+  wakeboard_two_riders_60fps.mp4                    10,5 MB, 1174 frames
+  wakeboard_two_riders_60fps_rider1_motion.json     bear_tag_666
+  wakeboard_two_riders_60fps_rider2_motion.json     bear_tag_123
+  wakeboard_fs360_60fps.mp4                          5,54 MB, 574 frames
+  wakeboard_fs360_60fps_rider1_motion.json          bear_tag_666
+
+
+9. KENDTE BEGRÆNSNINGER
+-----------------------
+  - Vandet er ikke simuleret. Spray er partikler, kølvand er genereret
+    geometri, overfladen er displacement. Ægte FLIP-simulering ville
+    kræve en ombygning af hele vandopsætningen.
+  - Rebet forkortes, når det slækker, i stedet for at bue. Det kræver
+    en kurve med kædelinje frem for en Stretch To-constraint.
+  - EEVEE bruger screen-space reflections. Det, der er uden for
+    billedet, forsvinder ud af vandets spejling.
+  - Skuldre/hofter, se afsnit 5.
+  - Kameraet står helt stille. Perfekt kamerastilhed er et stærkere
+    CG-signal end ufuldkomment vand.

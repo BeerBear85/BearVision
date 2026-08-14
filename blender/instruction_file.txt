@@ -1,0 +1,183 @@
+INSTRUCTION FILE — LÆS DETTE FØRST
+==================================
+Til dig der er en AI-assistent og skal arbejde videre på
+D:/Blender/wakeboard_scene.blend.
+Læs også project_description.txt for scenens opbygning.
+
+
+0. DE FEM VIGTIGSTE REGLER
+--------------------------
+1. Rebet er begrænsningen. Vognen kører konstant 7,7 m/s; rytterens
+   position udledes af reblængden. Aldrig omvendt.
+2. Luftfasen er ren kasteparabel. Vandret hastighed konstant, lodret
+   acceleration -9,81. Udled ALDRIG x fra rebet under svævet.
+3. Mål altid, gæt aldrig, på rig-akser. Fortegn og akseretning i denne
+   Rigify-rig flugter ikke med intuitionen, og højre og venstre side
+   spejler ikke altid hinanden.
+4. Der skal ALTID laves to sæt leverancer: ét med kun rytter 1, og ét
+   med begge. Se afsnit 3.
+5. Alle motion-filer SKAL have et bear_tag_id. Se afsnit 2.
+
+
+1. HVAD PROJEKTET GÅR UD PÅ
+---------------------------
+Det er ikke en flot animation for udseendets skyld. Målet er, at
+bevægelsen er fysisk korrekt, og at den kan efterprøves i tal.
+Derfor følger der motion-filer med, og derfor er de vigtige.
+
+Ejeren rider selv wakeboard og fanger fejl, du ikke selv kan se.
+Tag hans rettelser bogstaveligt. Eksempler fra projektets historie:
+  - "park- og rampebrætter har IKKE finner"  (jeg var ved at tilføje finner)
+  - "man bukker sig ikke ned efter halen"    (jeg havde lavet dybt sammenkrøb)
+  - "hænderne er ca. 20 cm fra kroppen"      (mine svingede 13-43 cm)
+Når han beskriver teknik, så research det og implementér det. Lad være
+med at antage, at din første model er rigtig.
+
+
+2. MOTION-FILER — FORMAT
+------------------------
+Format: JSON, ikke CSV. Én fil pr. rytter pr. video.
+
+2.1 Navngivning
+  Companion-filer arver hovedfilens stamme og får et beskrivende
+  suffiks:
+      wakeboard_two_riders_60fps.mp4
+      wakeboard_two_riders_60fps_rider1_motion.json
+      wakeboard_two_riders_60fps_rider2_motion.json
+  IKKE "wakeboard_rider_motion.json". Stammen skal matche videoen,
+  så det altid er entydigt, hvilken film tallene hører til.
+
+2.2 bear_tag_id — OBLIGATORISK
+  Hver motion-fil skal have et bear_tag_id på øverste niveau,
+  placeret lige efter schema_version.
+      Rytter 1  ->  "bear_tag_666"
+      Rytter 2  ->  "bear_tag_123"
+  Kommer der flere ryttere til, så spørg ejeren om deres tag.
+  Find ikke selv på nye tags.
+
+2.3 Struktur
+  {
+    "schema_version": "2.0",
+    "bear_tag_id":    "bear_tag_666",
+    "subject":  { "label": "rider 1 (blue)", "tracked_object": "RiderRoot" },
+    "source":   { "blend_file": ..., "clip": "<den mp4 filen hører til>" },
+    "units":    { ... },
+    "coordinate_system": { ... },
+    "timing":   { "fps": 60, "frame_start": ..., "frame_end": ... },
+    "events":   { "takeoff_frame": ..., "landing_frame": ..., "trick": ... },
+    "method":   { ... },
+    "summary":  { ... },
+    "frames":   [ ... ]
+  }
+
+  Pr. frame: frame, time_s, x_m, y_m, z_m, vx/vy/vz_ms, speed_ms,
+  speed_kmh, ax/ay/az_ms2, accel_ms2, felt_g, rope_length_m,
+  rope_angle_deg, phase, impulsive.
+
+2.4 Beregning
+  Hastighed og acceleration udledes med kvadratisk mindste-kvadraters
+  tilpasning over et vindue på +/-4 frames. Rå centraldifferens er for
+  støjende, fordi banen er keyframet.
+  Vinduet må ALDRIG spænde over en fysisk diskontinuitet. Sæt
+  segmentgrænser ved rampeindgang, afsæt og landing, og lad tilpasningen
+  glide indad ved segmentenderne i stedet for at gentage værdier.
+  Frames tæt på de grænser markeres impulsive = true. Deres acceleration
+  er en artefakt af framerate, ikke en kraft.
+
+  felt_g er specifik kraft = a - g. Altså 1,0 i hvile og 0,00 i frit
+  fald. Hvis luftfasen ikke giver 0,00, er der en fejl i animationen —
+  præcis sådan blev en tidligere fejl fundet.
+
+2.5 Flere ryttere
+  ÉN FIL PR. RYTTER. Bland dem aldrig i én fil.
+  Hver fil dækker kun det interval, hvor rytteren findes i scenen.
+  Rytter 2 begynder først ved frame 380, så hans fil løber 380-1174,
+  ikke 1-1174. Skriv ikke tomme frames for en rytter der ikke er der.
+  Begge filer peger på det samme "clip" og bruger samme frame-nummerering,
+  så de kan sammenholdes direkte.
+  Tricket beskrives i events.trick pr. rytter — de laver ikke det samme.
+
+
+3. TO SÆT LEVERANCER — ALTID
+----------------------------
+Der skal laves både en fuld video og en kort med kun rytter 1.
+
+  SÆT 1 — fuld
+    wakeboard_two_riders_60fps.mp4                 frames 1-1174
+    wakeboard_two_riders_60fps_rider1_motion.json  bear_tag_666
+    wakeboard_two_riders_60fps_rider2_motion.json  bear_tag_123
+
+  SÆT 2 — kun rytter 1
+    wakeboard_fs360_60fps.mp4                      frames 1-574
+    wakeboard_fs360_60fps_rider1_motion.json       bear_tag_666
+    Slutter 5,0 sekunder efter rytter 1 forlader billedet ved frame 274.
+
+VIGTIG GENVEJ:
+  Rytter 2 er skjult før frame 380 og uden for billedet indtil ca.
+  frame 700. Frames 1-574 indeholder derfor INGEN synlig rytter 2.
+  Rendér derfor kun ÉN PNG-sekvens på 1174 frames, og enkod to MP4'er
+  ud af den — den korte som frames 1-574. Det halverer rendertiden.
+  Tjek antagelsen igen, hvis timingen ændres.
+
+
+4. RENDER — PRAKTISK
+--------------------
+  ~2,9 s pr. frame. 1174 frames tager ca. 70 minutter.
+
+  Kør ALDRIG hele renderen i ét kald. Værktøjskald timer ud efter
+  4 minutter. Brug bidder på 60-80 frames:
+      sc.frame_start, sc.frame_end = a, b
+      bpy.ops.render.render(animation=True)
+  til PNG i D:/Blender/seq/, og enkod til sidst via en midlertidig
+  scene med en image-strip og FFMPEG/MPEG4/H264.
+
+  NÅR ET KALD TIMER UD: gentag IKKE bidden. Tæl filerne i seq/ først.
+  I stort set alle tilfælde er renderen kørt færdig, og det er kun
+  svaret der mangler. Det skete fem gange under den seneste render.
+
+  Enkod den korte video, så snart de første 574 frames er i hus, i
+  stedet for at vente til slutningen. Forbindelsen til Blender falder
+  ud jævnligt, og så er mindst én leverance sikret.
+
+  Verificér altid MP4'en bagefter ved at indlæse den som movie-strip
+  og tælle frames. Filstørrelse alene beviser ingenting.
+
+  Husk at sætte output tilbage til VIDEO/FFMPEG bagefter, hvis du har
+  skiftet til IMAGE/PNG.
+
+
+5. FÆLDER SOM HAR KOSTET TID
+----------------------------
+  - matrix_parent_inverse: skal være identitet, hvis location skal
+    tolkes som lokalt offset. Ellers står objektet fast i verden.
+  - At skrue en Child Of-constraint ned får IK-målet til at falde
+    tilbage til hvilepositionen. Vil du flytte en hånd, så lad
+    Child Of stå på 1 og blend en Copy Location OVEN PÅ den.
+  - Modifier-fcurves ligger på OBJEKTET, ikke på modifieren.
+    Modifieren har ingen animation_data_clear().
+  - Blender 5.2 bruger slotted actions. action.fcurves findes ikke;
+    gå via action.layers -> strips -> channelbags -> fcurves.
+  - Fjern keyframes BAGFRA i listen, ellers bliver indekserne ugyldige.
+  - Sæt frame_end FØR frame_start, når du flytter et interval opad,
+    ellers klemmer Blender værdierne.
+  - Vandnettet har 0,83 m mellem punkter uden WaterRes-modifieren.
+    Det kan ikke gengive bølger på 10-15 cm. Fjern den ikke.
+  - Tunge scripts, der løber hele tidslinjen igennem flere gange,
+    har fået Blender til at crashe. Del dem op i flere kald.
+  - Screenshot-værktøjet timer altid ud. Du kan IKKE se resultatet.
+    Verificér numerisk: knævinkler, rækkevidde, overstræk, afstande.
+    Og sig ærligt til ejeren, at du ikke har set det.
+
+
+6. FØR DU KALDER NOGET FÆRDIGT
+------------------------------
+  [ ] Luftfasen: vandret hastighed konstant, az = -9,81, felt_g = 0,00
+  [ ] Ingen frame uden mindst én hånd på håndtaget (undtagen under greb)
+  [ ] Armene ikke overstrakt: skulder-til-hånd <= armlængde
+  [ ] Fødderne stadig i bindingerne
+  [ ] Håndtaget på vognens side af rytteren under hele rotationen
+  [ ] Vognen inden for kablets ender
+  [ ] Bølgedrivere keyframet helt til slutframe, så vandet ikke fryser
+  [ ] MP4 verificeret ved tilbagelæsning af antal frames
+  [ ] Alle motion-filer har bear_tag_id
+  [ ] Begge sæt leverancer findes
