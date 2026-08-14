@@ -28,6 +28,7 @@ def test_video_scenario_generates_deterministic_ten_hertz_bear_tag_data() -> Non
     )
 
     assert len(observations) == 131
+    assert registry[0].tag_id == "bear_tag_666"
     assert registry[0].rider_id == "rider-video"
     active = [item for item in observations if 6.0 <= item.observed_at_monotonic_s <= 11.0]
     assert len(active) == 51

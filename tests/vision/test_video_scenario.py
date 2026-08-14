@@ -57,12 +57,12 @@ def test_recorded_video_drives_real_yolo_capture_and_rider_assignment(
     registry = InMemoryUserRegistry(
         RegistryData(
             users=(UserRecord(id=user_id, email=email, displayName="Rider Video"),),
-            bearTags=(BearTagRecord(id="tag-video-rider"),),
+            bearTags=(BearTagRecord(id="bear_tag_666"),),
             assignments=(
                 BearTagAssignment(
                     id="assignment-video-rider",
                     userId=user_id,
-                    bearTagId="tag-video-rider",
+                    bearTagId="bear_tag_666",
                     validFrom=clock.start_utc - timedelta(days=1),
                     validTo=clock.start_utc + timedelta(days=1),
                 ),

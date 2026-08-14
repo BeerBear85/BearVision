@@ -19,7 +19,7 @@ detector:
   confidence_threshold: 0.6
 
 synthetic_bear_tags:
-  - tag_id: tag-video-rider
+  - tag_id: bear_tag_666
     rider_id: rider-video
     start_s: 0
     end_s: 13
