@@ -1,6 +1,9 @@
+import asyncio
+from datetime import timedelta
 from pathlib import Path
 import hashlib
 import json
+from uuid import NAMESPACE_URL, uuid5
 
 import pytest
 
@@ -8,6 +11,16 @@ from bearvision.adapters import FfmpegVideoClipper
 from bearvision.config.models import ClipExtractionConfig
 from bearvision.contracts import load_scenario
 from bearvision.edge import build_behavioral_system
+from bearvision.server import (
+    BearTagAssignment,
+    BearTagRecord,
+    FileSystemJobQueue,
+    InMemoryUserRegistry,
+    RegistryData,
+    ServerWorker,
+    UserRecord,
+)
+from bearvision.simulation import VirtualClock
 
 cv2 = pytest.importorskip("cv2")
 
@@ -24,22 +37,52 @@ def test_recorded_video_drives_real_yolo_capture_and_rider_assignment(
     scenario = load_scenario(ROOT / "specs/scenarios/wakeboard-video-yolo.yaml")
     source = ROOT / scenario.video.path  # type: ignore[union-attr]
     source_hash = hashlib.sha256(source.read_bytes()).hexdigest()
+    capture_dir = tmp_path / "captures"
+    queue = FileSystemJobQueue(tmp_path / "shared-queue")
 
-    result = build_behavioral_system(scenario, capture_dir=tmp_path).run()
+    result = build_behavioral_system(
+        scenario,
+        capture_dir=capture_dir,
+        job_queue=queue,
+        process_server=False,
+    ).run()
 
     assert result.failures == ()
     assert result.expectation_failures == ()
-    assert result.assignments[0].selected_user_email == "rider-video@scenario.invalid"
+    assert result.assignments == ()
+    assert queue.snapshot()["counts"]["ready"] == 1
+    clock = VirtualClock()
+    email = "rider-video@scenario.invalid"
+    user_id = uuid5(NAMESPACE_URL, f"bearvision:scenario-user:{email}")
+    registry = InMemoryUserRegistry(
+        RegistryData(
+            users=(UserRecord(id=user_id, email=email, displayName="Rider Video"),),
+            bearTags=(BearTagRecord(id="tag-video-rider"),),
+            assignments=(
+                BearTagAssignment(
+                    id="assignment-video-rider",
+                    userId=user_id,
+                    bearTagId="tag-video-rider",
+                    validFrom=clock.start_utc - timedelta(days=1),
+                    validTo=clock.start_utc + timedelta(days=1),
+                ),
+            ),
+        )
+    )
+    server_result = asyncio.run(
+        ServerWorker(FileSystemJobQueue(tmp_path / "shared-queue"), registry, clock).run_once()
+    )
+    assert server_result is not None and server_result.selected_user_id == user_id
     detected = [entry for entry in result.trace if entry.kind == "person_detected"]
     assert detected[0].at_s == pytest.approx(6.006, abs=0.01)
     assert result.captures
     assert result.uploads[0].object_key == "input-queue/ready/capture-video-frame-180"
-    output = tmp_path / "capture-video-frame-180.virtual-cameraman.mp4"
+    output = capture_dir / "capture-video-frame-180.virtual-cameraman.mp4"
     assert output.is_file()
-    extracted = tmp_path / "capture-video-frame-180.mp4"
+    extracted = capture_dir / "capture-video-frame-180.mp4"
     assert extracted.is_file()
-    tracking = tmp_path / "capture-video-frame-180.tracking.json"
-    debug = tmp_path / "capture-video-frame-180.tracking-debug.mp4"
+    tracking = capture_dir / "capture-video-frame-180.tracking.json"
+    debug = capture_dir / "capture-video-frame-180.tracking-debug.mp4"
     assert tracking.is_file()
     assert debug.is_file()
     assert output.stat().st_size < extracted.stat().st_size

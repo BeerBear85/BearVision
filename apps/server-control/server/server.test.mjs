@@ -45,6 +45,16 @@ test("assignment mutation is delegated as an exact Python CLI command", () => {
   ]);
 });
 
+test("email updates retain the UUID identity", () => {
+  assert.deepEqual(adminArgs("update-user-email", {
+    userId: "b10e3918-490c-4a3f-859a-e67c12b66680",
+    email: "new-bear@example.com",
+  }), [
+    "update-user-email", "--user-id", "b10e3918-490c-4a3f-859a-e67c12b66680",
+    "--email", "new-bear@example.com",
+  ]);
+});
+
 test("user media commands always carry the claimed owner", () => {
   assert.deepEqual(adminArgs("list-user-videos", {
     userId: "bear@example.com", page: "2", pageSize: "12",

@@ -19,6 +19,8 @@ from the package. The server validates paths, interval bounds, byte length and
 checksum before scoring.
 
 Terminal jobs contain `result.json` with status, processing time, algorithm
-version, selected tag/user/assignment when applicable, every candidate score,
-reason and error code. READY-less folders are ignored and `jobId` is the
-idempotency key.
+version, selected tag, stable `selectedUserId` UUID and assignment when
+applicable, every candidate score, reason and error code. Result files use
+`schemaVersion: 2`; email is not part of the transport contract. Processed jobs
+are stored under `processed/user_<uuid>/<job-id>`. READY-less folders are
+ignored and `jobId` is the idempotency key.

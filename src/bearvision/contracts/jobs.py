@@ -4,10 +4,12 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 from typing import Literal
+from uuid import UUID
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from .models import Vector3
+from .time import UtcDatetime
 
 
 class JobContractModel(BaseModel):
@@ -18,9 +20,16 @@ class JobContractModel(BaseModel):
 
 class JobVideo(JobContractModel):
     filename: str = Field(min_length=1, max_length=255)
-    mime_type: str = Field(alias="mimeType", min_length=1, max_length=100)
+    mime_type: str = Field(alias="mimeType", pattern=r"^video/[A-Za-z0-9.+-]+$")
     size_bytes: int = Field(alias="sizeBytes", ge=1)
     sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+
+    @field_validator("filename")
+    @classmethod
+    def validate_filename(cls, value: str) -> str:
+        if value in {".", ".."} or "/" in value or "\\" in value:
+            raise ValueError("video filename must be one path segment")
+        return value
 
 
 class EdgeJobManifest(JobContractModel):
@@ -31,9 +40,9 @@ class EdgeJobManifest(JobContractModel):
     edge_device_id: str = Field(
         alias="edgeDeviceId", min_length=1, max_length=128, pattern=r"^[A-Za-z0-9._:-]+$"
     )
-    created_at: AwareDatetime = Field(alias="createdAt")
-    capture_started_at: AwareDatetime = Field(alias="captureStartedAt")
-    capture_ended_at: AwareDatetime = Field(alias="captureEndedAt")
+    created_at: UtcDatetime = Field(alias="createdAt")
+    capture_started_at: UtcDatetime = Field(alias="captureStartedAt")
+    capture_ended_at: UtcDatetime = Field(alias="captureEndedAt")
     video: JobVideo
     observations_filename: Literal["beartag-data.ndjson"] = Field(
         alias="observationsFilename", default="beartag-data.ndjson"
@@ -43,6 +52,8 @@ class EdgeJobManifest(JobContractModel):
     def validate_times(self) -> "EdgeJobManifest":
         if self.capture_ended_at <= self.capture_started_at:
             raise ValueError("captureEndedAt must be later than captureStartedAt")
+        if self.created_at < self.capture_ended_at:
+            raise ValueError("createdAt must not be earlier than captureEndedAt")
         return self
 
     @property
@@ -76,14 +87,33 @@ class CandidateScore(JobContractModel):
 
 
 class JobResultManifest(JobContractModel):
-    schema_version: Literal[1] = Field(alias="schemaVersion", default=1)
+    schema_version: Literal[2] = Field(alias="schemaVersion", default=2)
     job_id: str = Field(alias="jobId", min_length=1)
     status: Literal["processed", "unresolved", "failed"]
-    processed_at: AwareDatetime = Field(alias="processedAt")
+    processed_at: UtcDatetime = Field(alias="processedAt")
     algorithm_version: str = Field(alias="algorithmVersion", min_length=1)
     selected_bear_tag_id: str | None = Field(alias="selectedBearTagId", default=None)
-    selected_user_email: str | None = Field(alias="selectedUserEmail", default=None)
+    selected_user_id: UUID | None = Field(alias="selectedUserId", default=None)
     assignment_id: str | None = Field(alias="assignmentId", default=None)
     candidates: tuple[CandidateScore, ...] = ()
     reason: str = Field(min_length=1, max_length=1000)
     error_code: str | None = Field(alias="errorCode", default=None)
+
+    @model_validator(mode="after")
+    def validate_outcome(self) -> "JobResultManifest":
+        assignment_fields = (
+            self.selected_bear_tag_id,
+            self.selected_user_id,
+            self.assignment_id,
+        )
+        if self.status == "processed":
+            if any(value is None for value in assignment_fields):
+                raise ValueError("processed result requires tag, user and assignment ids")
+            if self.error_code is not None:
+                raise ValueError("processed result must not contain an error code")
+        else:
+            if self.selected_user_id is not None or self.assignment_id is not None:
+                raise ValueError("non-processed result must not assign a user")
+            if self.error_code is None:
+                raise ValueError("non-processed result requires an error code")
+        return self

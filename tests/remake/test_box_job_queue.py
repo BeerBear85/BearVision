@@ -1,11 +1,17 @@
 import asyncio
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from uuid import UUID
+
+import pytest
 
 from bearvision.adapters import BoxJobQueue
 from bearvision.contracts import JobResultManifest, MediaAsset, TagObservation, Vector3
 from bearvision.edge.job_package import build_edge_job
 from bearvision.ports import CapturedMedia
+
+
+USER_ID = UUID("b10e3918-490c-4a3f-859a-e67c12b66680")
 
 
 class MemoryBoxFolders:
@@ -18,6 +24,8 @@ class MemoryBoxFolders:
         self.files[remote_path] = Path(local_path).read_bytes()
 
     def download_file(self, remote_path, local_path):
+        if remote_path not in self.files:
+            raise FileNotFoundError(remote_path)
         Path(local_path).write_bytes(self.files[remote_path])
 
     def folder_exists(self, path):
@@ -75,7 +83,7 @@ def test_box_queue_commits_with_ready_then_claims_complete_folder(tmp_path: Path
     manifest, observations = build_edge_job(
         job_id="job-1",
         edge_device_id="edge-1",
-        created_at=now,
+        created_at=now + timedelta(seconds=5),
         capture_started_at=now,
         capture_ended_at=now + timedelta(seconds=5),
         clip_start_monotonic_s=0,
@@ -106,22 +114,22 @@ def test_box_queue_commits_with_ready_then_claims_complete_folder(tmp_path: Path
         processedAt=now + timedelta(seconds=6),
         algorithmVersion="test-v1",
         selectedBearTagId="BearTag-1",
-        selectedUserEmail="bear@example.com",
+        selectedUserId=USER_ID,
         assignmentId="assignment-1",
         reason="selected test rider",
     )
-    asyncio.run(queue.finish("job-1", processed, "bear@example.com"))
+    asyncio.run(queue.finish("job-1", processed, USER_ID))
 
     assert queue.admin_list_jobs() == [
         {
             "jobId": "job-1",
             "status": "processed",
-            "userEmail": "bear@example.com",
+            "userId": str(USER_ID),
         }
     ]
     snapshot = queue.snapshot()
     assert snapshot["counts"]["processed"] == 1
-    assert snapshot["jobs"][0]["selectedUserEmail"] == "bear@example.com"
+    assert snapshot["jobs"][0]["selectedUserId"] == str(USER_ID)
 
     second_manifest = manifest.model_copy(update={"job_id": "job-2"})
     assert asyncio.run(queue.publish(second_manifest, video, observations))
@@ -139,3 +147,12 @@ def test_box_queue_commits_with_ready_then_claims_complete_folder(tmp_path: Path
     assert asyncio.run(queue.requeue("job-2"))
     assert not asyncio.run(queue.requeue("missing-job"))
     assert asyncio.run(queue.acquire_next()) == "job-2"
+
+
+def test_box_queue_preserves_missing_package_file_as_permanent_error(tmp_path: Path) -> None:
+    handler = MemoryBoxFolders()
+    handler.files["processing/job-broken/manifest.json"] = b"{}"
+    queue = BoxJobQueue(handler, tmp_path)
+
+    with pytest.raises(FileNotFoundError):
+        asyncio.run(queue.read("job-broken", "video.mp4"))

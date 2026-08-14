@@ -6,6 +6,7 @@ from collections.abc import AsyncIterator, Iterable
 from datetime import datetime
 from pathlib import Path
 from typing import Protocol, runtime_checkable
+from uuid import UUID
 
 from bearvision.contracts import (
     BearTagJobObservation,
@@ -110,7 +111,7 @@ class JobQueue(Protocol):
     async def read(self, job_id: str, filename: str) -> bytes: ...
 
     async def finish(
-        self, job_id: str, result: JobResultManifest, user_email: str | None = None
+        self, job_id: str, result: JobResultManifest, user_id: UUID | None = None
     ) -> None: ...
 
     async def requeue(self, job_id: str) -> bool: ...

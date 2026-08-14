@@ -22,12 +22,12 @@ async def processed_fixture(
 ) -> tuple[FileSystemJobQueue, FileUserRegistry, bytes]:
     queue = FileSystemJobQueue(tmp_path / "queue")
     registry = FileUserRegistry(tmp_path / "registry.json")
-    registry.create_user(" Bear@Example.com ", "Bear Rider")
+    user = registry.create_user(" Bear@Example.com ", "Bear Rider")
     registry.create_bear_tag("BearTag-1")
     registry.create_assignment(
         BearTagAssignment(
             id="assignment-1",
-            userId="bear@example.com",
+            userId=user.id,
             bearTagId="BearTag-1",
             validFrom=START - timedelta(hours=1),
             validTo=START + timedelta(hours=1),
@@ -83,7 +83,7 @@ def test_admin_catalog_pages_and_enriches_jobs_and_users(tmp_path: Path) -> None
     assert jobs["items"][0]["selectedBearTagId"] == "BearTag-1"
 
     users = asyncio.run(catalog.list_users(query="bear", page_size=10))
-    assert users["items"][0]["id"] == "bear@example.com"
+    assert users["items"][0]["email"] == "bear@example.com"
     assert users["items"][0]["processedVideoCount"] == 1
     assert users["items"][0]["assignments"][0]["bearTagId"] == "BearTag-1"
 
@@ -116,6 +116,7 @@ def test_user_catalog_exposes_only_public_video_fields(tmp_path: Path) -> None:
     )
 
     assert result["user"] == {
+        "id": str(registry.load().users[0].id),
         "email": "bear@example.com",
         "displayName": "Bear Rider",
     }
@@ -126,8 +127,10 @@ def test_user_catalog_exposes_only_public_video_fields(tmp_path: Path) -> None:
 
 
 def test_user_media_rejects_a_job_owned_by_someone_else(tmp_path: Path) -> None:
-    queue, _, _ = asyncio.run(processed_fixture(tmp_path))
-    service = StubThumbnailMediaService(queue, tmp_path / "cache")
+    queue, registry, _ = asyncio.run(processed_fixture(tmp_path))
+    service = StubThumbnailMediaService(
+        queue, tmp_path / "cache", registry=registry
+    )
 
     with pytest.raises(FileNotFoundError, match="video not found for user"):
         asyncio.run(
@@ -169,7 +172,7 @@ def test_packaged_ffmpeg_generates_real_thumbnail(tmp_path: Path) -> None:
     manifest, observations = build_edge_job(
         job_id="preview-job",
         edge_device_id="edge-1",
-        created_at=START,
+        created_at=START + timedelta(seconds=4),
         capture_started_at=START,
         capture_ended_at=START + timedelta(seconds=4),
         clip_start_monotonic_s=0,

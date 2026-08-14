@@ -128,7 +128,7 @@ function VideoLibrary({ onError, refreshVersion, userFilter = "" }) {
               <span className="duration">{formatDuration(job.durationSeconds)}</span>
             </div>
             <div className="video-copy">
-              <div className="card-title"><strong>{job.displayName ?? job.selectedUserEmail ?? "Unknown rider"}</strong><Status value={job.status} /></div>
+              <div className="card-title"><strong>{job.displayName ?? job.userEmail ?? "Unknown rider"}</strong><Status value={job.status} /></div>
               <span>{formatDate(job.captureStartedAt)}</span>
               <span>{job.selectedBearTagId ?? "No BearTag selected"} · {job.jobId}</span>
             </div>
@@ -149,13 +149,14 @@ function VideoLibrary({ onError, refreshVersion, userFilter = "" }) {
               type={detail.video?.mimeType ?? "video/mp4"} />
           </video>}
           <div className="detail-heading">
-            <div><h2>{detail.displayName ?? detail.selectedUserEmail ?? "Unknown rider"}</h2><p>{detail.jobId}</p></div>
+            <div><h2>{detail.displayName ?? detail.userEmail ?? "Unknown rider"}</h2><p>{detail.jobId}</p></div>
             <Status value={detail.status} />
           </div>
           <dl className="facts">
             <dt>Captured</dt><dd>{formatDate(detail.captureStartedAt)}</dd>
             <dt>BearTag</dt><dd>{detail.selectedBearTagId ?? "—"}</dd>
-            <dt>User</dt><dd>{detail.selectedUserEmail ?? "—"}</dd>
+            <dt>User email</dt><dd>{detail.userEmail ?? "—"}</dd>
+            <dt>User ID</dt><dd>{detail.selectedUserId ?? "—"}</dd>
             <dt>Assignment</dt><dd>{detail.assignmentId ?? "—"}</dd>
             <dt>Decision</dt><dd>{detail.reason ?? "Awaiting processing"}</dd>
           </dl>
@@ -185,7 +186,7 @@ function UserForm({ onClose, onDone, onError }) {
   return <form onSubmit={submit}>
     <label>Name<input required autoFocus value={values.displayName} onChange={(e) => setValues({ ...values, displayName: e.target.value })} /></label>
     <label>Email<input required type="email" value={values.email} onChange={(e) => setValues({ ...values, email: e.target.value })} /></label>
-    <p className="field-note">The email becomes the permanent user ID. Dots and +aliases are preserved.</p>
+    <p className="field-note">A permanent UUID is generated. The email remains an editable contact field.</p>
     <footer className="modal-actions"><button type="button" className="secondary" onClick={onClose}>Cancel</button><button className="primary">Create user</button></footer>
   </form>;
 }
@@ -278,14 +279,14 @@ function Users({ onError, onShowVideos }) {
       <div className="table-surface"><table>
         <thead><tr><th>User</th><th>Active BearTags</th><th className="numeric">Videos</th></tr></thead>
         <tbody>{data.items.map((user) => <tr key={user.id} className={user.id === selectedId ? "selected-row" : ""} onClick={() => setSelectedId(user.id)}>
-          <td><div className="person"><span className="avatar">{initials(user.displayName)}</span><span><strong>{user.displayName}</strong><small>{user.id}</small></span></div></td>
+          <td><div className="person"><span className="avatar">{initials(user.displayName)}</span><span><strong>{user.displayName}</strong><small>{user.email}</small></span></div></td>
           <td>{user.activeBearTags.join(", ") || "—"}</td><td className="numeric">{user.processedVideoCount}</td>
         </tr>)}</tbody>
       </table></div>
       <aside className="user-detail">
         {!selected && <Empty>No user selected.</Empty>}
         {selected && <>
-          <div className="user-heading"><span className="avatar large">{initials(selected.displayName)}</span><div><h2>{selected.displayName}</h2><p>{selected.id}</p></div></div>
+          <div className="user-heading"><span className="avatar large">{initials(selected.displayName)}</span><div><h2>{selected.displayName}</h2><p>{selected.email}</p><small>{selected.id}</small></div></div>
           <h3>BearTag history</h3>
           {selected.assignments.length === 0 && <p className="muted">No assignments.</p>}
           {selected.assignments.map((item) => <div className={"assignment " + (item.active ? "active" : "")} key={item.id}>
@@ -296,7 +297,7 @@ function Users({ onError, onShowVideos }) {
       </aside>
     </div>
     <section className="tags-section"><div><h2>BearTags</h2><p>{tags.length} registered tags</p></div><div className="tag-list">{tags.map((tag) => <span key={tag.id}>{tag.id}</span>)}</div></section>
-    {modal === "user" && <Modal title="Create user" description="The email is the user's permanent identity." onClose={() => setModal(null)}><UserForm onClose={() => setModal(null)} onDone={refresh} onError={onError} /></Modal>}
+    {modal === "user" && <Modal title="Create user" description="The user gets a permanent UUID; email is contact information." onClose={() => setModal(null)}><UserForm onClose={() => setModal(null)} onDone={refresh} onError={onError} /></Modal>}
     {modal === "tag" && <Modal title="Create BearTag" description="The BearTag ID must match the physical device." onClose={() => setModal(null)}><TagForm onClose={() => setModal(null)} onDone={refresh} onError={onError} /></Modal>}
     {modal === "assignment" && selected && <Modal title="Assign BearTag" description="The period is checked against the complete assignment history." onClose={() => setModal(null)}><AssignmentForm user={selected} tags={tags} onClose={() => setModal(null)} onDone={refresh} onError={onError} /></Modal>}
   </>;

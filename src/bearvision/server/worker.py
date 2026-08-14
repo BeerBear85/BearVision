@@ -55,12 +55,18 @@ class ServerWorker:
         try:
             manifest, video, observations = await self._load(job_id)
             result = self._decide(manifest, observations)
-            await self.queue.finish(job_id, result, result.selected_user_email)
+            await self.queue.finish(job_id, result, result.selected_user_id)
             return result
         except (ComponentTimeout, ComponentUnavailable):
             # Keep the claimed processing folder durable; the polling loop retries it.
             raise
-        except (InvalidJob, ValidationError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        except (
+            FileNotFoundError,
+            InvalidJob,
+            ValidationError,
+            UnicodeDecodeError,
+            json.JSONDecodeError,
+        ) as exc:
             result = self._failure(job_id, "INVALID_JOB", str(exc))
             await self.queue.finish(job_id, result)
             return result
@@ -170,7 +176,7 @@ class ServerWorker:
             processedAt=processed_at,
             algorithmVersion=ALGORITHM_VERSION,
             selectedBearTagId=selection.selected_tag_id,
-            selectedUserEmail=assignment.user_id,
+            selectedUserId=assignment.user_id,
             assignmentId=assignment.id,
             candidates=selection.evidence,
             reason=f"{selection.reason}; one assignment covers the complete clip",

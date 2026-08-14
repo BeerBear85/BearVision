@@ -30,6 +30,8 @@ jobs:
         run: uv run ruff check src tests/remake tests/vision
       - name: Type-check active package
         run: uv run mypy
+      - name: Verify local Edge-to-server package handoff
+        run: uv run pytest tests/remake/test_local_end_to_end.py tests/remake/test_box_job_queue.py
       - name: Run behavioural gate
         run: uv run pytest
       - name: Build package

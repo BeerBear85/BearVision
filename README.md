@@ -18,14 +18,15 @@ BearTag BLE -------------------------------> |
 GoPro capture <----------------------------- |
 Box input queue <--------------------------- |
 
-Box input queue -> Python server worker -> processed/<normalized-email>
+Box input queue -> Python server worker -> processed/user_<uuid>
                                       \----> unresolved / failed
 
-Scenario events -> simulated adapters -> same orchestrator
+Scenario events -> simulated adapters -> shared local queue -> same server worker
 ```
 
-Edge and server communicate only through Box. The current production storage
-provider is Box. The active Android application,
+In production, Edge and server communicate only through Box. Edge Control
+simulations use `temp/simulation-queue`, which the server can consume with
+`config/server.local.yaml`. The active Android application,
 Google Drive integration and previous physical simulation are outside the 3.0
 runtime and have been moved to a separate local archive.
 
@@ -66,8 +67,10 @@ uv sync --locked --extra edge --extra dev
 uv run python -m bearvision.control simulate specs/scenarios/wakeboard-video-yolo.yaml
 ```
 
-Generate a scenario from a Blender scene export (MP4, rider-motion JSON and
-camera-info YAML in the same directory):
+Generate a scenario from a Blender scene export (MP4, one or more numbered
+rider-motion JSON files and camera-info YAML in the same directory). Schema 2.0
+exports provide each rider's `bear_tag_id`; later riders are aligned to the
+video timeline using `timing.frame_start`:
 
 ```bash
 uv run bearvision-generate-blender-scenario \
@@ -101,6 +104,10 @@ corepack pnpm install
 corepack pnpm build
 corepack pnpm serve
 ```
+
+To consume packages emitted by Edge Control simulation, set
+`BEARVISION_SERVER_CONFIG=config/server.local.yaml` before starting Server
+Control. Production continues to use `config/server.yaml` and Box.
 
 Open `http://127.0.0.1:4320`. It binds only to loopback. The admin UI includes
 a paginated video library, assignment evidence, queue operations and

@@ -161,7 +161,8 @@ class GoProConfiguration(BaseModel):
         # This would need to be implemented based on actual GoPro state format
         settings = camera_state.get("settings", {})
 
-        config_data = {}
+        video_resolution: VideoResolution | None = None
+        frame_rate: FrameRate | None = None
 
         # Map video resolution (example mapping)
         if "video_resolution" in settings:
@@ -172,7 +173,7 @@ class GoProConfiguration(BaseModel):
                 6: VideoResolution.RES_1080P,
                 # Add more mappings as needed
             }
-            config_data["video_resolution"] = res_mapping.get(settings["video_resolution"])
+            video_resolution = res_mapping.get(settings["video_resolution"])
 
         # Map frame rate (example mapping)
         if "frames_per_second" in settings:
@@ -183,11 +184,11 @@ class GoProConfiguration(BaseModel):
                 8: FrameRate.FPS_60,
                 # Add more mappings as needed
             }
-            config_data["frame_rate"] = fps_mapping.get(settings["frames_per_second"])
+            frame_rate = fps_mapping.get(settings["frames_per_second"])
 
         # Add more field mappings as needed
 
-        return cls(**config_data)
+        return cls(video_resolution=video_resolution, frame_rate=frame_rate)
 
     def to_gopro_settings(self) -> dict:
         """

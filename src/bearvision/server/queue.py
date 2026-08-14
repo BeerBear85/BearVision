@@ -6,9 +6,10 @@ import json
 import os
 from pathlib import Path
 import shutil
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from bearvision.contracts import BearTagJobObservation, EdgeJobManifest, JobResultManifest
+from bearvision.contracts.identity import user_id_from_storage_folder, user_storage_folder
 from bearvision.ports import CapturedMedia
 
 
@@ -53,15 +54,19 @@ class FileSystemJobQueue:
                 )
         processed = self.root / "processed"
         if processed.exists():
-            for user in processed.iterdir():
-                if user.is_dir():
+            for user_folder in processed.iterdir():
+                if user_folder.is_dir():
+                    try:
+                        user_id = user_id_from_storage_folder(user_folder.name)
+                    except ValueError:
+                        continue
                     result.extend(
                         {
                             "jobId": item.name,
                             "status": "processed",
-                            "userEmail": user.name,
+                            "userId": str(user_id),
                         }
-                        for item in user.iterdir()
+                        for item in user_folder.iterdir()
                         if item.is_dir()
                     )
         return result
@@ -144,16 +149,16 @@ class FileSystemJobQueue:
         return (self.root / "processing" / job_id / filename).read_bytes()
 
     async def finish(
-        self, job_id: str, result: JobResultManifest, user_email: str | None = None
+        self, job_id: str, result: JobResultManifest, user_id: UUID | None = None
     ) -> None:
         source = self.root / "processing" / job_id
         temporary = source / ".result.json.tmp"
         temporary.write_text(result.model_dump_json(by_alias=True, indent=2) + "\n", encoding="utf-8")
         os.replace(temporary, source / "result.json")
         if result.status == "processed":
-            if user_email is None:
-                raise ValueError("processed result requires user email")
-            destination = self.root / "processed" / user_email / job_id
+            if user_id is None:
+                raise ValueError("processed result requires user id")
+            destination = self.root / "processed" / user_storage_folder(user_id) / job_id
         else:
             destination = self.root / result.status / job_id
         destination.parent.mkdir(parents=True, exist_ok=True)
@@ -188,9 +193,15 @@ class FileSystemJobQueue:
         unresolved = jobs(self.root / "unresolved")
         failed = jobs(self.root / "failed")
         processed: list[dict[str, str]] = []
-        for user in sorted((self.root / "processed").iterdir()):
-            if user.is_dir():
-                processed.extend({**item, "userEmail": user.name} for item in jobs(user))
+        for user_folder in sorted((self.root / "processed").iterdir()):
+            if user_folder.is_dir():
+                try:
+                    user_id = user_id_from_storage_folder(user_folder.name)
+                except ValueError:
+                    continue
+                processed.extend(
+                    {**item, "userId": str(user_id)} for item in jobs(user_folder)
+                )
         all_jobs = ready + processing + processed + unresolved + failed
         for state, state_jobs in (
             ("ready", ready),

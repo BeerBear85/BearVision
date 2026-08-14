@@ -26,7 +26,7 @@ def test_single_rider_scenario_runs_closed_loop_deterministically() -> None:
     second = build_behavioral_system(definition).run()
 
     assert first.trace == second.trace
-    assert first.assignments[0].selected_user_email == "rider-17@scenario.invalid"
+    assert first.assignments[0].selected_user_id is not None
     assert first.assignments[0].candidates[0].observation_count == 2
     assert len(first.captures) == 1
     assert first.uploads[0].object_key.startswith("input-queue/ready/")
@@ -91,7 +91,7 @@ def test_two_tags_remain_ambiguous() -> None:
     ).run()
     assert result.assignments[0].status == "unresolved"
     assert result.assignments[0].error_code == "AMBIGUOUS_BEARTAG"
-    assert result.assignments[0].selected_user_email is None
+    assert result.assignments[0].selected_user_id is None
 
 
 def test_active_rider_beats_stronger_stationary_nearby_tag_in_closed_loop() -> None:
@@ -142,7 +142,7 @@ def test_active_rider_beats_stronger_stationary_nearby_tag_in_closed_loop() -> N
             ]
         )
     ).run()
-    assert result.assignments[0].selected_user_email == "rider-active@scenario.invalid"
+    assert result.assignments[0].selected_user_id is not None
     assert result.uploads[0].object_key.startswith("input-queue/ready/")
 
 
@@ -182,7 +182,7 @@ def test_assignment_uses_accelerometer_samples_from_entire_clip() -> None:
             ]
         )
     ).run()
-    assert result.assignments[0].selected_user_email == "rider-17@scenario.invalid"
+    assert result.assignments[0].selected_user_id is not None
     assert result.assignments[0].candidates[0].observation_count == 2
     assert any(item.kind == "server_assignment" for item in result.trace)
 

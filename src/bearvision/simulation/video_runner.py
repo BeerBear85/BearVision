@@ -14,6 +14,7 @@ from bearvision.contracts import ScenarioDefinition, StorageReceipt
 from bearvision.edge.job_package import build_edge_job
 from bearvision.edge.orchestrator import BearVisionOrchestrator, OrchestrationResult
 from bearvision.processing import VirtualCameramanProcessor
+from bearvision.ports import JobQueue
 
 from bearvision.server import (
     BearTagAssignment,
@@ -25,7 +26,12 @@ from bearvision.server import (
 )
 from .adapters import InMemoryJobQueue, SimulatedTagScanner, VirtualClock
 from .engine import TraceEntry
-from .runner import ScenarioRunResult, _scenario_email, evaluate_expectations
+from .runner import (
+    ScenarioRunResult,
+    _scenario_email,
+    _scenario_user_id,
+    evaluate_expectations,
+)
 from .scenario_inputs import generate_bear_tag_series
 from .video import RecordedVideoCamera, RecordedVideoFrameSource
 
@@ -41,8 +47,8 @@ class VideoScenarioRunner:
         clock: VirtualClock,
         camera: RecordedVideoCamera,
         frame_source: RecordedVideoFrameSource,
-        queue: InMemoryJobQueue,
-        worker: ServerWorker,
+        queue: JobQueue,
+        worker: ServerWorker | None,
         post_processor: VirtualCameramanProcessor,
     ) -> None:
         self.scenario = scenario
@@ -63,6 +69,8 @@ class VideoScenarioRunner:
         recording_duration_s: float = 5.0,
         repository_root: Path | None = None,
         capture_dir: Path | None = None,
+        job_queue: JobQueue | None = None,
+        process_server: bool = True,
     ) -> "VideoScenarioRunner":
         if scenario.video is None:
             raise ValueError("video scenario requires video configuration")
@@ -95,9 +103,13 @@ class VideoScenarioRunner:
             capture_dir=capture_dir or root / "temp/captures",
         )
         frame_source = RecordedVideoFrameSource(sample_fps=scenario.video.sample_fps)
-        queue = InMemoryJobQueue()
+        queue: JobQueue = job_queue or InMemoryJobQueue()
         users = tuple(
-            UserRecord(id=_scenario_email(item.rider_id), displayName=item.rider_id)
+            UserRecord(
+                id=_scenario_user_id(item.rider_id),
+                email=_scenario_email(item.rider_id),
+                displayName=item.rider_id,
+            )
             for item in registry
         )
         server_registry = InMemoryUserRegistry(
@@ -107,7 +119,7 @@ class VideoScenarioRunner:
                 assignments=tuple(
                     BearTagAssignment(
                         id=f"scenario-{item.tag_id}",
-                        userId=_scenario_email(item.rider_id),
+                        userId=_scenario_user_id(item.rider_id),
                         bearTagId=item.tag_id,
                         validFrom=clock.start_utc - timedelta(days=1),
                         validTo=clock.start_utc + timedelta(days=1),
@@ -150,7 +162,11 @@ class VideoScenarioRunner:
             camera=camera,
             frame_source=frame_source,
             queue=queue,
-            worker=ServerWorker(queue, server_registry, clock, assignment_policy),
+            worker=(
+                ServerWorker(queue, server_registry, clock, assignment_policy)
+                if process_server
+                else None
+            ),
             post_processor=post_processor,
         )
 
@@ -163,6 +179,7 @@ class VideoScenarioRunner:
         detection_times_s: list[float] = []
         failures: list[dict[str, str]] = []
         receipts: list[StorageReceipt] = []
+        assignments = []
         await self.orchestrator.start()
         try:
             async for frame in self.frame_source.frames():
@@ -233,8 +250,9 @@ class VideoScenarioRunner:
             )
             assert manifest.video.sha256 == hashlib.sha256(processed_content).hexdigest()
             await self.queue.publish(manifest, processed.media, packaged_observations)
-            server_result = await self.worker.run_once()
-            assert server_result is not None
+            server_result = await self.worker.run_once() if self.worker is not None else None
+            if server_result is not None:
+                assignments.append(server_result)
             receipt = StorageReceipt(
                 asset_id=processed.media.asset.asset_id,
                 object_key=f"input-queue/ready/{manifest.job_id}",
@@ -256,11 +274,6 @@ class VideoScenarioRunner:
                         result.clip_end_monotonic_s,
                         "finalize_clip",
                         {"request_id": result.request_id},
-                    ),
-                    (
-                        result.clip_end_monotonic_s,
-                        "server_assignment",
-                        server_result.model_dump(mode="json", by_alias=True),
                     ),
                     (
                         result.clip_end_monotonic_s,
@@ -304,6 +317,14 @@ class VideoScenarioRunner:
                     ),
                 ]
             )
+            if server_result is not None:
+                trace_events.append(
+                    (
+                        result.clip_end_monotonic_s,
+                        "server_assignment",
+                        server_result.model_dump(mode="json", by_alias=True),
+                    )
+                )
             for tracking_frame in processed.tracking_frames:
                 trace_events.append(
                     (
@@ -324,19 +345,20 @@ class VideoScenarioRunner:
             TraceEntry(at_s=at_s, sequence=sequence, kind=kind, payload=payload)
             for sequence, (_, (at_s, kind, payload)) in enumerate(ordered)
         )
-        assignments = tuple(self.queue.results.values())
+        assignment_results = tuple(assignments)
         captures = tuple(media.asset.asset_id for media in self.camera.captures.values())
         uploads = tuple(receipts)
         expectation_failures = evaluate_expectations(
             self.scenario,
-            assignments,
+            assignment_results,
             captures,
             uploads,
             detection_times_s=tuple(detection_times_s),
+            evaluate_server=self.worker is not None,
         )
         return ScenarioRunResult(
             trace=trace,
-            assignments=assignments,
+            assignments=assignment_results,
             captures=captures,
             uploads=uploads,
             failures=tuple(failures),

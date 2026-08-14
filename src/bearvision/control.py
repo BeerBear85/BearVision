@@ -12,6 +12,7 @@ import time
 from bearvision.config import load_edge_config
 from bearvision.contracts import load_scenario
 from bearvision.edge import build_behavioral_system, build_real_orchestrator
+from bearvision.server import FileSystemJobQueue
 
 
 def emit(kind: str, payload: dict | None = None, *, at_s: float | None = None) -> None:
@@ -29,10 +30,21 @@ def emit(kind: str, payload: dict | None = None, *, at_s: float | None = None) -
     )
 
 
-def simulate(path: Path, *, realtime: bool, speed: float) -> int:
+def simulate(
+    path: Path,
+    *,
+    realtime: bool,
+    speed: float,
+    local_queue_root: Path | None = None,
+) -> int:
     if speed <= 0:
         raise ValueError("speed must be positive")
-    result = build_behavioral_system(load_scenario(path)).run()
+    queue = FileSystemJobQueue(local_queue_root) if local_queue_root else None
+    result = build_behavioral_system(
+        load_scenario(path),
+        job_queue=queue,
+        process_server=queue is None,
+    ).run()
     previous_at_s = 0.0
     for entry in result.trace:
         if entry.kind == "server_assignment":
@@ -74,11 +86,17 @@ def main() -> int:
     simulation.add_argument("scenario", type=Path)
     simulation.add_argument("--realtime", action="store_true")
     simulation.add_argument("--speed", type=float, default=1.0)
+    simulation.add_argument("--local-queue-root", type=Path)
     real = commands.add_parser("hardware")
     real.add_argument("--config", type=Path, default=Path("config/edge.yaml"))
     args = parser.parse_args()
     if args.command == "simulate":
-        return simulate(args.scenario, realtime=args.realtime, speed=args.speed)
+        return simulate(
+            args.scenario,
+            realtime=args.realtime,
+            speed=args.speed,
+            local_queue_root=args.local_queue_root,
+        )
     return asyncio.run(hardware(args.config))
 
 

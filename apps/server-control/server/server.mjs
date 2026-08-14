@@ -31,6 +31,9 @@ export function pythonCommand() {
 
 export function adminArgs(command, body = {}) {
   if (command === "create-user") return [command, "--email", body.email, "--display-name", body.displayName];
+  if (command === "update-user-email") return [
+    command, "--user-id", body.userId, "--email", body.email,
+  ];
   if (command === "create-tag") return [command, "--id", body.id];
   if (command === "create-assignment" || command === "validate-assignment") return [
     command,
@@ -209,6 +212,15 @@ async function handle(request, response) {
     const body = request.method === "POST" ? await readJson(request) : {};
     if (request.method === "POST" && url.pathname === "/api/users") {
       writeJson(response, 201, await runPython("create-user", body)); return;
+    }
+    const userEmail = url.pathname.match(
+      /^\/api\/users\/([0-9a-fA-F-]{36})\/email$/,
+    );
+    if (request.method === "POST" && userEmail) {
+      writeJson(response, 200, await runPython("update-user-email", {
+        userId: userEmail[1], email: body.email,
+      }));
+      return;
     }
     if (request.method === "POST" && url.pathname === "/api/beartags") {
       writeJson(response, 201, await runPython("create-tag", body)); return;

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import os
 import base64
 import json
@@ -47,6 +49,17 @@ class BoxHandler:
         self.config = config
         self.client: Optional["Client"] = None
         self.root_id: Optional[str] = None
+
+    @property
+    def _client(self) -> "Client":
+        if self.client is None:
+            raise RuntimeError("Box client is not connected")
+        return self.client
+
+    def _root_id(self) -> str:
+        if self.root_id is None:
+            raise RuntimeError("Box root folder is not initialized")
+        return self.root_id
 
     def _authenticate(self):
         """
@@ -142,7 +155,7 @@ class BoxHandler:
         else:
             root_name = self.config.get("BOX", {}).get("root_folder", "bearvison_files")
 
-        root = self.client.folder("0")
+        root = self._client.folder("0")
         for item in root.get_items():
             if item.type == "folder" and item.name == root_name:
                 self.root_id = item.id
@@ -175,11 +188,11 @@ class BoxHandler:
             str: Box folder ID.
         """
         self.connect()
-        parent_id = self.root_id
+        parent_id = self._root_id()
         if not folder_path:
             return parent_id
         for name in Path(folder_path).parts:
-            folder = self.client.folder(parent_id)
+            folder = self._client.folder(parent_id)
             for item in folder.get_items():
                 if item.type == "folder" and item.name == name:
                     parent_id = item.id
@@ -200,11 +213,11 @@ class BoxHandler:
             Optional[str]: Folder ID if found, otherwise ``None``.
         """
         self.connect()
-        parent_id = self.root_id
+        parent_id = self._root_id()
         if not folder_path:
             return parent_id
         for name in Path(folder_path).parts:
-            folder = self.client.folder(parent_id)
+            folder = self._client.folder(parent_id)
             for item in folder.get_items():
                 if item.type == "folder" and item.name == name:
                     parent_id = item.id
@@ -223,7 +236,7 @@ class BoxHandler:
         Outputs:
             Optional[str]: File ID if found, otherwise ``None``.
         """
-        folder = self.client.folder(folder_id)
+        folder = self._client.folder(folder_id)
         for item in folder.get_items():
             if item.type == "file" and item.name == filename:
                 return item.id
@@ -251,9 +264,9 @@ class BoxHandler:
         if existing_id and not overwrite:
             raise FileExistsError(f"{remote_path} already exists")
         if existing_id:
-            self.client.file(existing_id).update_contents(local_path)
+            self._client.file(existing_id).update_contents(local_path)
         else:
-            self.client.folder(folder_id).upload(local_path, name)
+            self._client.folder(folder_id).upload(local_path, name)
 
     def download_file(self, remote_path: str, local_path: str):
         """
@@ -274,7 +287,7 @@ class BoxHandler:
         if not file_id:
             raise FileNotFoundError(remote_path)
         with open(local_path, "wb") as fh:
-            self.client.file(file_id).download_to(fh)
+            self._client.file(file_id).download_to(fh)
 
     def delete_file(self, remote_path: str):
         """
@@ -293,7 +306,7 @@ class BoxHandler:
         folder_id = self._get_folder_id(folder)
         file_id = self._find_file(folder_id, name)
         if file_id:
-            self.client.file(file_id).delete()
+            self._client.file(file_id).delete()
 
     def list_files(self, remote_path: str = "") -> list:
         """
@@ -310,7 +323,7 @@ class BoxHandler:
         folder_id = self._find_folder_id(remote_path)
         if folder_id is None:
             return []
-        return [item.name for item in self.client.folder(folder_id).get_items() if item.type == "file"]
+        return [item.name for item in self._client.folder(folder_id).get_items() if item.type == "file"]
 
     def list_folders(self, remote_path: str = "") -> list[str]:
         """List direct child folder names without creating the requested path."""
@@ -321,7 +334,7 @@ class BoxHandler:
             return []
         return [
             item.name
-            for item in self.client.folder(folder_id).get_items()
+            for item in self._client.folder(folder_id).get_items()
             if item.type == "folder"
         ]
 
@@ -352,7 +365,7 @@ class BoxHandler:
         destination_parent = os.path.dirname(destination_path)
         destination_name = os.path.basename(destination_path)
         parent_id = self._get_folder_id(destination_parent)
-        self.client.folder(source_id).move(
-            self.client.folder(parent_id),
+        self._client.folder(source_id).move(
+            self._client.folder(parent_id),
             name=destination_name,
         )

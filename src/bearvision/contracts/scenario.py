@@ -129,11 +129,20 @@ class GeneratedScenarioSource(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
     generator: Literal["blender-motion-v1"]
-    motion_path: str = Field(min_length=1)
+    motion_path: str | None = Field(default=None, min_length=1)
+    motion_paths: tuple[str, ...] | None = None
     camera_path: str | None = Field(default=None, min_length=1)
     reference_rssi_dbm_at_1m: int = Field(ge=-127, le=20)
     path_loss_exponent: float = Field(gt=0)
     gravity_mps2: float = Field(gt=0)
+
+    @model_validator(mode="after")
+    def validate_motion_provenance(self) -> "GeneratedScenarioSource":
+        if bool(self.motion_path) == bool(self.motion_paths):
+            raise ValueError("generated source must declare motion_path or motion_paths")
+        if self.motion_paths and any(not path for path in self.motion_paths):
+            raise ValueError("generated motion paths must not be empty")
+        return self
 
 
 class ScenarioDefinition(BaseModel):

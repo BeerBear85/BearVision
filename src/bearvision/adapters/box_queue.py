@@ -7,8 +7,10 @@ import json
 from pathlib import Path
 import tempfile
 from typing import Any
+from uuid import UUID
 
 from bearvision.contracts import BearTagJobObservation, EdgeJobManifest, JobResultManifest
+from bearvision.contracts.identity import user_id_from_storage_folder, user_storage_folder
 from bearvision.ports import CapturedMedia
 
 from ._errors import translated_error
@@ -38,11 +40,20 @@ class BoxJobQueue:
         ):
             if self.handler.folder_exists(path):
                 return status, path, None
-        for user in self.handler.list_folders("processed"):
-            path = f"processed/{user}/{job_id}"
+        for user_folder, user_id in self._processed_users():
+            path = f"processed/{user_folder}/{job_id}"
             if self.handler.folder_exists(path):
-                return "processed", path, user
+                return "processed", path, str(user_id)
         raise FileNotFoundError(job_id)
+
+    def _processed_users(self) -> list[tuple[str, UUID]]:
+        result: list[tuple[str, UUID]] = []
+        for folder in self.handler.list_folders("processed"):
+            try:
+                result.append((folder, user_id_from_storage_folder(folder)))
+            except ValueError:
+                continue
+        return result
 
     def admin_list_jobs(self) -> list[dict[str, str]]:
         """List job identities and locations without downloading manifests."""
@@ -58,10 +69,10 @@ class BoxJobQueue:
                 {"jobId": job_id, "status": status}
                 for job_id in self.handler.list_folders(path)
             )
-        for user in self.handler.list_folders("processed"):
+        for user_folder, user_id in self._processed_users():
             result.extend(
-                {"jobId": job_id, "status": "processed", "userEmail": user}
-                for job_id in self.handler.list_folders(f"processed/{user}")
+                {"jobId": job_id, "status": "processed", "userId": str(user_id)}
+                for job_id in self.handler.list_folders(f"processed/{user_folder}")
             )
         return result
 
@@ -78,6 +89,8 @@ class BoxJobQueue:
                 self.handler.download_file, f"{folder}/{filename}", str(temporary)
             )
             return temporary.read_bytes()
+        except FileNotFoundError:
+            raise
         except Exception as exc:
             raise translated_error(exc, "read archived Box job file") from exc
         finally:
@@ -95,6 +108,8 @@ class BoxJobQueue:
             await asyncio.to_thread(
                 self.handler.download_file, f"{folder}/{filename}", str(destination)
             )
+        except FileNotFoundError:
+            raise
         except Exception as exc:
             raise translated_error(exc, "download archived Box job file") from exc
 
@@ -102,10 +117,10 @@ class BoxJobQueue:
         for path in self._paths(job_id):
             if await asyncio.to_thread(self.handler.folder_exists, path):
                 return True
-        users = await asyncio.to_thread(self.handler.list_folders, "processed")
-        for user in users:
+        users = await asyncio.to_thread(self._processed_users)
+        for user_folder, _ in users:
             if await asyncio.to_thread(
-                self.handler.folder_exists, f"processed/{user}/{job_id}"
+                self.handler.folder_exists, f"processed/{user_folder}/{job_id}"
             ):
                 return True
         return False
@@ -204,6 +219,8 @@ class BoxJobQueue:
                 str(temporary),
             )
             return temporary.read_bytes()
+        except FileNotFoundError:
+            raise
         except Exception as exc:
             raise translated_error(exc, "read Box job file") from exc
         finally:
@@ -211,7 +228,7 @@ class BoxJobQueue:
                 temporary.unlink(missing_ok=True)
 
     async def finish(
-        self, job_id: str, result: JobResultManifest, user_email: str | None = None
+        self, job_id: str, result: JobResultManifest, user_id: UUID | None = None
     ) -> None:
         try:
             await self._upload_bytes(
@@ -220,9 +237,9 @@ class BoxJobQueue:
                 overwrite=True,
             )
             if result.status == "processed":
-                if user_email is None:
-                    raise ValueError("processed result requires user email")
-                destination = f"processed/{user_email}/{job_id}"
+                if user_id is None:
+                    raise ValueError("processed result requires user id")
+                destination = f"processed/{user_storage_folder(user_id)}/{job_id}"
             else:
                 destination = f"{result.status}/{job_id}"
             await asyncio.to_thread(
@@ -269,9 +286,9 @@ class BoxJobQueue:
             unresolved = self.handler.list_folders("unresolved")
             failed = self.handler.list_folders("failed")
             processed = [
-                (user, job_id)
-                for user in self.handler.list_folders("processed")
-                for job_id in self.handler.list_folders(f"processed/{user}")
+                (user_folder, user_id, job_id)
+                for user_folder, user_id in self._processed_users()
+                for job_id in self.handler.list_folders(f"processed/{user_folder}")
             ]
             jobs = (
                 [{"jobId": item, "status": "ready"} for item in ready]
@@ -280,10 +297,10 @@ class BoxJobQueue:
                     {
                         "jobId": job_id,
                         "status": "processed",
-                        "userEmail": user,
-                        **self._result_details(f"processed/{user}/{job_id}"),
+                        "userId": str(user_id),
+                        **self._result_details(f"processed/{user_folder}/{job_id}"),
                     }
-                    for user, job_id in processed
+                    for user_folder, user_id, job_id in processed
                 ]
                 + [
                     {

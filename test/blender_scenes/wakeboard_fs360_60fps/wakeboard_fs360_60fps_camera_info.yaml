@@ -1,0 +1,7 @@
+camera:
+  static: true
+  transform_world:
+    location_m:
+      x: -8.0
+      y: -30.5
+      z: 3.0

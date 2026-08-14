@@ -156,6 +156,9 @@ def parser() -> argparse.ArgumentParser:
     create_user = commands.add_parser("create-user")
     create_user.add_argument("--email", required=True)
     create_user.add_argument("--display-name", required=True)
+    update_user_email = commands.add_parser("update-user-email")
+    update_user_email.add_argument("--user-id", required=True)
+    update_user_email.add_argument("--email", required=True)
     create_tag = commands.add_parser("create-tag")
     create_tag.add_argument("--id", required=True)
     create_assignment = commands.add_parser("create-assignment")
@@ -222,13 +225,19 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "materialize-user-media":
             base = args.config.resolve().parents[1]
             media = AdminMediaService(
-                queue, _resolve(base, config.scratch_dir) / "app-media"
+                queue,
+                _resolve(base, config.scratch_dir) / "app-media",
+                registry=registry,
             )
             output = asyncio.run(
                 media.materialize_for_user(args.user_id, args.job_id, args.kind)
             )
         elif args.command == "create-user":
             output = registry.create_user(args.email, args.display_name).model_dump(
+                mode="json", by_alias=True
+            )
+        elif args.command == "update-user-email":
+            output = registry.update_user_email(args.user_id, args.email).model_dump(
                 mode="json", by_alias=True
             )
         elif args.command == "create-tag":

@@ -5,7 +5,9 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import Annotated, Literal
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from .time import UtcDatetime
 
 
 ContractVersion = Literal["2.0"]
@@ -42,7 +44,7 @@ class TagObservation(ContractModel):
     """One decoded BLE observation from a registered or unknown tag."""
 
     tag_id: Identifier
-    observed_at_utc: AwareDatetime
+    observed_at_utc: UtcDatetime
     observed_at_monotonic_s: float = Field(ge=0)
     rssi_dbm: int = Field(ge=-127, le=20)
     acceleration_mps2: Vector3
@@ -132,7 +134,7 @@ class MediaAsset(ContractModel):
     filename: str = Field(min_length=1, max_length=255)
     content_type: str = Field(min_length=1, max_length=100)
     size_bytes: int = Field(ge=0)
-    created_at_utc: AwareDatetime
+    created_at_utc: UtcDatetime
 
 
 class CaptureResult(ContractModel):
@@ -158,5 +160,5 @@ class StorageReceipt(ContractModel):
 
     asset_id: Identifier
     object_key: str = Field(min_length=1, max_length=1024)
-    stored_at_utc: AwareDatetime
+    stored_at_utc: UtcDatetime
     checksum_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")

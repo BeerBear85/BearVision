@@ -1,0 +1,14 @@
+config_schema_version: "1.0"
+config_kind: bearvision-server
+admin: {host: 127.0.0.1, port: 4320}
+registry_path: data/server/user-registry.json
+local_queue_root: temp/simulation-queue
+scratch_dir: temp/server-scratch
+worker:
+  poll_interval_s: 1.0
+  retry_delay_s: 5.0
+assignment: {}
+storage:
+  provider: box
+  root_folder: BearVision
+  credential_env: BOX_CONFIG_JSON

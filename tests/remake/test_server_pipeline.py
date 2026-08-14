@@ -62,12 +62,12 @@ async def publish(queue: FileSystemJobQueue, job_id: str = "job-1") -> bool:
 
 def registry(path: Path, *, valid_to: datetime | None = None) -> FileUserRegistry:
     store = FileUserRegistry(path)
-    store.create_user(" Bear.Eskildsen@GMAIL.com ", "Bear Eskildsen")
+    user = store.create_user(" Bear.Eskildsen@GMAIL.com ", "Bear Eskildsen")
     store.create_bear_tag("BearTag-666")
     store.create_assignment(
         BearTagAssignment(
             id="assignment-1",
-            userId="bear.eskildsen@gmail.com",
+            userId=user.id,
             bearTagId="BearTag-666",
             validFrom=START - timedelta(days=1),
             validTo=valid_to or START + timedelta(days=1),
@@ -85,10 +85,11 @@ def test_complete_job_is_scored_and_moved_to_normalized_user(tmp_path: Path) -> 
 
     assert result is not None and result.status == "processed"
     assert result.selected_bear_tag_id == "BearTag-666"
-    assert result.selected_user_email == "bear.eskildsen@gmail.com"
+    user_id = store.load().users[0].id
+    assert result.selected_user_id == user_id
     result_path = (
         tmp_path
-        / "BearVision/processed/bear.eskildsen@gmail.com/job-1/result.json"
+        / f"BearVision/processed/user_{user_id}/job-1/result.json"
     )
     persisted = json.loads(result_path.read_text(encoding="utf-8"))
     assert persisted["assignmentId"] == "assignment-1"
@@ -122,7 +123,7 @@ def test_overlapping_assignment_is_rejected_without_partial_write(tmp_path: Path
         store.create_assignment(
             BearTagAssignment(
                 id="assignment-2",
-                userId="bear.eskildsen@gmail.com",
+                userId=store.load().users[0].id,
                 bearTagId="BearTag-666",
                 validFrom=START,
                 validTo=START + timedelta(hours=1),
@@ -140,7 +141,7 @@ def test_assignment_can_be_preflighted_without_writing_registry(tmp_path: Path) 
     proposed, _ = store.validate_assignment(
         BearTagAssignment(
             id="assignment-preview",
-            userId="bear.eskildsen@gmail.com",
+            userId=store.load().users[0].id,
             bearTagId="BearTag-2",
             validFrom=START,
             validTo=START + timedelta(hours=1),
@@ -245,3 +246,20 @@ def test_unexpected_queue_failure_becomes_technical_result(
     assert result is not None and result.status == "failed"
     assert result.error_code == "TECHNICAL_ERROR"
     assert queue.snapshot()["counts"]["failed"] == 1
+
+
+def test_missing_package_file_is_failed_and_does_not_block_next_job(tmp_path: Path) -> None:
+    queue = FileSystemJobQueue(tmp_path / "BearVision")
+    store = registry(tmp_path / "registry.json")
+    assert asyncio.run(publish(queue, "job-broken"))
+    assert asyncio.run(publish(queue, "job-valid"))
+    (tmp_path / "BearVision/input-queue/ready/job-broken/video.mp4").unlink()
+    worker = ServerWorker(queue, store, VirtualClock(START))
+
+    failed = asyncio.run(worker.run_once())
+    processed = asyncio.run(worker.run_once())
+
+    assert failed is not None and failed.error_code == "INVALID_JOB"
+    assert processed is not None and processed.status == "processed"
+    assert queue.snapshot()["counts"]["failed"] == 1
+    assert queue.snapshot()["counts"]["processed"] == 1

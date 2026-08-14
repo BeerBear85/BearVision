@@ -15,6 +15,8 @@ const distRoot = join(appRoot, "dist");
 const scenarioRoot = join(repoRoot, "specs", "scenarios");
 const configPath = join(repoRoot, "config", "edge.yaml");
 const captureRoot = join(repoRoot, "temp", "captures");
+const localQueueRoot = process.env.BEARVISION_LOCAL_QUEUE_ROOT
+  ?? join(repoRoot, "temp", "simulation-queue");
 const port = Number(process.env.BEARVISION_CONTROL_PORT ?? 4310);
 const state = new ControlState();
 const clients = new Set();
@@ -154,7 +156,10 @@ function attachOutput(stream, source) {
 function startRuntime(mode, scenarioName = null) {
   state.start({ mode, scenario: scenarioName });
   const args = mode === "simulation"
-    ? ["-m", "bearvision.control", "simulate", safeScenario(scenarioName), "--realtime"]
+    ? [
+      "-m", "bearvision.control", "simulate", safeScenario(scenarioName),
+      "--realtime", "--local-queue-root", localQueueRoot,
+    ]
     : ["-m", "bearvision.control", "hardware", "--config", configPath];
   child = spawn(pythonCommand(), args, { cwd: repoRoot, env: process.env, stdio: ["ignore", "pipe", "pipe"] });
   attachOutput(child.stdout, "stdout");

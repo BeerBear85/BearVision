@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass
 from datetime import timedelta
+from uuid import NAMESPACE_URL, UUID, uuid5
 
 from bearvision.config import AssignmentConfig
 from bearvision.contracts import (
@@ -17,7 +18,7 @@ from bearvision.contracts import (
     Vector3,
 )
 from bearvision.edge.orchestrator import BearVisionOrchestrator, OrchestrationResult
-from bearvision.ports import ComponentError, VideoFrame
+from bearvision.ports import ComponentError, JobQueue, VideoFrame
 from bearvision.server import (
     BearTagAssignment,
     BearTagRecord,
@@ -42,6 +43,10 @@ def _scenario_email(rider_id: str) -> str:
     return normalize_user_email(rider_id if "@" in rider_id else f"{rider_id}@scenario.invalid")
 
 
+def _scenario_user_id(rider_id: str) -> UUID:
+    return uuid5(NAMESPACE_URL, f"bearvision:scenario-user:{_scenario_email(rider_id)}")
+
+
 @dataclass(frozen=True, slots=True)
 class ScenarioRunResult:
     trace: tuple[TraceEntry, ...]
@@ -59,27 +64,29 @@ def evaluate_expectations(
     uploads: tuple[StorageReceipt, ...],
     *,
     detection_times_s: tuple[float, ...] = (),
+    evaluate_server: bool = True,
 ) -> tuple[str, ...]:
     expected = scenario.expect
     failures: list[str] = []
     first = assignments[0] if assignments else None
-    if expected.rider_id is not None:
-        expected_email = _scenario_email(expected.rider_id)
-        if first is None or first.selected_user_email != expected_email:
-            actual = first.selected_user_email if first is not None else None
+    if evaluate_server and expected.rider_id is not None:
+        expected_user_id = _scenario_user_id(expected.rider_id)
+        if first is None or first.selected_user_id != expected_user_id:
+            actual = first.selected_user_id if first is not None else None
             failures.append(f"expected rider_id={expected.rider_id!r}, got {actual!r}")
-    if expected.assignment_status is not None:
-        actual = None
+    if evaluate_server and expected.assignment_status is not None:
+        actual_status: str | None = None
         if first is not None:
             if first.status == "processed":
-                actual = "assigned"
+                actual_status = "assigned"
             elif first.error_code == "AMBIGUOUS_BEARTAG":
-                actual = "ambiguous"
+                actual_status = "ambiguous"
             else:
-                actual = "unassigned"
-        if actual != expected.assignment_status:
+                actual_status = "unassigned"
+        if actual_status != expected.assignment_status:
             failures.append(
-                f"expected assignment_status={expected.assignment_status!r}, got {actual!r}"
+                f"expected assignment_status={expected.assignment_status!r}, "
+                f"got {actual_status!r}"
             )
     if expected.capture_triggered is not None and bool(captures) != expected.capture_triggered:
         failures.append(
@@ -109,11 +116,11 @@ class ClosedLoopScenarioRunner:
         scenario: ScenarioDefinition,
         *,
         orchestrator: BearVisionOrchestrator,
-        worker: ServerWorker,
+        worker: ServerWorker | None,
         clock: VirtualClock,
         observations: tuple[TagObservation, ...],
         camera: SimulatedCamera,
-        queue: InMemoryJobQueue,
+        queue: JobQueue,
     ) -> None:
         self.scenario = scenario
         self.orchestrator = orchestrator
@@ -130,6 +137,8 @@ class ClosedLoopScenarioRunner:
         *,
         assignment_policy: AssignmentConfig | None = None,
         recording_duration_s: float = 5.0,
+        job_queue: JobQueue | None = None,
+        process_server: bool = True,
     ) -> "ClosedLoopScenarioRunner":
         if recording_duration_s <= 0:
             raise ValueError("recording_duration_s must be positive")
@@ -170,14 +179,18 @@ class ClosedLoopScenarioRunner:
                     ),
                 )
         users = tuple(
-            UserRecord(id=_scenario_email(rider), displayName=rider)
+            UserRecord(
+                id=_scenario_user_id(rider),
+                email=_scenario_email(rider),
+                displayName=rider,
+            )
             for rider in sorted(set(riders_by_tag.values()))
         )
         tags = tuple(BearTagRecord(id=tag_id) for tag_id in sorted(riders_by_tag))
         assignments = tuple(
             BearTagAssignment(
                 id=f"scenario-{tag_id}",
-                userId=_scenario_email(rider),
+                userId=_scenario_user_id(rider),
                 bearTagId=tag_id,
                 validFrom=clock.start_utc - timedelta(days=1),
                 validTo=clock.start_utc + timedelta(days=1),
@@ -188,7 +201,9 @@ class ClosedLoopScenarioRunner:
             RegistryData(users=users, bearTags=tags, assignments=assignments)
         )
         camera = SimulatedCamera(clock, fail_capture=scenario.faults.camera_capture)
-        queue = InMemoryJobQueue(fail_publish=scenario.faults.storage_upload)
+        queue: JobQueue = job_queue or InMemoryJobQueue(
+            fail_publish=scenario.faults.storage_upload
+        )
         orchestrator = BearVisionOrchestrator(
             clock=clock,
             camera=camera,
@@ -203,7 +218,11 @@ class ClosedLoopScenarioRunner:
         return cls(
             scenario,
             orchestrator=orchestrator,
-            worker=ServerWorker(queue, registry, clock, assignment_policy),
+            worker=(
+                ServerWorker(queue, registry, clock, assignment_policy)
+                if process_server
+                else None
+            ),
             clock=clock,
             observations=tuple(sorted(observations, key=lambda item: item.observed_at_monotonic_s)),
             camera=camera,
@@ -244,11 +263,12 @@ class ClosedLoopScenarioRunner:
             await self.orchestrator.stop()
 
         server_results: list[JobResultManifest] = []
-        while True:
-            processed_result = await self.worker.run_once()
-            if processed_result is None:
-                break
-            server_results.append(processed_result)
+        if self.worker is not None:
+            while True:
+                processed_result = await self.worker.run_once()
+                if processed_result is None:
+                    break
+                server_results.append(processed_result)
         for edge_result in edge_results.values():
             trace_events.extend(
                 [
@@ -299,6 +319,7 @@ class ClosedLoopScenarioRunner:
             captures,
             uploads,
             detection_times_s=tuple(detection_times),
+            evaluate_server=self.worker is not None,
         )
         return ScenarioRunResult(
             trace=trace,

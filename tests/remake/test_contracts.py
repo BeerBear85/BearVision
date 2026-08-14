@@ -1,10 +1,14 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from uuid import uuid4
 
 import pytest
 from pydantic import ValidationError
 
 from bearvision.contracts import (
     CaptureRequest,
+    EdgeJobManifest,
+    JobResultManifest,
+    JobVideo,
     RiderAssignment,
     RiderAssignmentStatus,
     TagObservation,
@@ -70,3 +74,42 @@ def test_capture_can_start_before_rider_assignment_is_known() -> None:
         post_roll_s=5,
     )
     assert request.assignment is None
+
+
+def test_edge_job_rejects_non_utc_time_unsafe_filename_and_non_video_media() -> None:
+    utc = datetime(2026, 8, 12, tzinfo=timezone.utc)
+    video = {
+        "filename": "clip.mp4",
+        "mimeType": "video/mp4",
+        "sizeBytes": 1,
+        "sha256": "0" * 64,
+    }
+    payload = {
+        "jobId": "job-1",
+        "edgeDeviceId": "edge-1",
+        "createdAt": utc + timedelta(seconds=2),
+        "captureStartedAt": utc,
+        "captureEndedAt": utc + timedelta(seconds=1),
+        "video": video,
+    }
+
+    with pytest.raises(ValidationError, match="datetime must be UTC"):
+        EdgeJobManifest.model_validate(
+            {**payload, "createdAt": datetime(2026, 8, 12, 4, tzinfo=timezone(timedelta(hours=2)))}
+        )
+    with pytest.raises(ValidationError, match="one path segment"):
+        JobVideo.model_validate({**video, "filename": "../clip.mp4"})
+    with pytest.raises(ValidationError):
+        JobVideo.model_validate({**video, "mimeType": "application/octet-stream"})
+
+
+def test_result_contract_requires_complete_uuid_assignment() -> None:
+    with pytest.raises(ValidationError, match="requires tag, user and assignment ids"):
+        JobResultManifest(
+            jobId="job-1",
+            status="processed",
+            processedAt=datetime(2026, 8, 12, tzinfo=timezone.utc),
+            algorithmVersion="test-v1",
+            selectedUserId=uuid4(),
+            reason="incomplete assignment",
+        )

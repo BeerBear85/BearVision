@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 from collections.abc import Iterable
 from datetime import datetime, timedelta, timezone
+from uuid import UUID
 
 from bearvision.contracts import (
     BearTagJobObservation,
@@ -23,8 +24,8 @@ from bearvision.ports import CapturedMedia, ComponentUnavailable, VideoFrame
 class VirtualClock:
     def __init__(self, start_utc: datetime | None = None) -> None:
         self.start_utc = start_utc or datetime(2026, 1, 1, tzinfo=timezone.utc)
-        if self.start_utc.tzinfo is None or self.start_utc.utcoffset() is None:
-            raise ValueError("start_utc must be timezone-aware")
+        if self.start_utc.utcoffset() != timedelta(0):
+            raise ValueError("start_utc must be UTC")
         self.elapsed_s = 0.0
 
     def utc_now(self) -> datetime:
@@ -196,12 +197,12 @@ class InMemoryJobQueue:
         return self.packages[job_id][filename]
 
     async def finish(
-        self, job_id: str, result: JobResultManifest, user_email: str | None = None
+        self, job_id: str, result: JobResultManifest, user_id: UUID | None = None
     ) -> None:
         self.results[job_id] = result
         self.packages[job_id]["result.json"] = result.model_dump_json(by_alias=True).encode()
         self.states[job_id] = (
-            f"processed/{user_email}" if result.status == "processed" else result.status
+            f"processed/user_{user_id}" if result.status == "processed" else result.status
         )
 
     async def requeue(self, job_id: str) -> bool:

@@ -72,6 +72,8 @@ class DnnHandler:
         # Use blobFromImage for preprocessing because it performs normalization
         # and channel swapping in optimized C++ code.
         blob = cv2.dnn.blobFromImage(image, scalefactor=1 / 255, size=(640, 640), swapRB=True)
+        if self.net is None:
+            raise RuntimeError("DNN model is not initialized; call init() first")
         self.net.setInput(blob)
 
         outputs = self.net.forward()

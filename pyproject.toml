@@ -55,7 +55,6 @@ python_version = "3.12"
 packages = ["bearvision"]
 check_untyped_defs = true
 ignore_missing_imports = true
-exclude = ["src/bearvision/integrations"]
 
 [tool.coverage.run]
 source = ["bearvision"]

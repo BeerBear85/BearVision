@@ -43,6 +43,8 @@ def build_behavioral_system(
     server_assignment_policy: AssignmentConfig | None = None,
     *,
     capture_dir: Path | None = None,
+    job_queue: JobQueue | None = None,
+    process_server: bool = True,
 ) -> "ClosedLoopScenarioRunner | VideoScenarioRunner":
     if scenario.components.frames == "video":
         from bearvision.simulation.video_runner import VideoScenarioRunner
@@ -51,6 +53,8 @@ def build_behavioral_system(
             scenario,
             assignment_policy=server_assignment_policy,
             capture_dir=capture_dir,
+            job_queue=job_queue,
+            process_server=process_server,
         )
     supported_synthetic = (
         scenario.components.frames == "synthetic"
@@ -69,6 +73,8 @@ def build_behavioral_system(
     return ClosedLoopScenarioRunner.from_scenario(
         scenario,
         assignment_policy=server_assignment_policy,
+        job_queue=job_queue,
+        process_server=process_server,
     )
 
 

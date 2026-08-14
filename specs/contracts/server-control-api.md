@@ -19,6 +19,7 @@ and the server continue to communicate only through Box.
 ## Mutations
 
 - `POST /api/users`
+- `POST /api/users/<user-uuid>/email`
 - `POST /api/beartags`
 - `POST /api/assignments/validate`
 - `POST /api/assignments`

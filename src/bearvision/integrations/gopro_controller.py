@@ -281,7 +281,7 @@ class GoProController:
         resp = self._run_in_thread(self._gopro.http_command.get_camera_state())
         return resp.data
 
-    def download_configuration(self, output_path: str = None) -> str:
+    def download_configuration(self, output_path: str | None = None) -> str:
         """
         Download current camera configuration to a YAML file.
 

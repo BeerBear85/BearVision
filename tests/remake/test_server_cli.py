@@ -26,7 +26,9 @@ def test_admin_cli_uses_authoritative_registry_and_queue_snapshot(
 ) -> None:
     config = write_config(tmp_path)
     assert main(["--config", str(config), "create-user", "--email", " Bear@Example.com ", "--display-name", "Bear"]) == 0
-    assert json.loads(capsys.readouterr().out)["id"] == "bear@example.com"
+    user = json.loads(capsys.readouterr().out)
+    user_id = user["id"]
+    assert user["email"] == "bear@example.com"
     assert main(["--config", str(config), "create-tag", "--id", "BearTag-1"]) == 0
     capsys.readouterr()
     assert main(
@@ -35,7 +37,7 @@ def test_admin_cli_uses_authoritative_registry_and_queue_snapshot(
             str(config),
             "validate-assignment",
             "--user-id",
-            "bear@example.com",
+            user_id,
             "--bear-tag-id",
             "BearTag-1",
             "--valid-from",
@@ -54,7 +56,7 @@ def test_admin_cli_uses_authoritative_registry_and_queue_snapshot(
             "--id",
             "assignment-1",
             "--user-id",
-            "bear@example.com",
+            user_id,
             "--bear-tag-id",
             "BearTag-1",
             "--valid-from",
@@ -66,7 +68,15 @@ def test_admin_cli_uses_authoritative_registry_and_queue_snapshot(
     assert json.loads(capsys.readouterr().out)["id"] == "assignment-1"
 
     assert main(["--config", str(config), "list-users"]) == 0
-    assert json.loads(capsys.readouterr().out)["items"][0]["id"] == "bear@example.com"
+    assert json.loads(capsys.readouterr().out)["items"][0]["id"] == user_id
+
+    assert main([
+        "--config", str(config), "update-user-email", "--user-id", user_id,
+        "--email", "new-bear@example.com",
+    ]) == 0
+    updated_user = json.loads(capsys.readouterr().out)
+    assert updated_user["id"] == user_id
+    assert updated_user["email"] == "new-bear@example.com"
 
     assert main(
         [
@@ -74,11 +84,11 @@ def test_admin_cli_uses_authoritative_registry_and_queue_snapshot(
             str(config),
             "list-user-videos",
             "--user-id",
-            " Bear@Example.com ",
+            " new-bear@example.com ",
         ]
     ) == 0
     user_videos = json.loads(capsys.readouterr().out)
-    assert user_videos["user"]["email"] == "bear@example.com"
+    assert user_videos["user"]["email"] == "new-bear@example.com"
     assert user_videos["items"] == []
 
     assert main(["--config", str(config), "list-tags"]) == 0
@@ -99,7 +109,7 @@ def test_admin_cli_uses_authoritative_registry_and_queue_snapshot(
     assert main(["--config", str(config), "snapshot"]) == 0
     snapshot = json.loads(capsys.readouterr().out)
     assert snapshot["queue"]["counts"]["ready"] == 0
-    assert snapshot["registry"]["users"][0]["id"] == "bear@example.com"
+    assert snapshot["registry"]["users"][0]["id"] == user_id
 
     assert main(["--config", str(config), "job-detail", "--job-id", "missing"]) == 1
     assert "missing" in json.loads(capsys.readouterr().err)["error"]

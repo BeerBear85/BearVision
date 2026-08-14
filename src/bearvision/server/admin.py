@@ -10,7 +10,7 @@ import os
 from pathlib import Path
 import subprocess
 from typing import Any
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from pydantic import ValidationError
 
@@ -74,8 +74,8 @@ class AdminCatalog:
         if status:
             entries = [item for item in entries if item["status"] == status]
         if user_id:
-            normalized = user_id.strip().lower()
-            entries = [item for item in entries if item.get("userEmail") == normalized]
+            normalized = str(UUID(user_id))
+            entries = [item for item in entries if item.get("userId") == normalized]
 
         normalized_query = query.strip().lower()
         if normalized_query:
@@ -90,7 +90,7 @@ class AdminCatalog:
                     str(details.get(key, ""))
                     for key in (
                         "selectedBearTagId",
-                        "selectedUserEmail",
+                        "selectedUserId",
                         "displayName",
                         "reason",
                     )
@@ -132,7 +132,7 @@ class AdminCatalog:
         data = self.registry.load()
         now = datetime.now(timezone.utc)
         video_counts = Counter(
-            item.get("userEmail")
+            item.get("userId")
             for item in self.queue.admin_list_jobs()
             if item["status"] == "processed"
         )
@@ -140,11 +140,12 @@ class AdminCatalog:
         for assignment in sorted(data.assignments, key=lambda item: item.valid_from, reverse=True):
             payload = assignment.model_dump(mode="json", by_alias=True)
             payload["active"] = assignment.valid_from <= now < assignment.valid_to
-            assignments_by_user.setdefault(assignment.user_id, []).append(payload)
+            assignments_by_user.setdefault(str(assignment.user_id), []).append(payload)
 
         users = []
         for user in data.users:
-            assignments = assignments_by_user.get(user.id, [])
+            user_id = str(user.id)
+            assignments = assignments_by_user.get(user_id, [])
             active_tags = [
                 item["bearTagId"] for item in assignments if bool(item["active"])
             ]
@@ -153,7 +154,7 @@ class AdminCatalog:
                     **user.model_dump(mode="json", by_alias=True),
                     "assignments": assignments,
                     "activeBearTags": active_tags,
-                    "processedVideoCount": video_counts[user.id],
+                    "processedVideoCount": video_counts[user_id],
                 }
             )
         normalized_query = query.strip().lower()
@@ -165,6 +166,7 @@ class AdminCatalog:
                 in " ".join(
                     (
                         item["id"],
+                        item["email"],
                         item["displayName"],
                         *item["activeBearTags"],
                     )
@@ -218,11 +220,18 @@ class AdminCatalog:
                 )
             except (FileNotFoundError, ValidationError) as exc:
                 metadata_errors.append(f"result: {exc}")
-        users = {item.id: item.display_name for item in self.registry.load().users}
-        user_email = (
-            result.selected_user_email if result is not None else entry.get("userEmail")
+        users = {str(item.id): item for item in self.registry.load().users}
+        selected_user_id = (
+            str(result.selected_user_id)
+            if result is not None and result.selected_user_id is not None
+            else entry.get("userId")
         )
-        payload: dict[str, Any] = {**entry, "displayName": users.get(user_email or "")}
+        selected_user = users.get(selected_user_id or "")
+        payload: dict[str, Any] = {
+            **entry,
+            "displayName": selected_user.display_name if selected_user else None,
+            "userEmail": selected_user.email if selected_user else None,
+        }
         if manifest is not None:
             payload.update(
                 {
@@ -254,10 +263,7 @@ class UserVideoCatalog:
         self, user_email: str, *, page: int = 1, page_size: int = 50
     ) -> dict[str, Any]:
         normalized = normalize_user_email(user_email)
-        user = next(
-            (item for item in self.registry.load().users if item.id == normalized),
-            None,
-        )
+        user = self.registry.find_user_by_email(normalized)
         if user is None:
             raise FileNotFoundError("user not found")
 
@@ -265,7 +271,7 @@ class UserVideoCatalog:
             page=page,
             page_size=page_size,
             status="processed",
-            user_id=normalized,
+            user_id=str(user.id),
         )
         items = []
         for item in jobs["items"]:
@@ -283,7 +289,11 @@ class UserVideoCatalog:
             }
             items.append(public_item)
         return {
-            "user": {"email": user.id, "displayName": user.display_name},
+            "user": {
+                "id": str(user.id),
+                "email": user.email,
+                "displayName": user.display_name,
+            },
             "items": items,
             "page": jobs["page"],
             "pageSize": jobs["pageSize"],
@@ -300,10 +310,12 @@ class AdminMediaService:
         queue: ManagedJobQueue,
         cache_root: Path,
         *,
+        registry: FileUserRegistry | None = None,
         ffmpeg_path: str | Path | None = None,
     ) -> None:
         self.queue = queue
         self.cache_root = cache_root
+        self.registry = registry
         self.ffmpeg_path = FfmpegVideoClipper._resolve_executable(
             ffmpeg_path, "BEARVISION_FFMPEG", "ffmpeg"
         )
@@ -337,10 +349,14 @@ class AdminMediaService:
     ) -> dict[str, Any]:
         """Materialize media only when the processed job belongs to the user."""
 
-        normalized = normalize_user_email(user_email)
+        if self.registry is None:
+            raise RuntimeError("user media access requires a user registry")
+        user = self.registry.find_user_by_email(user_email)
+        if user is None:
+            raise FileNotFoundError("video not found for user")
         owns_job = any(
             item.get("status") == "processed"
-            and item.get("userEmail") == normalized
+            and item.get("userId") == str(user.id)
             and item.get("jobId") == job_id
             for item in self.queue.admin_list_jobs()
         )
