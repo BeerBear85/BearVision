@@ -62,7 +62,7 @@ function Modal({ title, description, onClose, children }) {
   </div>;
 }
 
-function VideoLibrary({ onError, userFilter = "" }) {
+function VideoLibrary({ onError, refreshVersion, userFilter = "" }) {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("processed");
   const [page, setPage] = useState(1);
@@ -90,13 +90,13 @@ function VideoLibrary({ onError, userFilter = "" }) {
       finally { setLoading(false); }
     }, 220);
     return () => clearTimeout(timer);
-  }, [query, status, page, userFilter]);
+  }, [query, status, page, userFilter, refreshVersion]);
 
   useEffect(() => {
     if (!selected) { setDetail(null); return; }
     api("/api/jobs/" + encodeURIComponent(selected)).then(setDetail)
       .catch((error) => onError(error.message));
-  }, [selected]);
+  }, [selected, refreshVersion]);
 
   const candidates = detail?.candidates ?? [];
   return <>
@@ -302,7 +302,7 @@ function Users({ onError, onShowVideos }) {
   </>;
 }
 
-function JobQueue({ onError }) {
+function JobQueue({ onError, refreshVersion }) {
   const [status, setStatus] = useState("");
   const [data, setData] = useState({ items: [], total: 0 });
   async function refresh() {
@@ -311,7 +311,7 @@ function JobQueue({ onError }) {
       setData(await api("/api/jobs?" + params)); onError("");
     } catch (error) { onError(error.message); }
   }
-  useEffect(() => { refresh(); }, [status]);
+  useEffect(() => { refresh(); }, [status, refreshVersion]);
   async function requeue(jobId) {
     if (!window.confirm("Requeue " + jobId + "?")) return;
     try {
@@ -338,8 +338,13 @@ function App() {
   const [summary, setSummary] = useState(null);
   const [error, setError] = useState("");
   const [videoUser, setVideoUser] = useState("");
+  const [refreshVersion, setRefreshVersion] = useState(0);
   async function refreshSummary() {
-    try { setSummary(await api("/api/summary")); setError(""); }
+    try {
+      setSummary(await api("/api/summary"));
+      setRefreshVersion((current) => current + 1);
+      setError("");
+    }
     catch (caught) { setError(caught.message); }
   }
   useEffect(() => {
@@ -360,9 +365,9 @@ function App() {
       {error && <div className="error-banner" role="alert">{error}<button aria-label="Dismiss error" onClick={() => setError("")}>×</button></div>}
       <div className="page">
         {view === "overview" && <Overview summary={summary} setView={setView} />}
-        {view === "videos" && <VideoLibrary onError={setError} userFilter={videoUser} />}
+        {view === "videos" && <VideoLibrary onError={setError} refreshVersion={refreshVersion} userFilter={videoUser} />}
         {view === "users" && <Users onError={setError} onShowVideos={showUserVideos} />}
-        {view === "jobs" && <JobQueue onError={setError} />}
+        {view === "jobs" && <JobQueue onError={setError} refreshVersion={refreshVersion} />}
       </div>
     </main>
   </div>;

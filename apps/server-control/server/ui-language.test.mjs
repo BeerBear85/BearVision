@@ -24,3 +24,10 @@ test("Server Control contains no Danish UI copy", () => {
     assert.equal(uiSource.includes(phrase), false, `${phrase} remains in ${appRoot}`);
   }
 });
+
+test("Server Control refreshes queue views with the server summary", () => {
+  assert.match(uiSource, /function VideoLibrary\(\{ onError, refreshVersion,/);
+  assert.match(uiSource, /\[query, status, page, userFilter, refreshVersion\]/);
+  assert.match(uiSource, /function JobQueue\(\{ onError, refreshVersion \}\)/);
+  assert.match(uiSource, /\[status, refreshVersion\]/);
+});
