@@ -35,6 +35,8 @@ def simulate(path: Path, *, realtime: bool, speed: float) -> int:
     result = build_behavioral_system(load_scenario(path)).run()
     previous_at_s = 0.0
     for entry in result.trace:
+        if entry.kind == "server_assignment":
+            continue
         if realtime:
             time.sleep(max(0.0, entry.at_s - previous_at_s) / speed)
         previous_at_s = entry.at_s

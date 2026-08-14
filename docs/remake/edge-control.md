@@ -3,6 +3,17 @@
 Status: control GUI and recorded-video regression implemented; physical preview
 transport remains future work.
 
+## Operator UI
+
+Edge Control uses the shared BearVision operator shell from Server Control while
+retaining an Edge-specific workflow: configure, run, observe and verify. The
+preview is the primary work surface; connection/runtime health and the event
+trace are supporting evidence. All existing scenario, capture, processed-video
+and tracking views remain available when their artefacts exist.
+
+The normative UX/UI baseline and acceptance checks are in
+[`ui-design-criteria.md`](ui-design-criteria.md).
+
 ## Deployment boundary
 
 The Edge computer hosts both runtimes. BearVision 3 targets a small Windows

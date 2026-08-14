@@ -1,8 +1,18 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
 
 const initialState = { mode: "simulation", phase: "loading", scenario: null, last_event: null };
+
+function formatLabel(value) {
+  if (!value) return "Connecting";
+  const label = value.replaceAll("_", " ");
+  return label.charAt(0).toUpperCase() + label.slice(1);
+}
+
+function formatFileSize(bytes) {
+  return Number.isFinite(Number(bytes)) ? `${Math.round(Number(bytes) / 1024)} KiB` : "Size unavailable";
+}
 
 function eventMessage(event) {
   const labels = {
@@ -12,7 +22,6 @@ function eventMessage(event) {
     runtime_failed: "Runtime failed",
     person_detected: "Vision detected a person",
     capture_started: "GoPro capture started",
-    server_assignment: "Server assignment completed",
     capture_completed: "Capture completed",
     clip_uploaded: "Clip uploaded",
     tag_observed: "BearTag observation received",
@@ -26,10 +35,10 @@ function eventMessage(event) {
   return labels[event.kind] ?? event.kind?.replaceAll("_", " ") ?? "Event";
 }
 
-function Indicator({ label, active, detail }) {
+function Indicator({ label, status = "idle", detail }) {
   return (
     <div className="indicator">
-      <span className={`dot ${active ? "active" : ""}`} />
+      <span className={`dot ${status}`} aria-hidden="true" />
       <span><strong>{label}</strong><small>{detail}</small></span>
     </div>
   );
@@ -46,6 +55,7 @@ function App() {
   const [displayedMedia, setDisplayedMedia] = useState("scenario");
   const [trackingFrame, setTrackingFrame] = useState(null);
   const [trackingData, setTrackingData] = useState(null);
+  const [streamConnected, setStreamConnected] = useState(false);
   const videoRef = useRef(null);
 
   async function request(path, options) {
@@ -64,6 +74,10 @@ function App() {
       })
       .catch((reason) => setError(reason.message));
     const source = new EventSource("/api/events");
+    source.onopen = () => {
+      setStreamConnected(true);
+      setError((current) => current === "Event stream disconnected; reconnecting..." ? "" : current);
+    };
     source.onmessage = ({ data }) => {
       const event = JSON.parse(data);
       if (event.kind === "control_snapshot") {
@@ -118,18 +132,16 @@ function App() {
       }
       request("/api/health").then(setState).catch(() => {});
     };
-    source.onerror = () => setError("Event stream disconnected; reconnecting...");
+    source.onerror = () => {
+      setStreamConnected(false);
+      setError("Event stream disconnected; reconnecting...");
+    };
     return () => source.close();
   }, []);
 
   const running = state.phase !== "idle";
   const current = events[0];
   const selected = scenarios.find((scenario) => scenario.name === selectedScenario);
-  const lastAssignment = useMemo(
-    () => events.find((event) => event.kind === "server_assignment"),
-    [events],
-  );
-
   async function chooseMode(mode) {
     try {
       setError("");
@@ -209,42 +221,82 @@ function App() {
     overlaySpace && (detectorBox || estimate) && ["scenario", "capture"].includes(displayedMedia),
   );
 
+  const captureRunning = events.some((event) => event.kind === "capture_started")
+    && !events.some((event) => event.kind === "capture_completed");
+  const phaseTone = ["failed", "error"].includes(state.phase)
+    ? "attention"
+    : running ? "working" : "ok";
+
   return (
-    <main>
-      <header>
-        <div><span className="eyebrow">BEARVISION 3</span><h1>Edge Control</h1></div>
-        <div className={`phase ${state.phase}`}>{state.phase}</div>
-      </header>
-
-      <section className="controls">
-        <div className="mode" aria-label="Runtime mode">
-          <button className={state.mode === "simulation" ? "selected" : ""} disabled={running} onClick={() => chooseMode("simulation")}>Simulation</button>
-          <button className={state.mode === "hardware" ? "selected" : ""} disabled={running} onClick={() => chooseMode("hardware")}>Hardware</button>
+    <div className="app-shell">
+      <aside className="sidebar">
+        <div className="brand">
+          <span className="brand-mark">BV</span>
+          <span><strong>BearVision</strong><small>Edge Control</small></span>
         </div>
-        {state.mode === "simulation" && (
-          <select value={selectedScenario} disabled={running} onChange={(event) => setSelectedScenario(event.target.value)}>
-            {scenarios.map((scenario) => (
-              <option key={scenario.name} value={scenario.name}>
-                {scenario.name}{scenario.generated_from ? " · generated from Blender" : ""}
-              </option>
-            ))}
-          </select>
-        )}
-        <button className="primary" disabled={running || (state.mode === "simulation" && !selectedScenario)} onClick={run}>
-          {state.mode === "simulation" ? "Run scenario" : "Start hardware"}
-        </button>
-        <button className="danger" disabled={!running} onClick={stop}>Stop</button>
-      </section>
+        <nav aria-label="Page sections">
+          <a href="#control">Control</a>
+          <a href="#preview">Live preview</a>
+          <a href="#activity">Activity</a>
+        </nav>
+        <div className="runtime-state" aria-live="polite">
+          <span className={`dot ${phaseTone}`} aria-hidden="true" />
+          <span><strong>{formatLabel(state.phase)}</strong><small>{formatLabel(state.mode)} runtime</small></span>
+        </div>
+      </aside>
 
-      {error && <div className="error">{error}</div>}
+      <main>
+        <header className="topbar">
+          <div><h1>Edge Control</h1><p>Run capture scenarios and verify the complete Edge pipeline.</p></div>
+          <span className={`status-badge ${phaseTone}`}><span className="status-dot" />{formatLabel(state.phase)}</span>
+        </header>
 
-      <section className="dashboard">
-        <div className="preview panel">
-          <div className="panel-title">
-            <span>{mediaTitle}</span>
-            <small>{state.mode}</small>
-          </div>
-          <div className="preview-content">
+        {error && <div className="error-banner" role="alert">
+          <span>{error}</span>
+          <button type="button" aria-label="Dismiss error" onClick={() => setError("")}>×</button>
+        </div>}
+
+        <div className="page">
+          <section className="control-card" id="control" aria-labelledby="control-heading">
+            <div className="section-heading">
+              <div><span className="eyebrow">Operator setup</span><h2 id="control-heading">Choose how to run</h2></div>
+              <p>Configuration is locked while the runtime is active.</p>
+            </div>
+            <div className="controls">
+              <fieldset className="mode-group">
+                <legend>Runtime mode</legend>
+                <div className="segmented-control">
+                  <button type="button" aria-pressed={state.mode === "simulation"} className={state.mode === "simulation" ? "selected" : ""} disabled={running} onClick={() => chooseMode("simulation")}>Simulation</button>
+                  <button type="button" aria-pressed={state.mode === "hardware"} className={state.mode === "hardware" ? "selected" : ""} disabled={running} onClick={() => chooseMode("hardware")}>Hardware</button>
+                </div>
+              </fieldset>
+              {state.mode === "simulation" && (
+                <label className="scenario-field">Scenario
+                  <select value={selectedScenario} disabled={running} onChange={(event) => setSelectedScenario(event.target.value)}>
+                    {scenarios.map((scenario) => (
+                      <option key={scenario.name} value={scenario.name}>
+                        {scenario.name}{scenario.generated_from ? " · Blender" : ""}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+              <div className="control-actions">
+                <button className="primary" disabled={running || (state.mode === "simulation" && !selectedScenario)} onClick={run}>
+                  {state.mode === "simulation" ? "Run scenario" : "Start hardware"}
+                </button>
+                <button className="danger" disabled={!running} onClick={stop}>Stop runtime</button>
+              </div>
+            </div>
+          </section>
+
+          <section className="dashboard" aria-label="Runtime workspace">
+            <section className="preview panel" id="preview" aria-labelledby="preview-heading">
+              <div className="panel-title">
+                <div><span className="eyebrow">Media</span><h2 id="preview-heading">{mediaTitle}</h2></div>
+                <span className="mode-badge">{formatLabel(state.mode)}</span>
+              </div>
+              <div className="preview-content">
             {state.mode === "simulation" && mediaUrl ? (
               <div className="video-stage">
                 <video
@@ -324,62 +376,76 @@ function App() {
               </div>
             )}
             {capturedClip && (
-              <div className="media-switcher">
+              <div className="media-switcher" aria-label="Media view">
                 <button
+                  type="button"
+                  aria-pressed={displayedMedia === "scenario"}
                   className={displayedMedia === "scenario" ? "selected" : ""}
                   onClick={() => showMedia("scenario")}
                 >Scenario source</button>
                 <button
+                  type="button"
+                  aria-pressed={displayedMedia === "capture"}
                   className={displayedMedia === "capture" ? "selected" : ""}
                   onClick={() => showMedia("capture")}
                 >Extracted clip</button>
                 {capturedClip.processed_url && (
                   <button
+                    type="button"
+                    aria-pressed={displayedMedia === "processed"}
                     className={displayedMedia === "processed" ? "selected" : ""}
                     onClick={() => showMedia("processed")}
-                  >Upload clip</button>
+                  >Processed upload</button>
                 )}
                 {capturedClip.debug_url && (
                   <button
+                    type="button"
+                    aria-pressed={displayedMedia === "debug"}
                     className={displayedMedia === "debug" ? "selected" : ""}
                     onClick={() => showMedia("debug")}
                   >Tracking view</button>
                 )}
                 <small>
                   {displayedMedia === "processed" && capturedClip.processed_filename
-                    ? `${capturedClip.processed_filename} · ${Math.round(capturedClip.processed_size_bytes / 1024)} KiB`
-                    : `${capturedClip.filename} · ${Number(capturedClip.clip_duration_s).toFixed(1)} s · ${Math.round(capturedClip.size_bytes / 1024)} KiB`}
+                    ? `${capturedClip.processed_filename} · ${formatFileSize(capturedClip.processed_size_bytes)}`
+                    : `${capturedClip.filename} · ${Number(capturedClip.clip_duration_s).toFixed(1)} s · ${formatFileSize(capturedClip.size_bytes)}`}
                 </small>
               </div>
             )}
             {(current?.at_s != null || playhead > 0) && <div className="clock">T+ {playhead.toFixed(1)} s</div>}
-          </div>
+              </div>
+            </section>
+
+            <aside className="status-rail" id="activity">
+              <section className="panel indicators" aria-labelledby="system-heading">
+                <div className="panel-title"><div><span className="eyebrow">Health</span><h2 id="system-heading">System</h2></div></div>
+                <div className="indicator-list">
+                  <Indicator label="Control server" status={streamConnected ? "ok" : "attention"} detail={streamConnected ? "Connected" : "Reconnecting"} />
+                  <Indicator label="Runtime" status={running ? "working" : "idle"} detail={formatLabel(state.mode)} />
+                  <Indicator label="Capture" status={captureRunning ? "working" : "idle"} detail="GoPro" />
+                </div>
+              </section>
+
+              <section className="panel event-panel" aria-labelledby="activity-heading" aria-live="polite">
+                <div className="panel-title">
+                  <div><span className="eyebrow">Live trace</span><h2 id="activity-heading">Activity</h2></div>
+                  <span className="count-badge">{events.length}</span>
+                </div>
+                <ol>
+                  {events.length === 0 && <li className="empty"><strong>No activity yet</strong><small>Events will appear when the runtime starts.</small></li>}
+                  {events.map((event, index) => (
+                    <li key={`${event.sequence}-${index}`}>
+                      <time>{event.at_s == null ? "LIVE" : `T+${Number(event.at_s).toFixed(1)}`}</time>
+                      <span><strong>{eventMessage(event)}</strong><small>{event.payload?.rider_id ?? event.payload?.message ?? ""}</small></span>
+                    </li>
+                  ))}
+                </ol>
+              </section>
+            </aside>
+          </section>
         </div>
-
-        <aside>
-          <div className="panel indicators">
-            <div className="panel-title">System</div>
-            <Indicator label="Control server" active detail="Node.js" />
-            <Indicator label="Runtime" active={running} detail={state.mode} />
-            <Indicator label="Capture" active={events.some((event) => event.kind === "capture_started") && !events.some((event) => event.kind === "capture_completed")} detail="GoPro" />
-            <Indicator label="Rider" active={Boolean(lastAssignment?.payload?.rider_id)} detail={lastAssignment?.payload?.rider_id ?? "not assigned"} />
-          </div>
-
-          <div className="panel event-panel">
-            <div className="panel-title"><span>Event log</span><small>{events.length}</small></div>
-            <ol>
-              {events.length === 0 && <li className="empty">Waiting for runtime events</li>}
-              {events.map((event, index) => (
-                <li key={`${event.sequence}-${index}`}>
-                  <time>{event.at_s == null ? "LIVE" : `T+${Number(event.at_s).toFixed(1)}`}</time>
-                  <span><strong>{eventMessage(event)}</strong><small>{event.payload?.rider_id ?? event.payload?.message ?? ""}</small></span>
-                </li>
-              ))}
-            </ol>
-          </div>
-        </aside>
-      </section>
-    </main>
+      </main>
+    </div>
   );
 }
 
