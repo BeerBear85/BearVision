@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from bearvision.adapters import BoxJobQueue
-from bearvision.contracts import MediaAsset, TagObservation, Vector3
+from bearvision.contracts import JobResultManifest, MediaAsset, TagObservation, Vector3
 from bearvision.edge.job_package import build_edge_job
 from bearvision.ports import CapturedMedia
 
@@ -48,6 +48,9 @@ class MemoryBoxFolders:
             del self.files[key]
         for key, value in moving.items():
             self.files[destination_prefix + key.removeprefix(source_prefix)] = value
+
+    def delete_file(self, path):
+        del self.files[path.strip("/")]
 
 
 def test_box_queue_commits_with_ready_then_claims_complete_folder(tmp_path: Path) -> None:
@@ -96,3 +99,43 @@ def test_box_queue_commits_with_ready_then_claims_complete_folder(tmp_path: Path
     downloaded = tmp_path / "downloaded.mp4"
     asyncio.run(queue.admin_download("job-1", "video.mp4", downloaded))
     assert downloaded.read_bytes() == b"video"
+
+    processed = JobResultManifest(
+        jobId="job-1",
+        status="processed",
+        processedAt=now + timedelta(seconds=6),
+        algorithmVersion="test-v1",
+        selectedBearTagId="BearTag-1",
+        selectedUserEmail="bear@example.com",
+        assignmentId="assignment-1",
+        reason="selected test rider",
+    )
+    asyncio.run(queue.finish("job-1", processed, "bear@example.com"))
+
+    assert queue.admin_list_jobs() == [
+        {
+            "jobId": "job-1",
+            "status": "processed",
+            "userEmail": "bear@example.com",
+        }
+    ]
+    snapshot = queue.snapshot()
+    assert snapshot["counts"]["processed"] == 1
+    assert snapshot["jobs"][0]["selectedUserEmail"] == "bear@example.com"
+
+    second_manifest = manifest.model_copy(update={"job_id": "job-2"})
+    assert asyncio.run(queue.publish(second_manifest, video, observations))
+    assert asyncio.run(queue.acquire_next()) == "job-2"
+    unresolved = JobResultManifest(
+        jobId="job-2",
+        status="unresolved",
+        processedAt=now + timedelta(seconds=7),
+        algorithmVersion="test-v1",
+        reason="no unique rider",
+        errorCode="AMBIGUOUS_BEARTAG",
+    )
+    asyncio.run(queue.finish("job-2", unresolved))
+    assert queue.snapshot()["counts"]["unresolved"] == 1
+    assert asyncio.run(queue.requeue("job-2"))
+    assert not asyncio.run(queue.requeue("missing-job"))
+    assert asyncio.run(queue.acquire_next()) == "job-2"

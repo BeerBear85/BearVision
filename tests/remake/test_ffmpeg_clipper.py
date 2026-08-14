@@ -232,7 +232,8 @@ def test_executable_resolution_prefers_packaged_runtime(monkeypatch: pytest.Monk
         "ffmpeg",
     )
 
-    assert Path(resolved).name == "ffmpeg.exe"
+    assert Path(resolved).stem == "ffmpeg"
+    assert resolved != "managed-tool.exe"
 
 
 def test_executable_resolution_falls_back_to_system_path_without_package(

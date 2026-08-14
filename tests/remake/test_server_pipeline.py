@@ -7,7 +7,7 @@ import pytest
 
 from bearvision.contracts import MediaAsset, TagObservation, Vector3
 from bearvision.edge.job_package import build_edge_job
-from bearvision.ports import CapturedMedia
+from bearvision.ports import CapturedMedia, ComponentUnavailable
 from bearvision.server import (
     BearTagAssignment,
     FileSystemJobQueue,
@@ -179,3 +179,69 @@ def test_processing_job_survives_queue_and_worker_restart(tmp_path: Path) -> Non
 
 def test_email_normalization_preserves_gmail_alias_semantics() -> None:
     assert normalize_user_email(" Bear.Name+Cable@GMAIL.com ") == "bear.name+cable@gmail.com"
+
+
+@pytest.mark.parametrize("failure", ["job-id", "size", "checksum", "observation"])
+def test_invalid_job_payload_is_failed_durably(tmp_path: Path, failure: str) -> None:
+    queue = FileSystemJobQueue(tmp_path / failure / "BearVision")
+    store = registry(tmp_path / failure / "registry.json")
+    job_id = f"job-{failure}"
+    assert asyncio.run(publish(queue, job_id))
+    ready = tmp_path / failure / "BearVision/input-queue/ready" / job_id
+
+    if failure == "job-id":
+        manifest = json.loads((ready / "manifest.json").read_text(encoding="utf-8"))
+        manifest["jobId"] = "different-job"
+        (ready / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    elif failure == "size":
+        (ready / "video.mp4").write_bytes(b"wrong-size")
+    elif failure == "checksum":
+        content = (ready / "video.mp4").read_bytes()
+        (ready / "video.mp4").write_bytes(b"x" * len(content))
+    else:
+        (ready / "beartag-data.ndjson").write_text(
+            '{"bearTagId":"BearTag-666","offsetMs":999999,'
+            '"rssiDbm":-50,"accelerationMps2":{"x":0,"y":0,"z":20}}\n',
+            encoding="utf-8",
+        )
+
+    result = asyncio.run(ServerWorker(queue, store, VirtualClock(START)).run_once())
+
+    assert result is not None and result.status == "failed"
+    assert result.error_code == "INVALID_JOB"
+    assert queue.snapshot()["counts"]["failed"] == 1
+
+
+def test_transient_queue_failure_keeps_claimed_job_for_retry(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    queue = FileSystemJobQueue(tmp_path / "BearVision")
+    store = registry(tmp_path / "registry.json")
+    assert asyncio.run(publish(queue))
+
+    async def unavailable(*_args) -> bytes:
+        raise ComponentUnavailable("temporary Box outage")
+
+    monkeypatch.setattr(queue, "read", unavailable)
+    with pytest.raises(ComponentUnavailable, match="temporary Box outage"):
+        asyncio.run(ServerWorker(queue, store, VirtualClock(START)).run_once())
+
+    assert queue.snapshot()["counts"]["processing"] == 1
+
+
+def test_unexpected_queue_failure_becomes_technical_result(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    queue = FileSystemJobQueue(tmp_path / "BearVision")
+    store = registry(tmp_path / "registry.json")
+    assert asyncio.run(publish(queue))
+
+    async def broken(*_args) -> bytes:
+        raise RuntimeError("unexpected adapter defect")
+
+    monkeypatch.setattr(queue, "read", broken)
+    result = asyncio.run(ServerWorker(queue, store, VirtualClock(START)).run_once())
+
+    assert result is not None and result.status == "failed"
+    assert result.error_code == "TECHNICAL_ERROR"
+    assert queue.snapshot()["counts"]["failed"] == 1
