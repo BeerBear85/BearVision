@@ -8,21 +8,21 @@ async function api(path, options = {}) {
     ...options,
   });
   const body = await response.json();
-  if (!response.ok) throw new Error(body.error ?? "Anmodningen mislykkedes");
+  if (!response.ok) throw new Error(body.error ?? "The request failed");
   return body;
 }
 
 const pageCopy = {
-  overview: ["Overblik", "Driftstilstand og opmærksomhedspunkter"],
-  videos: ["Videoer", "Find, gennemse og verificér behandlede klip"],
-  users: ["Brugere & BearTags", "Administrér identitet og tidsbegrænsede assignments"],
-  jobs: ["Jobkø", "Følg behandling, fejl og genkø"],
+  overview: ["Overview", "Operational status and items requiring attention"],
+  videos: ["Videos", "Find, browse and verify processed clips"],
+  users: ["Users & BearTags", "Manage identities and time-bound assignments"],
+  jobs: ["Job queue", "Monitor processing, failures and requeues"],
 };
 const statusLabels = {
-  ready: "Klar", processing: "Behandles", processed: "Processed",
-  unresolved: "Uafklaret", failed: "Fejlet",
+  ready: "Ready", processing: "Processing", processed: "Processed",
+  unresolved: "Unresolved", failed: "Failed",
 };
-const dateFormatter = new Intl.DateTimeFormat("da-DK", {
+const dateFormatter = new Intl.DateTimeFormat("en-GB", {
   dateStyle: "medium", timeStyle: "short",
 });
 
@@ -33,6 +33,12 @@ function formatDate(value) {
 function formatDuration(seconds) {
   if (!Number.isFinite(seconds)) return "—";
   return Math.floor(seconds / 60) + ":" + String(Math.round(seconds % 60)).padStart(2, "0");
+}
+
+function formatState(value) {
+  if (!value) return "Connecting";
+  const label = value.replaceAll("_", " ");
+  return label.charAt(0).toUpperCase() + label.slice(1);
 }
 
 function Status({ value }) {
@@ -49,7 +55,7 @@ function Modal({ title, description, onClose, children }) {
   }}>
     <section className="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
       <header><div><h2 id="modal-title">{title}</h2><p>{description}</p></div>
-        <button className="icon-button" type="button" onClick={onClose} aria-label="Luk">×</button>
+        <button className="icon-button" type="button" onClick={onClose} aria-label="Close">×</button>
       </header>
       {children}
     </section>
@@ -96,22 +102,22 @@ function VideoLibrary({ onError, userFilter = "" }) {
   return <>
     <div className="toolbar">
       <div className="filter-row">
-        <label>Søg<input type="search" value={query} onChange={(event) => {
+        <label>Search<input type="search" value={query} onChange={(event) => {
           setQuery(event.target.value); setPage(1);
-        }} placeholder="Rytter, BearTag eller job-ID" /></label>
+        }} placeholder="Rider, BearTag or job ID" /></label>
         <label>Status<select value={status} onChange={(event) => {
           setStatus(event.target.value); setPage(1);
         }}>
-          <option value="">Alle</option><option value="processed">Processed</option>
-          <option value="unresolved">Uafklaret</option><option value="failed">Fejlet</option>
+          <option value="">All</option><option value="processed">Processed</option>
+          <option value="unresolved">Unresolved</option><option value="failed">Failed</option>
         </select></label>
       </div>
-      <span className="result-count">{data.total} resultater</span>
+      <span className="result-count">{data.total} results</span>
     </div>
     <div className="browser-layout">
       <section>
-        {loading && <p className="loading">Henter videoer…</p>}
-        {!loading && data.items.length === 0 && <Empty>Ingen videoer matcher filtrene.</Empty>}
+        {loading && <p className="loading">Loading videos…</p>}
+        {!loading && data.items.length === 0 && <Empty>No videos match the filters.</Empty>}
         <div className="video-grid">{data.items.map((job) =>
           <button type="button" className={"video-card " + (selected === job.jobId ? "selected" : "")}
             key={job.jobId} onClick={() => setSelected(job.jobId)}
@@ -122,20 +128,20 @@ function VideoLibrary({ onError, userFilter = "" }) {
               <span className="duration">{formatDuration(job.durationSeconds)}</span>
             </div>
             <div className="video-copy">
-              <div className="card-title"><strong>{job.displayName ?? job.selectedUserEmail ?? "Ukendt rytter"}</strong><Status value={job.status} /></div>
+              <div className="card-title"><strong>{job.displayName ?? job.selectedUserEmail ?? "Unknown rider"}</strong><Status value={job.status} /></div>
               <span>{formatDate(job.captureStartedAt)}</span>
-              <span>{job.selectedBearTagId ?? "Intet valgt BearTag"} · {job.jobId}</span>
+              <span>{job.selectedBearTagId ?? "No BearTag selected"} · {job.jobId}</span>
             </div>
           </button>
         )}</div>
         {data.pageCount > 1 && <div className="pagination">
-          <button className="secondary" disabled={page === 1} onClick={() => setPage(page - 1)}>Forrige</button>
-          <span>Side {data.page} af {data.pageCount}</span>
-          <button className="secondary" disabled={page >= data.pageCount} onClick={() => setPage(page + 1)}>Næste</button>
+          <button className="secondary" disabled={page === 1} onClick={() => setPage(page - 1)}>Previous</button>
+          <span>Page {data.page} of {data.pageCount}</span>
+          <button className="secondary" disabled={page >= data.pageCount} onClick={() => setPage(page + 1)}>Next</button>
         </div>}
       </section>
       <aside className="detail-panel">
-        {!detail && <Empty>Vælg et job for at se detaljerne.</Empty>}
+        {!detail && <Empty>Select a job to view its details.</Empty>}
         {detail && <>
           {detail.video && <video key={detail.jobId} controls preload="metadata"
             poster={"/api/jobs/" + encodeURIComponent(detail.jobId) + "/thumbnail"}>
@@ -143,24 +149,24 @@ function VideoLibrary({ onError, userFilter = "" }) {
               type={detail.video?.mimeType ?? "video/mp4"} />
           </video>}
           <div className="detail-heading">
-            <div><h2>{detail.displayName ?? detail.selectedUserEmail ?? "Ukendt rytter"}</h2><p>{detail.jobId}</p></div>
+            <div><h2>{detail.displayName ?? detail.selectedUserEmail ?? "Unknown rider"}</h2><p>{detail.jobId}</p></div>
             <Status value={detail.status} />
           </div>
           <dl className="facts">
-            <dt>Optaget</dt><dd>{formatDate(detail.captureStartedAt)}</dd>
+            <dt>Captured</dt><dd>{formatDate(detail.captureStartedAt)}</dd>
             <dt>BearTag</dt><dd>{detail.selectedBearTagId ?? "—"}</dd>
-            <dt>Bruger</dt><dd>{detail.selectedUserEmail ?? "—"}</dd>
+            <dt>User</dt><dd>{detail.selectedUserEmail ?? "—"}</dd>
             <dt>Assignment</dt><dd>{detail.assignmentId ?? "—"}</dd>
-            <dt>Beslutning</dt><dd>{detail.reason ?? "Afventer behandling"}</dd>
+            <dt>Decision</dt><dd>{detail.reason ?? "Awaiting processing"}</dd>
           </dl>
-          {candidates.length > 0 && <section className="evidence"><h3>Kandidatevidens</h3>
+          {candidates.length > 0 && <section className="evidence"><h3>Candidate evidence</h3>
             {candidates.map((candidate) => <div className="score" key={candidate.bearTagId}>
               <span>{candidate.bearTagId}</span>
               <span className="score-track"><span style={{ width: (candidate.combinedScore * 100) + "%" }} /></span>
-              <strong>{candidate.combinedScore.toFixed(2).replace(".", ",")}</strong>
+              <strong>{candidate.combinedScore.toFixed(2)}</strong>
             </div>)}
           </section>}
-          <details className="manifest"><summary>Teknisk manifest</summary><pre>{JSON.stringify(detail.manifest, null, 2)}</pre></details>
+          <details className="manifest"><summary>Technical manifest</summary><pre>{JSON.stringify(detail.manifest, null, 2)}</pre></details>
         </>}
       </aside>
     </div>
@@ -177,10 +183,10 @@ function UserForm({ onClose, onDone, onError }) {
     } catch (error) { onError(error.message); }
   }
   return <form onSubmit={submit}>
-    <label>Navn<input required autoFocus value={values.displayName} onChange={(e) => setValues({ ...values, displayName: e.target.value })} /></label>
-    <label>E-mail<input required type="email" value={values.email} onChange={(e) => setValues({ ...values, email: e.target.value })} /></label>
-    <p className="field-note">E-mail bliver permanent bruger-ID. Punktummer og +alias bevares.</p>
-    <footer className="modal-actions"><button type="button" className="secondary" onClick={onClose}>Annuller</button><button className="primary">Opret bruger</button></footer>
+    <label>Name<input required autoFocus value={values.displayName} onChange={(e) => setValues({ ...values, displayName: e.target.value })} /></label>
+    <label>Email<input required type="email" value={values.email} onChange={(e) => setValues({ ...values, email: e.target.value })} /></label>
+    <p className="field-note">The email becomes the permanent user ID. Dots and +aliases are preserved.</p>
+    <footer className="modal-actions"><button type="button" className="secondary" onClick={onClose}>Cancel</button><button className="primary">Create user</button></footer>
   </form>;
 }
 
@@ -194,8 +200,8 @@ function TagForm({ onClose, onDone, onError }) {
     } catch (error) { onError(error.message); }
   }
   return <form onSubmit={submit}>
-    <label>BearTag-ID<input required autoFocus value={id} onChange={(event) => setId(event.target.value)} placeholder="BearTag-812" /></label>
-    <footer className="modal-actions"><button type="button" className="secondary" onClick={onClose}>Annuller</button><button className="primary">Opret BearTag</button></footer>
+    <label>BearTag ID<input required autoFocus value={id} onChange={(event) => setId(event.target.value)} placeholder="BearTag-812" /></label>
+    <footer className="modal-actions"><button type="button" className="secondary" onClick={onClose}>Cancel</button><button className="primary">Create BearTag</button></footer>
   </form>;
 }
 
@@ -206,13 +212,13 @@ function AssignmentForm({ user, tags, onClose, onDone, onError }) {
   useEffect(() => {
     if (!complete) { setValidation({ state: "idle", message: "" }); return; }
     const timer = setTimeout(async () => {
-      setValidation({ state: "checking", message: "Kontrollerer perioden…" });
+      setValidation({ state: "checking", message: "Checking the period…" });
       try {
         await api("/api/assignments/validate", { method: "POST", body: JSON.stringify({
           ...values, validFrom: new Date(values.validFrom).toISOString(),
           validTo: new Date(values.validTo).toISOString(),
         }) });
-        setValidation({ state: "valid", message: "Perioden er gyldig og overlapper ikke." });
+        setValidation({ state: "valid", message: "The period is valid and does not overlap." });
       } catch (error) { setValidation({ state: "invalid", message: error.message }); }
     }, 300);
     return () => clearTimeout(timer);
@@ -229,17 +235,17 @@ function AssignmentForm({ user, tags, onClose, onDone, onError }) {
     } catch (error) { onError(error.message); }
   }
   return <form onSubmit={submit}>
-    <label>Bruger<input value={user.id} readOnly /></label>
+    <label>User<input value={user.id} readOnly /></label>
     <label>BearTag<select required autoFocus value={values.bearTagId}
       onChange={(e) => setValues({ ...values, bearTagId: e.target.value })}>
-      <option value="">Vælg BearTag</option>{tags.map((tag) => <option key={tag.id}>{tag.id}</option>)}
+      <option value="">Select BearTag</option>{tags.map((tag) => <option key={tag.id}>{tag.id}</option>)}
     </select></label>
     <div className="date-grid">
-      <label>Gyldig fra<input required type="datetime-local" value={values.validFrom} onChange={(e) => setValues({ ...values, validFrom: e.target.value })} /></label>
-      <label>Gyldig til<input required type="datetime-local" value={values.validTo} onChange={(e) => setValues({ ...values, validTo: e.target.value })} /></label>
+      <label>Valid from<input required type="datetime-local" value={values.validFrom} onChange={(e) => setValues({ ...values, validFrom: e.target.value })} /></label>
+      <label>Valid until<input required type="datetime-local" value={values.validTo} onChange={(e) => setValues({ ...values, validTo: e.target.value })} /></label>
     </div>
-    <p className={"validation validation-" + validation.state}>{validation.message || "Tidspunkterne vises lokalt og gemmes som UTC."}</p>
-    <footer className="modal-actions"><button type="button" className="secondary" onClick={onClose}>Annuller</button><button className="primary" disabled={validation.state !== "valid"}>Tildel BearTag</button></footer>
+    <p className={"validation validation-" + validation.state}>{validation.message || "Times are displayed locally and stored as UTC."}</p>
+    <footer className="modal-actions"><button type="button" className="secondary" onClick={onClose}>Cancel</button><button className="primary" disabled={validation.state !== "valid"}>Assign BearTag</button></footer>
   </form>;
 }
 
@@ -265,34 +271,34 @@ function Users({ onError, onShowVideos }) {
   const initials = (name) => name.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase();
   return <>
     <div className="toolbar">
-      <div className="filter-row"><label>Søg<input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Navn, e-mail eller BearTag" /></label></div>
-      <div className="toolbar-actions"><button className="secondary" onClick={() => setModal("tag")}>Opret BearTag</button><button className="primary" onClick={() => setModal("user")}>Opret bruger</button></div>
+      <div className="filter-row"><label>Search<input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Name, email or BearTag" /></label></div>
+      <div className="toolbar-actions"><button className="secondary" onClick={() => setModal("tag")}>Create BearTag</button><button className="primary" onClick={() => setModal("user")}>Create user</button></div>
     </div>
     <div className="users-layout">
       <div className="table-surface"><table>
-        <thead><tr><th>Bruger</th><th>Aktive BearTags</th><th className="numeric">Videoer</th></tr></thead>
+        <thead><tr><th>User</th><th>Active BearTags</th><th className="numeric">Videos</th></tr></thead>
         <tbody>{data.items.map((user) => <tr key={user.id} className={user.id === selectedId ? "selected-row" : ""} onClick={() => setSelectedId(user.id)}>
           <td><div className="person"><span className="avatar">{initials(user.displayName)}</span><span><strong>{user.displayName}</strong><small>{user.id}</small></span></div></td>
           <td>{user.activeBearTags.join(", ") || "—"}</td><td className="numeric">{user.processedVideoCount}</td>
         </tr>)}</tbody>
       </table></div>
       <aside className="user-detail">
-        {!selected && <Empty>Ingen bruger valgt.</Empty>}
+        {!selected && <Empty>No user selected.</Empty>}
         {selected && <>
           <div className="user-heading"><span className="avatar large">{initials(selected.displayName)}</span><div><h2>{selected.displayName}</h2><p>{selected.id}</p></div></div>
-          <h3>BearTag-historik</h3>
-          {selected.assignments.length === 0 && <p className="muted">Ingen assignments.</p>}
+          <h3>BearTag history</h3>
+          {selected.assignments.length === 0 && <p className="muted">No assignments.</p>}
           {selected.assignments.map((item) => <div className={"assignment " + (item.active ? "active" : "")} key={item.id}>
-            <strong>{item.bearTagId}{item.active ? " · aktiv" : ""}</strong><span>{formatDate(item.validFrom)} → {formatDate(item.validTo)}</span>
+            <strong>{item.bearTagId}{item.active ? " · active" : ""}</strong><span>{formatDate(item.validFrom)} → {formatDate(item.validTo)}</span>
           </div>)}
-          <div className="panel-actions"><button className="primary" onClick={() => setModal("assignment")}>Tildel BearTag</button><button className="secondary" onClick={() => onShowVideos(selected.id)}>Vis videoer ({selected.processedVideoCount})</button></div>
+          <div className="panel-actions"><button className="primary" onClick={() => setModal("assignment")}>Assign BearTag</button><button className="secondary" onClick={() => onShowVideos(selected.id)}>Show videos ({selected.processedVideoCount})</button></div>
         </>}
       </aside>
     </div>
-    <section className="tags-section"><div><h2>BearTags</h2><p>{tags.length} registrerede tags</p></div><div className="tag-list">{tags.map((tag) => <span key={tag.id}>{tag.id}</span>)}</div></section>
-    {modal === "user" && <Modal title="Opret bruger" description="E-mail er brugerens permanente identitet." onClose={() => setModal(null)}><UserForm onClose={() => setModal(null)} onDone={refresh} onError={onError} /></Modal>}
-    {modal === "tag" && <Modal title="Opret BearTag" description="BearTag-ID skal matche den fysiske enhed." onClose={() => setModal(null)}><TagForm onClose={() => setModal(null)} onDone={refresh} onError={onError} /></Modal>}
-    {modal === "assignment" && selected && <Modal title="Tildel BearTag" description="Perioden valideres mod hele assignmenthistorikken." onClose={() => setModal(null)}><AssignmentForm user={selected} tags={tags} onClose={() => setModal(null)} onDone={refresh} onError={onError} /></Modal>}
+    <section className="tags-section"><div><h2>BearTags</h2><p>{tags.length} registered tags</p></div><div className="tag-list">{tags.map((tag) => <span key={tag.id}>{tag.id}</span>)}</div></section>
+    {modal === "user" && <Modal title="Create user" description="The email is the user's permanent identity." onClose={() => setModal(null)}><UserForm onClose={() => setModal(null)} onDone={refresh} onError={onError} /></Modal>}
+    {modal === "tag" && <Modal title="Create BearTag" description="The BearTag ID must match the physical device." onClose={() => setModal(null)}><TagForm onClose={() => setModal(null)} onDone={refresh} onError={onError} /></Modal>}
+    {modal === "assignment" && selected && <Modal title="Assign BearTag" description="The period is checked against the complete assignment history." onClose={() => setModal(null)}><AssignmentForm user={selected} tags={tags} onClose={() => setModal(null)} onDone={refresh} onError={onError} /></Modal>}
   </>;
 }
 
@@ -307,15 +313,15 @@ function JobQueue({ onError }) {
   }
   useEffect(() => { refresh(); }, [status]);
   async function requeue(jobId) {
-    if (!window.confirm("Sæt " + jobId + " tilbage i køen?")) return;
+    if (!window.confirm("Requeue " + jobId + "?")) return;
     try {
       await api("/api/jobs/" + encodeURIComponent(jobId) + "/requeue", { method: "POST", body: "{}" });
       await refresh();
     } catch (error) { onError(error.message); }
   }
   return <>
-    <div className="toolbar"><div className="filter-row"><label>Status<select value={status} onChange={(e) => setStatus(e.target.value)}><option value="">Alle</option>{Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label></div><span className="result-count">{data.total} jobs</span></div>
-    <div className="table-surface"><table><thead><tr><th>Job</th><th>Status</th><th>Optaget</th><th>Beslutning</th><th /></tr></thead><tbody>{data.items.map((job) => <tr key={job.jobId}><td><strong>{job.jobId}</strong></td><td><Status value={job.status} /></td><td>{formatDate(job.captureStartedAt)}</td><td>{job.reason ?? "—"}</td><td>{["failed", "unresolved"].includes(job.status) && <button className="secondary small" onClick={() => requeue(job.jobId)}>Genkø</button>}</td></tr>)}</tbody></table></div>
+    <div className="toolbar"><div className="filter-row"><label>Status<select value={status} onChange={(e) => setStatus(e.target.value)}><option value="">All</option>{Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label></div><span className="result-count">{data.total} jobs</span></div>
+    <div className="table-surface"><table><thead><tr><th>Job</th><th>Status</th><th>Captured</th><th>Decision</th><th /></tr></thead><tbody>{data.items.map((job) => <tr key={job.jobId}><td><strong>{job.jobId}</strong></td><td><Status value={job.status} /></td><td>{formatDate(job.captureStartedAt)}</td><td>{job.reason ?? "—"}</td><td>{["failed", "unresolved"].includes(job.status) && <button className="secondary small" onClick={() => requeue(job.jobId)}>Requeue</button>}</td></tr>)}</tbody></table></div>
   </>;
 }
 
@@ -323,7 +329,7 @@ function Overview({ summary, setView }) {
   const counts = summary?.counts ?? {};
   return <>
     <div className="metric-grid">{["ready", "processing", "processed", "unresolved", "failed"].map((status) => <button key={status} className="metric" onClick={() => setView(status === "processed" ? "videos" : "jobs")}><span>{statusLabels[status]}</span><strong>{counts[status] ?? 0}</strong></button>)}</div>
-    <section className="attention"><div><h2>Kræver opmærksomhed</h2><p>{summary?.attentionCount ?? 0} uafklarede eller fejlede jobs bør gennemgås.</p></div><button className="primary" onClick={() => setView("jobs")}>Åbn jobkø</button></section>
+    <section className="attention"><div><h2>Requires attention</h2><p>{summary?.attentionCount ?? 0} unresolved or failed jobs should be reviewed.</p></div><button className="primary" onClick={() => setView("jobs")}>Open job queue</button></section>
   </>;
 }
 
@@ -340,18 +346,18 @@ function App() {
     refreshSummary(); const timer = setInterval(refreshSummary, 5000);
     return () => clearInterval(timer);
   }, []);
-  const workerStatus = summary?.worker?.status ?? "forbinder";
+  const workerStatus = summary?.worker?.status ?? "connecting";
   function showUserVideos(userId) { setVideoUser(userId); setView("videos"); }
   function navigate(next) { if (next !== "videos") setVideoUser(""); setView(next); }
   return <div className="app-shell">
     <aside className="sidebar">
       <div className="brand"><span className="brand-mark">BV</span><span><strong>BearVision</strong><small>Server Control</small></span></div>
-      <nav aria-label="Primær navigation">{[["overview", "Overblik"], ["videos", "Videoer"], ["users", "Brugere & BearTags"], ["jobs", "Jobkø"]].map(([key, label]) => <button key={key} className={view === key ? "active" : ""} onClick={() => navigate(key)}>{label}</button>)}</nav>
-      <div className="worker-state"><span className={"worker-dot " + workerStatus} /><span><strong>Worker: {workerStatus}</strong><small>{summary?.worker?.updatedAt ? "Opdateret " + formatDate(summary.worker.updatedAt) : "Afventer status"}</small></span></div>
+      <nav aria-label="Primary navigation">{[["overview", "Overview"], ["videos", "Videos"], ["users", "Users & BearTags"], ["jobs", "Job queue"]].map(([key, label]) => <button key={key} className={view === key ? "active" : ""} onClick={() => navigate(key)}>{label}</button>)}</nav>
+      <div className="worker-state"><span className={"worker-dot " + workerStatus} /><span><strong>Worker: {formatState(workerStatus)}</strong><small>{summary?.worker?.updatedAt ? "Updated " + formatDate(summary.worker.updatedAt) : "Awaiting status"}</small></span></div>
     </aside>
     <main>
-      <header className="topbar"><div><h1>{pageCopy[view][0]}</h1><p>{videoUser ? "Filtreret på " + videoUser : pageCopy[view][1]}</p></div><button className="secondary" onClick={refreshSummary}>Opdatér</button></header>
-      {error && <div className="error-banner" role="alert">{error}<button aria-label="Luk fejl" onClick={() => setError("")}>×</button></div>}
+      <header className="topbar"><div><h1>{pageCopy[view][0]}</h1><p>{videoUser ? "Filtered by " + videoUser : pageCopy[view][1]}</p></div><button className="secondary" onClick={refreshSummary}>Refresh</button></header>
+      {error && <div className="error-banner" role="alert">{error}<button aria-label="Dismiss error" onClick={() => setError("")}>×</button></div>}
       <div className="page">
         {view === "overview" && <Overview summary={summary} setView={setView} />}
         {view === "videos" && <VideoLibrary onError={setError} userFilter={videoUser} />}
