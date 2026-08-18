@@ -76,6 +76,7 @@ class BearVisionOrchestrator:
         job_queue: JobQueue,
         edge_device_id: str,
         recording_duration_s: float,
+        capture_pre_roll_s: float = 0.0,
         clip_processor: ClipProcessor | None = None,
         observation_retention_s: float = 30.0,
         frame_source: FrameSource | None = None,
@@ -89,7 +90,9 @@ class BearVisionOrchestrator:
     ) -> None:
         if recording_duration_s <= 0:
             raise ValueError("recording_duration_s must be positive")
-        if observation_retention_s < recording_duration_s:
+        if capture_pre_roll_s < 0:
+            raise ValueError("capture_pre_roll_s must not be negative")
+        if observation_retention_s < capture_pre_roll_s + recording_duration_s:
             raise ValueError("observation retention must cover the entire clip")
         if not edge_device_id:
             raise ValueError("edge_device_id must not be empty")
@@ -100,6 +103,7 @@ class BearVisionOrchestrator:
         self.job_queue = job_queue
         self.edge_device_id = edge_device_id
         self.recording_duration_s = recording_duration_s
+        self.capture_pre_roll_s = capture_pre_roll_s
         self.clip_processor = clip_processor
         self.frame_source = frame_source
         self.detection_enabled = detection_enabled
@@ -206,27 +210,28 @@ class BearVisionOrchestrator:
 
     async def _record_and_enqueue(self, detection: PersonDetection) -> OrchestrationResult:
         request_id = f"capture-{detection.frame_id}"
-        clip_start_s = detection.observed_at_monotonic_s
-        clip_end_s = clip_start_s + self.recording_duration_s
-        capture_started_at = self.clock.utc_now()
-        capture_ended_at = capture_started_at + timedelta(seconds=self.recording_duration_s)
+        effective_pre_roll_s = min(
+            self.capture_pre_roll_s, detection.observed_at_monotonic_s
+        )
+        clip_start_s = detection.observed_at_monotonic_s - effective_pre_roll_s
+        clip_end_s = detection.observed_at_monotonic_s + self.recording_duration_s
+        triggered_at = self.clock.utc_now()
+        capture_started_at = triggered_at - timedelta(seconds=effective_pre_roll_s)
+        capture_ended_at = triggered_at + timedelta(seconds=self.recording_duration_s)
         job_start_s = clip_start_s
         job_end_s = clip_end_s
         states = [EdgeLifecycleState.RECORDING]
         self.state = states[-1]
         request = CaptureRequest(
             request_id=request_id,
-            requested_at_monotonic_s=clip_start_s,
-            pre_roll_s=0,
+            requested_at_monotonic_s=detection.observed_at_monotonic_s,
+            pre_roll_s=effective_pre_roll_s,
             post_roll_s=self.recording_duration_s,
         )
         try:
-            async def capture_once() -> CapturedMedia:
-                media_task = asyncio.create_task(self.camera.capture(request))
-                await self.clock.sleep(self.recording_duration_s)
-                return await media_task
-
-            media = await self._retry_component("capture clip", capture_once, states)
+            media = await self._retry_component(
+                "capture clip", lambda: self.camera.capture(request), states
+            )
             if self.clip_processor is not None:
                 clip_processor = self.clip_processor
                 states.append(EdgeLifecycleState.POST_PROCESSING)

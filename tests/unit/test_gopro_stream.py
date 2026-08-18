@@ -1,7 +1,6 @@
 import sys
 from pathlib import Path
 from unittest import mock
-import urllib.request
 
 MODULE_DIR = Path(__file__).resolve().parents[2] / 'code' / 'modules'
 sys.path.append(str(MODULE_DIR))
@@ -17,7 +16,7 @@ def test_stream_serves_video():
         url = ctrl.start_preview(9100)
         # For wired GoPro, we get UDP URL which we can't test with urllib
         # Just verify we get the expected UDP URL format
-        assert url.startswith('udp://') and ':9100' in url
+        assert url == 'udp://@0.0.0.0:9100'
         # Test that stop_preview works without error
         ctrl.stop_preview()
         ctrl.disconnect()

@@ -149,6 +149,7 @@ Their versioned configuration files live in `config/`. Test videos remain under
 ## Specifications
 
 - Runtime and simulation: `docs/remake/foundation.md`
+- Disk-backed GoPro simulator: `docs/remake/gopro-simulator.md`
 - Edge computer and control GUI: `docs/remake/edge-control.md`
 - Component behaviour: `specs/components/`
 - Versioned scenarios: `specs/scenarios/`

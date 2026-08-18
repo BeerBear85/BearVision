@@ -20,17 +20,36 @@ class GoProCameraAdapter:
         capture_dir: str | Path,
         *,
         hindsight_enabled: bool = True,
+        hindsight_duration_s: int = 15,
     ) -> None:
+        if hindsight_duration_s not in {15, 30}:
+            raise ValueError("HindSight duration must be 15 or 30 seconds")
         self.controller = controller
         self.clock = clock
         self.capture_dir = Path(capture_dir)
         self.hindsight_enabled = hindsight_enabled
+        self.hindsight_duration_s = hindsight_duration_s
         self._captures: dict[str, CapturedMedia] = {}
 
     async def connect(self) -> None:
+        connected = False
         try:
             await asyncio.to_thread(self.controller.connect)
+            connected = True
+            if self.hindsight_enabled:
+                enabled = await asyncio.to_thread(
+                    self.controller.enable_hindsight, self.hindsight_duration_s
+                )
+                if enabled is False:
+                    raise RuntimeError("GoPro did not enable HindSight")
+            else:
+                await asyncio.to_thread(self.controller.disableHindsightMode)
         except Exception as exc:
+            if connected:
+                try:
+                    await asyncio.to_thread(self.controller.disconnect)
+                except Exception:
+                    pass
             raise translated_error(exc, "connect GoPro") from exc
 
     async def disconnect(self) -> None:
@@ -57,12 +76,14 @@ class GoProCameraAdapter:
             return cached
         try:
             before = set(await asyncio.to_thread(self.controller.list_videos))
-            if self.hindsight_enabled:
-                await asyncio.to_thread(self.controller.start_hindsight_clip, request.post_roll_s)
-            else:
+            recording_started = False
+            try:
                 await asyncio.to_thread(self.controller.start_recording)
+                recording_started = True
                 await self.clock.sleep(request.post_roll_s)
-                await asyncio.to_thread(self.controller.stop_recording)
+            finally:
+                if recording_started:
+                    await asyncio.to_thread(self.controller.stop_recording)
             after = list(await asyncio.to_thread(self.controller.list_videos))
             new_files = [name for name in after if name not in before]
             if not new_files:
@@ -89,3 +110,7 @@ class GoProCameraAdapter:
             return media
         except Exception as exc:
             raise translated_error(exc, "capture GoPro media") from exc
+
+    @property
+    def captures(self) -> dict[str, CapturedMedia]:
+        return dict(self._captures)

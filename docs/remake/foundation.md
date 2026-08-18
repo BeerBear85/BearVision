@@ -4,8 +4,9 @@ Status: implemented foundation; hardware calibration and endurance testing are
 still required before production deployment.
 
 BearVision 3 is built around executable specifications and deterministic
-behavioural simulation. Simulation models component behaviour, timing and
-failures; it does not claim physical accuracy.
+behavioural simulation. The fast in-memory adapters model orchestration
+behaviour, timing and failures. The disk-backed GoPro controller simulator adds
+control and media fidelity, but does not claim firmware or transport accuracy.
 
 ## One orchestration core
 
@@ -40,3 +41,6 @@ registry live only in the independently versioned server configuration.
 The default `pytest` invocation runs the active BearVision 3 behavioural suite.
 Legacy, GUI and physical-hardware checks are deliberately outside that gate and
 must use explicit test commands/environments.
+
+The GoPro simulation boundary and its remaining fidelity gaps are documented in
+`docs/remake/gopro-simulator.md`.

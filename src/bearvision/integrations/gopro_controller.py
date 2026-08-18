@@ -193,12 +193,12 @@ class GoProController:
 
     def start_preview(self, port: int = 8554) -> str:
         """Start preview stream and return its URL."""
-        # For wired connection, use HTTP command instead of streaming feature
-        ip_address = self._run_in_thread(self._start_preview_http(port))
-        # Return the UDP stream URL (GoPro wired uses UDP, not RTMP)
-        return f"udp://{ip_address}:{port}"
+        self._run_in_thread(self._start_preview_http(port))
+        # GoPro sends the wired preview to the requesting host. FFmpeg/OpenCV
+        # therefore has to listen locally instead of connecting to the camera IP.
+        return f"udp://@0.0.0.0:{port}"
 
-    async def _start_preview_http(self, port: int) -> str:
+    async def _start_preview_http(self, port: int) -> None:
         """Start preview stream using HTTP commands (for wired connection)."""
         # First, stop any existing preview stream to avoid 409 conflict
         try:
@@ -211,15 +211,8 @@ class GoProController:
         result = await self._gopro.http_command.set_preview_stream(
             mode=constants.Toggle.ENABLE, port=port
         )
-        # Extract IP from the HTTP response URL
-        response_url = result.data.get("id", result.id if hasattr(result, "id") else str(result))
-        if "://" in response_url:
-            # Extract IP from URL like "http://172.24.106.51:8080/gopro/camera/stream/start?port=8554"
-            ip_part = response_url.split("://")[1].split(":")[0]
-            return ip_part
-        else:
-            # Fallback to common GoPro wired IP
-            return "172.24.106.51"
+        if hasattr(result, "ok") and not result.ok:
+            raise RuntimeError("GoPro rejected preview stream start")
 
     def stop_preview(self) -> None:
         """Stop preview stream."""
@@ -255,16 +248,28 @@ class GoProController:
         Returns:
             bool: True if hindsight mode was enabled successfully, False otherwise
         """
+        return self.enable_hindsight(15)
+
+    def enable_hindsight(self, duration_s: int = 15) -> bool:
+        """Enable the camera's rolling HindSight buffer."""
+        values = {
+            15: settings.Hindsight.NUM_15_SECONDS,
+            30: settings.Hindsight.NUM_30_SECONDS,
+        }
+        if duration_s not in values:
+            raise ValueError("HindSight duration must be 15 or 30 seconds")
         try:
-            if hasattr(self._gopro, "http_setting"):
-                self._run_in_thread(
-                    self._gopro.http_setting.hindsight.set(settings.Hindsight.NUM_15_SECONDS)
-                )
-                logger.info("Hindsight mode enabled successfully")
-                return True
-            else:
+            if not hasattr(self._gopro, "http_setting"):
                 logger.warning("http_setting not available, cannot enable hindsight mode")
                 return False
+            result = self._run_in_thread(
+                self._gopro.http_setting.hindsight.set(values[duration_s])
+            )
+            if hasattr(result, "ok") and not result.ok:
+                logger.error("GoPro rejected HindSight setting")
+                return False
+            logger.info("HindSight mode enabled with a %s second buffer", duration_s)
+            return True
         except Exception as e:
             logger.error(f"Failed to enable hindsight mode: {e}")
             return False

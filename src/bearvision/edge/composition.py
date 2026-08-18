@@ -138,6 +138,7 @@ def build_real_system(
             clock,
             capture_dir,
             hindsight_enabled=config.recording.hindsight_enabled,
+            hindsight_duration_s=config.recording.hindsight_duration_s,
         ),
         scanner=KBeaconTagScannerAdapter(beacon_factory(), clock),
         detector=detector,
@@ -181,8 +182,21 @@ def build_real_orchestrator(
         job_queue=components.job_queue,
         edge_device_id=config.system.device_id,
         recording_duration_s=config.recording.post_detection_duration_s,
+        capture_pre_roll_s=(
+            config.recording.hindsight_duration_s
+            if config.recording.hindsight_enabled
+            else 0
+        ),
         clip_processor=components.clip_processor,
-        observation_retention_s=max(30.0, config.recording.post_detection_duration_s),
+        observation_retention_s=max(
+            30.0,
+            config.recording.post_detection_duration_s
+            + (
+                config.recording.hindsight_duration_s
+                if config.recording.hindsight_enabled
+                else 0
+            ),
+        ),
         frame_source=components.frame_source,
         detection_enabled=config.detection.enabled,
         upload_enabled=config.features.cloud_upload,

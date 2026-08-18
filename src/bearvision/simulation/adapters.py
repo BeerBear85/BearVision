@@ -78,6 +78,7 @@ class SimulatedCamera:
         if self.fail_capture:
             raise ComponentUnavailable("injected camera capture failure")
         if request.request_id not in self.captures:
+            await self.clock.sleep(request.post_roll_s)
             content = f"bearvision-simulated-clip:{request.request_id}".encode()
             self.captures[request.request_id] = CapturedMedia(
                 asset=MediaAsset(

@@ -3,6 +3,7 @@ config_kind: bearvision-edge
 recording:
   post_detection_duration_s: 5.0
   hindsight_enabled: true
+  hindsight_duration_s: 15
 clip_extraction:
   engine: ffmpeg
   video_codec: libx264

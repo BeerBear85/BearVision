@@ -16,6 +16,7 @@ class StrictConfigModel(BaseModel):
 class RecordingConfig(StrictConfigModel):
     post_detection_duration_s: float = Field(default=5.0, ge=0, le=300)
     hindsight_enabled: bool = True
+    hindsight_duration_s: Literal[15, 30] = 15
 
 
 class ClipExtractionConfig(StrictConfigModel):

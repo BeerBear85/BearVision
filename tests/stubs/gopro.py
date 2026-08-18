@@ -140,6 +140,7 @@ class FakeGoPro:
     def __init__(self, *a, **k):
         self.http_command = FakeHttpCommand()
         self.http_settings = FakeHttpSettings()
+        self.http_setting = self.http_settings
         self.streaming = FakeStreaming()
         # Set the _serial attribute to simulate a properly opened WiredGoPro
         self._serial = "fake_serial_123"
@@ -162,4 +163,3 @@ class FakeGoPro:
             from open_gopro.domain.exceptions import GoProNotOpened
             raise GoProNotOpened("Serial / IP has not yet been discovered")
         return f"http://172.24.106.51:8080/gopro"
-

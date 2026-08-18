@@ -147,6 +147,45 @@ def test_post_processing_adjusts_job_utc_interval_and_observation_offsets() -> N
     asyncio.run(exercise())
 
 
+def test_hindsight_extends_clip_and_manifest_before_detection() -> None:
+    async def exercise() -> None:
+        clock = VirtualClock(NOW)
+        clock.advance_to(20)
+        detection = PersonDetection(
+            frame_id="frame-hindsight",
+            observed_at_monotonic_s=20,
+            bounding_box=BoundingBox(x_px=1, y_px=1, width_px=20, height_px=40),
+            confidence=0.9,
+        )
+        camera = SimulatedCamera(clock)
+        orchestrator = BearVisionOrchestrator(
+            clock=clock,
+            camera=camera,
+            scanner=SimulatedTagScanner(()),
+            detector=SimulatedDetector({}),
+            job_queue=InMemoryJobQueue(),
+            edge_device_id="edge-test",
+            recording_duration_s=5,
+            capture_pre_roll_s=15,
+            observation_retention_s=30,
+        )
+        for at_s in (4.9, 5, 12, 25, 25.1):
+            orchestrator.add_tag_observation(
+                observation("active", at_s, active=True, rssi_dbm=-60)
+            )
+
+        await orchestrator.start()
+        result = await orchestrator.handle_detection(detection)
+        assert result.clip_start_monotonic_s == 5
+        assert result.clip_end_monotonic_s == 25
+        assert result.manifest.capture_started_at == NOW + timedelta(seconds=5)
+        assert result.manifest.capture_ended_at == NOW + timedelta(seconds=25)
+        assert tuple(item.offset_ms for item in result.observations) == (0, 7000, 20000)
+        await orchestrator.stop()
+
+    asyncio.run(exercise())
+
+
 def test_repeated_and_concurrent_detections_publish_one_job() -> None:
     async def exercise() -> None:
         orchestrator, queue = build_orchestrator()

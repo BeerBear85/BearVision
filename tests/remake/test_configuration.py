@@ -19,6 +19,7 @@ def test_active_edge_config_is_versioned_and_valid() -> None:
     assert config.storage.provider == "box"
     assert not hasattr(config, "assignment")
     assert config.clip_extraction.engine == "ffmpeg"
+    assert config.recording.hindsight_duration_s == 15
     assert config.clip_extraction.crf == 20
     assert config.virtual_cameraman.crop_width_ratio == 0.5
     assert config.virtual_cameraman.output_width_px == 960

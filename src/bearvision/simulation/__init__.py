@@ -10,6 +10,7 @@ from .adapters import (
     VirtualClock,
 )
 from .engine import BehavioralSimulation, Event, TraceEntry
+from .gopro import SimulatedGoProController
 from .runner import ClosedLoopScenarioRunner, ScenarioRunResult
 from .scenario_inputs import generate_bear_tag_series
 
@@ -22,6 +23,7 @@ __all__ = [
     "InMemoryTagRegistry",
     "SimulatedCamera",
     "SimulatedDetector",
+    "SimulatedGoProController",
     "SimulatedTagScanner",
     "ScenarioRunResult",
     "TraceEntry",

@@ -26,6 +26,7 @@ from bearvision.testing import check_camera, check_detector, check_scanner, chec
 class StubGoPro:
     def __init__(self) -> None:
         self.files: list[str] = []
+        self.hindsight_duration_s = 0
 
     def connect(self):
         return None
@@ -42,7 +43,17 @@ class StubGoPro:
     def list_videos(self):
         return list(self.files)
 
-    def start_hindsight_clip(self, duration):
+    def enable_hindsight(self, duration):
+        self.hindsight_duration_s = duration
+        return True
+
+    def disableHindsightMode(self):
+        self.hindsight_duration_s = 0
+
+    def start_recording(self):
+        return None
+
+    def stop_recording(self):
         self.files.append("GX010001.MP4")
 
     def download_file(self, camera_file, local_path):
@@ -176,3 +187,4 @@ def test_real_composition_wraps_existing_implementations(tmp_path: Path) -> None
     )
     assert isinstance(orchestrator, BearVisionOrchestrator)
     assert orchestrator.recording_duration_s == config.recording.post_detection_duration_s
+    assert orchestrator.capture_pre_roll_s == config.recording.hindsight_duration_s

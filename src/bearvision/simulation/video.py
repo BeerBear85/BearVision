@@ -61,6 +61,7 @@ class RecordedVideoCamera:
         if not self.connected:
             raise ComponentUnavailable("recorded video camera is disconnected")
         if request.request_id not in self.captures:
+            await self.clock.sleep(request.post_roll_s)
             filename = self._capture_filename(request.request_id)
             start_s = max(0.0, request.requested_at_monotonic_s - request.pre_roll_s)
             duration_s = request.pre_roll_s + request.post_roll_s
