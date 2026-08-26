@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import timedelta
 from enum import StrEnum
 import logging
-from typing import TypeVar
+from typing import Any, TypeVar
 
 from bearvision.contracts import (
     BearTagJobObservation,
@@ -30,6 +30,7 @@ from bearvision.ports import (
     InvalidComponentData,
     JobQueue,
     PermanentComponentError,
+    PreparedClip,
     TagScanner,
     VideoFrame,
 )
@@ -53,16 +54,43 @@ class EdgeLifecycleState(StrEnum):
 
 
 @dataclass(frozen=True, slots=True)
+class OrchestrationEvent:
+    """Stable trace evidence exposed without leaking orchestrator internals."""
+
+    at_monotonic_s: float
+    kind: str
+    payload: dict[str, Any]
+
+    def __post_init__(self) -> None:
+        if self.at_monotonic_s < 0:
+            raise ValueError("orchestration event time must not be negative")
+        if not self.kind.strip():
+            raise ValueError("orchestration event kind must not be empty")
+
+
+@dataclass(frozen=True, slots=True)
 class OrchestrationResult:
     request_id: str
     clip_start_monotonic_s: float
     clip_end_monotonic_s: float
+    job_start_monotonic_s: float
+    job_end_monotonic_s: float
     manifest: EdgeJobManifest
     observations: tuple[BearTagJobObservation, ...]
     raw_capture: CapturedClip
     media: CapturedMedia
+    processing: PreparedClip | None
     published: bool
     states: tuple[EdgeLifecycleState, ...]
+    events: tuple[OrchestrationEvent, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class FrameEvaluation:
+    """Detection trace and optional completed capture for one preview frame."""
+
+    events: tuple[OrchestrationEvent, ...]
+    result: OrchestrationResult | None
 
 
 class BearVisionOrchestrator:
@@ -179,10 +207,32 @@ class BearVisionOrchestrator:
             self.add_tag_observation(observation)
 
     async def process_frame(self, frame: VideoFrame) -> OrchestrationResult | None:
+        return (await self.evaluate_frame(frame)).result
+
+    async def evaluate_frame(self, frame: VideoFrame) -> FrameEvaluation:
+        """Evaluate one frame and return trace data through a stable public seam."""
+
         if not self.detection_enabled:
-            return None
+            return FrameEvaluation(events=(), result=None)
         detections = await self.detector.detect(frame)
-        return await self.handle_detection(detections[0]) if detections else None
+        if not detections:
+            return FrameEvaluation(events=(), result=None)
+        detection = detections[0]
+        result = await self.handle_detection(detection)
+        event = OrchestrationEvent(
+            at_monotonic_s=frame.observed_at_monotonic_s,
+            kind="person_detected",
+            payload={
+                "frame_id": frame.frame_id,
+                "confidence": detection.confidence,
+                "bounding_box": detection.bounding_box.model_dump(mode="json"),
+                "coordinate_space": {
+                    "width_px": frame.width_px,
+                    "height_px": frame.height_px,
+                },
+            },
+        )
+        return FrameEvaluation(events=(event,), result=result)
 
     async def handle_detection(self, detection: PersonDetection) -> OrchestrationResult:
         request_id = f"capture-{detection.frame_id}"
@@ -240,6 +290,7 @@ class BearVisionOrchestrator:
             capture_ended_at = timing_reference_utc + timedelta(
                 seconds=job_end_s - timing_reference_monotonic_s
             )
+            prepared: PreparedClip | None = None
             if self.clip_processor is not None:
                 clip_processor = self.clip_processor
                 states.append(EdgeLifecycleState.POST_PROCESSING)
@@ -276,22 +327,99 @@ class BearVisionOrchestrator:
                     lambda: self.job_queue.publish(manifest, media, observations),
                     states,
                 )
+            events = self._build_result_events(
+                request_id=request_id,
+                raw_capture=raw_capture,
+                processed_media=media,
+                prepared=prepared,
+                clip_start_s=clip_start_s,
+                clip_end_s=clip_end_s,
+                published=published,
+            )
             states.append(EdgeLifecycleState.MONITORING)
             self.state = states[-1]
             return OrchestrationResult(
                 request_id=request_id,
                 clip_start_monotonic_s=clip_start_s,
                 clip_end_monotonic_s=clip_end_s,
+                job_start_monotonic_s=job_start_s,
+                job_end_monotonic_s=job_end_s,
                 manifest=manifest,
                 observations=observations,
                 raw_capture=raw_capture,
                 media=media,
+                processing=prepared,
                 published=published,
                 states=tuple(states),
+                events=events,
             )
         except Exception:
             self.state = EdgeLifecycleState.MONITORING
             raise
+
+    @staticmethod
+    def _build_result_events(
+        *,
+        request_id: str,
+        raw_capture: CapturedClip,
+        processed_media: CapturedMedia,
+        prepared: PreparedClip | None,
+        clip_start_s: float,
+        clip_end_s: float,
+        published: bool,
+    ) -> tuple[OrchestrationEvent, ...]:
+        raw_media = raw_capture.media
+        events = [
+            OrchestrationEvent(
+                at_monotonic_s=clip_start_s,
+                kind="capture_started",
+                payload={
+                    "asset_id": raw_media.asset.asset_id,
+                    "clip_end_s": clip_end_s,
+                },
+            ),
+            OrchestrationEvent(
+                at_monotonic_s=clip_end_s,
+                kind="finalize_clip",
+                payload={"request_id": request_id},
+            ),
+            OrchestrationEvent(
+                at_monotonic_s=clip_end_s,
+                kind="capture_completed",
+                payload={
+                    "asset_id": raw_media.asset.asset_id,
+                    "filename": raw_media.asset.filename,
+                    "size_bytes": raw_media.asset.size_bytes,
+                    "clip_start_s": clip_start_s,
+                    "clip_duration_s": clip_end_s - clip_start_s,
+                },
+            ),
+        ]
+        if prepared is not None:
+            events.extend(
+                OrchestrationEvent(
+                    at_monotonic_s=(
+                        clip_end_s
+                        if item.source_offset_s is None
+                        else clip_start_s + item.source_offset_s
+                    ),
+                    kind=item.kind,
+                    payload=dict(item.payload),
+                )
+                for item in prepared.trace_events
+            )
+        if published:
+            events.append(
+                OrchestrationEvent(
+                    at_monotonic_s=clip_end_s,
+                    kind="clip_uploaded",
+                    payload={
+                        "asset_id": processed_media.asset.asset_id,
+                        "object_key": f"input-queue/ready/{request_id}",
+                    },
+                )
+            )
+        return tuple(events)
 
     @staticmethod
     def _validate_camera_capture(

@@ -7,7 +7,7 @@ components:
   frames: video
   detector: yolo
   bear_tag: synthetic
-  camera: recorded_video
+  camera: simulated_gopro
   storage: memory
 
 video:
@@ -19,8 +19,8 @@ detector:
   confidence_threshold: 0.6
 
 synthetic_bear_tags:
-  # Rider 1 crosses the frame around 1.3-3.2 s. The tag stays active through
-  # the resulting five-second clip because the rider continues out of frame.
+  # Rider 1 crosses the frame around 1.3-3.2 s. The tag remains active through
+  # the useful part of the processed first clip, then returns to baseline.
   - tag_id: bear_tag_666
     rider_id: rider-testmovie5-1
     start_s: 0
@@ -33,14 +33,15 @@ synthetic_bear_tags:
       z: 9.80665
     motion_windows:
       - start_s: 1.0
-        end_s: 7.8
+        end_s: 5.0
         rssi_dbm: -64
         acceleration_mps2:
           x: 4.8
           y: 2.6
           z: 19.2
-  # A unique tag is required for rider 2; sharing bear_tag_666 would make
-  # identity assignment ambiguous and would not model physical BearTags.
+  # Rider 2 starts the approach before entering the frame. This temporal
+  # separation is required because its 15-second HindSight clip also contains
+  # rider 1's earlier pass.
   - tag_id: bear_tag_667
     rider_id: rider-testmovie5-2
     start_s: 0
@@ -52,7 +53,7 @@ synthetic_bear_tags:
       y: 0
       z: 9.80665
     motion_windows:
-      - start_s: 11.4
+      - start_s: 7.0
         end_s: 13.5
         rssi_dbm: -66
         acceleration_mps2:

@@ -15,6 +15,7 @@ from .models import (
     CaptureWindowPrecision,
     ExtractedClip,
     PreparedClip,
+    ProcessingTraceEvent,
     VideoFrame,
     requested_capture_window,
 )
@@ -54,6 +55,7 @@ __all__ = [
     "MediaProbe",
     "PermanentComponentError",
     "PreparedClip",
+    "ProcessingTraceEvent",
     "Storage",
     "TagRegistry",
     "TagScanner",

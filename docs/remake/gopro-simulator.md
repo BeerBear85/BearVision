@@ -1,7 +1,7 @@
 # GoPro controller simulator
 
-Status: first high-fidelity control slice implemented; endurance, storage-full,
-camera sleep and UDP fault simulation remain open.
+Status: integrated into all video scenarios; endurance, storage-full, camera
+sleep and UDP fault simulation remain open.
 
 ## Purpose
 
@@ -13,6 +13,15 @@ idempotency use the same code in simulation and on hardware.
 The older `SimulatedCamera` remains a fast in-memory test double for synthetic
 scenario tests. It is not a GoPro emulator and must not be used to validate
 camera timing or media behaviour.
+
+All behavioural scenarios with `frames: video` select `camera:
+simulated_gopro`. They therefore exercise the same `GoProCameraAdapter` as the
+physical camera, including HindSight, shutter control, media listing and the
+download from the simulated SD card.
+
+For schema 3.0 compatibility, the former `camera: recorded_video` value is
+accepted while loading and normalized to `simulated_gopro`. Newly generated
+and checked-in scenarios always write the explicit new value.
 
 ## Modelled behaviour
 
@@ -64,4 +73,3 @@ packet loss, startup delay and stream interruption need to be tested.
 - chaptered recordings and multi-file captures;
 - preview packet loss, jitter and firewall behaviour;
 - battery, temperature and firmware-specific status values;
-- automatic integration into every behavioural scenario composition.

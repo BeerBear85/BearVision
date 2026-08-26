@@ -59,6 +59,7 @@ edge = [
     { name = "numpy" },
     { name = "open-gopro" },
     { name = "opencv-python-headless" },
+    { name = "scipy" },
     { name = "truststore", marker = "sys_platform == 'win32'" },
 ]
 gui = [
@@ -88,6 +89,7 @@ requires-dist = [
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=6,<8" },
     { name = "pyyaml", specifier = ">=6,<7" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.12,<1" },
+    { name = "scipy", marker = "extra == 'edge'", specifier = ">=1.14,<2" },
     { name = "scipy", marker = "extra == 'training'", specifier = ">=1.14,<2" },
     { name = "truststore", marker = "sys_platform == 'win32' and extra == 'edge'", specifier = ">=0.10,<1" },
     { name = "types-pyyaml", marker = "extra == 'dev'", specifier = ">=6.0,<7" },

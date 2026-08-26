@@ -32,16 +32,16 @@
 
 ### P1 - Use one Edge capture-to-publish pipeline
 
-- [ ] Extend the orchestration result/event surface with the processing and trace
+- [x] Extend the orchestration result/event surface with the processing and trace
   metadata needed by scenario evaluation; do not expose mutable implementation
   fields such as `detector` and `observations` to runners.
-- [ ] Configure `VideoScenarioRunner` with the same `ClipProcessor` and publishing
+- [x] Configure `VideoScenarioRunner` with the same `ClipProcessor` and publishing
   path as hardware execution.
-- [ ] Remove the runner's second processing, time adjustment, package hashing and
+- [x] Remove the runner's second processing, time adjustment, package hashing and
   `queue.publish()` implementation.
-- [ ] Add parity tests proving hardware-style and recorded-video execution produce
+- [x] Add parity tests proving hardware-style and recorded-video execution produce
   equivalent manifests, observation windows, ordering and publish behaviour.
-- [ ] Preserve ADR 0007: `process_server=False` must never run the server worker
+- [x] Preserve ADR 0007: `process_server=False` must never run the server worker
   in-process.
 
 ### P2 - Reduce Scenario duplication after the pipeline is unified

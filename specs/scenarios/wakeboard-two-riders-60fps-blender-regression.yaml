@@ -18,7 +18,7 @@ components:
   frames: video
   detector: yolo
   bear_tag: synthetic
-  camera: recorded_video
+  camera: simulated_gopro
   storage: memory
 video:
   path: tests/end2end/blender_scenes/wakeboard_two_riders_fs360_60fps/wakeboard_two_riders_60fps.mp4

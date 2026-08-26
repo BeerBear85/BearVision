@@ -12,6 +12,7 @@ from bearvision.ports import (
     ComponentUnavailable,
     PermanentComponentError,
     PreparedClip,
+    ProcessingTraceEvent,
     VideoFrame,
 )
 from bearvision.simulation import (
@@ -141,8 +142,115 @@ def test_post_processing_adjusts_job_utc_interval_and_observation_offsets() -> N
         assert result.manifest.capture_started_at == NOW + timedelta(seconds=1)
         assert result.manifest.capture_ended_at == NOW + timedelta(seconds=3)
         assert tuple(item.offset_ms for item in result.observations) == (0, 2000)
+        assert result.job_start_monotonic_s == 2
+        assert result.job_end_monotonic_s == 4
+        assert result.processing is not None
         assert EdgeLifecycleState.POST_PROCESSING in result.states
         await orchestrator.stop()
+
+    asyncio.run(exercise())
+
+
+def test_hardware_style_and_recorded_cameras_share_the_complete_publish_pipeline() -> None:
+    async def run_pipeline(*, estimated_camera_timing: bool):
+        class Camera(SimulatedCamera):
+            async def capture(self, request):
+                capture = await super().capture(request)
+                if not estimated_camera_timing:
+                    return capture
+                return replace(
+                    capture,
+                    actual_window=replace(
+                        capture.actual_window,
+                        precision=CaptureWindowPrecision.ESTIMATED,
+                        basis=CaptureWindowBasis.CAMERA_COMMAND_TIMING,
+                    ),
+                )
+
+        class Processor:
+            def __init__(self) -> None:
+                self.calls = 0
+
+            async def process(self, media):
+                self.calls += 1
+                return PreparedClip(
+                    media=media,
+                    source_start_offset_s=1,
+                    duration_s=2,
+                    trace_events=(
+                        ProcessingTraceEvent(
+                            kind="processor_completed",
+                            payload={"processor": "parity-test"},
+                        ),
+                    ),
+                )
+
+        class Queue(InMemoryJobQueue):
+            def __init__(self) -> None:
+                super().__init__()
+                self.publish_calls = 0
+
+            async def publish(self, manifest, video, observations):
+                self.publish_calls += 1
+                return await super().publish(manifest, video, observations)
+
+        clock = VirtualClock(NOW)
+        camera = Camera(clock)
+        processor = Processor()
+        queue = Queue()
+        orchestrator = BearVisionOrchestrator(
+            clock=clock,
+            camera=camera,
+            scanner=SimulatedTagScanner(()),
+            detector=SimulatedDetector({}),
+            job_queue=queue,
+            edge_device_id="parity-edge",
+            recording_duration_s=5,
+            capture_pre_roll_s=15,
+            clip_processor=processor,
+            observation_retention_s=30,
+        )
+        detection = PersonDetection(
+            frame_id="same-frame",
+            observed_at_monotonic_s=20,
+            bounding_box=BoundingBox(x_px=1, y_px=1, width_px=20, height_px=40),
+            confidence=0.9,
+        )
+        for at_s in (5.5, 6, 7.9, 8, 24):
+            orchestrator.add_tag_observation(
+                observation("active", at_s, active=True, rssi_dbm=-60)
+            )
+
+        await orchestrator.start()
+        clock.advance_to(20)
+        result = await orchestrator.handle_detection(detection)
+        await orchestrator.stop()
+        return result, queue, processor
+
+    async def exercise() -> None:
+        hardware, hardware_queue, hardware_processor = await run_pipeline(
+            estimated_camera_timing=True
+        )
+        recorded, recorded_queue, recorded_processor = await run_pipeline(
+            estimated_camera_timing=False
+        )
+
+        assert hardware.manifest == recorded.manifest
+        assert hardware.observations == recorded.observations
+        assert hardware.job_start_monotonic_s == recorded.job_start_monotonic_s == 6
+        assert hardware.job_end_monotonic_s == recorded.job_end_monotonic_s == 8
+        assert hardware.events == recorded.events
+        assert tuple(event.kind for event in hardware.events) == (
+            "capture_started",
+            "finalize_clip",
+            "capture_completed",
+            "processor_completed",
+            "clip_uploaded",
+        )
+        assert hardware.published and recorded.published
+        assert hardware_queue.packages == recorded_queue.packages
+        assert hardware_queue.publish_calls == recorded_queue.publish_calls == 1
+        assert hardware_processor.calls == recorded_processor.calls == 1
 
     asyncio.run(exercise())
 

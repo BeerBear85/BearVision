@@ -267,7 +267,7 @@ def generate_blender_scenario(
                 "frames": "video",
                 "detector": "yolo",
                 "bear_tag": "synthetic",
-                "camera": "recorded_video",
+                "camera": "simulated_gopro",
                 "storage": "memory",
             },
             "video": {

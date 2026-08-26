@@ -45,9 +45,19 @@ def test_blender_video_and_synthetic_bear_tag_assign_the_rider(tmp_path: Path) -
     detected = [entry for entry in result.trace if entry.kind == "person_detected"]
     assert detected[0].at_s == pytest.approx(2.1, abs=0.11)
     assert result.uploads[0].object_key == "input-queue/ready/capture-video-frame-126"
-    source_clip = tmp_path / "capture-video-frame-126.mp4"
-    processed_clip = tmp_path / "capture-video-frame-126.virtual-cameraman.mp4"
-    tracking_path = tmp_path / "capture-video-frame-126.tracking.json"
+    capture_event = next(
+        entry for entry in result.trace if entry.kind == "capture_completed"
+    )
+    processing_event = next(
+        entry for entry in result.trace if entry.kind == "virtual_cameraman_completed"
+    )
+    source_clip = tmp_path / capture_event.payload["filename"]
+    processed_clip = tmp_path / processing_event.payload["processed_filename"]
+    tracking_path = tmp_path / processing_event.payload["tracking_filename"]
+    assert source_clip.name == "capture-video-frame-126-GX010001.MP4"
+    assert (
+        tmp_path / ".simulated-gopro-sd/100GOPRO/GX010001.MP4"
+    ).is_file()
     assert source_clip.is_file()
     assert processed_clip.is_file()
     assert processed_clip.stat().st_size > 0
@@ -110,10 +120,21 @@ def test_two_rider_blender_video_assigns_both_riders_bear_tags(
         "input-queue/ready/capture-video-frame-126",
         "input-queue/ready/capture-video-frame-708",
     ]
-    for frame_id in (126, 708):
-        capture = cv2.VideoCapture(
-            str(tmp_path / f"capture-video-frame-{frame_id}.virtual-cameraman.mp4")
-        )
+    capture_events = [
+        entry for entry in result.trace if entry.kind == "capture_completed"
+    ]
+    processing_events = [
+        entry for entry in result.trace if entry.kind == "virtual_cameraman_completed"
+    ]
+    assert [entry.payload["filename"] for entry in capture_events] == [
+        "capture-video-frame-126-GX010001.MP4",
+        "capture-video-frame-708-GX010002.MP4",
+    ]
+    assert [path.name for path in sorted(
+        (tmp_path / ".simulated-gopro-sd/100GOPRO").glob("*.MP4")
+    )] == ["GX010001.MP4", "GX010002.MP4"]
+    for event in processing_events:
+        capture = cv2.VideoCapture(str(tmp_path / event.payload["processed_filename"]))
         try:
             assert capture.isOpened()
             ok, frame = capture.read()

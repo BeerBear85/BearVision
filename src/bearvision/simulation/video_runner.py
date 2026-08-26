@@ -1,19 +1,17 @@
-"""Hybrid scenario runner: recorded frames, real YOLO and simulated infrastructure."""
+"""Hybrid scenario runner: recorded frames, real YOLO and GoPro emulation."""
 
 from __future__ import annotations
 
 import asyncio
 from datetime import timedelta
-import hashlib
 from pathlib import Path
 
-from bearvision.adapters import FfmpegVideoClipper, YoloDetectorAdapter
+from bearvision.adapters import FfmpegVideoClipper, GoProCameraAdapter, YoloDetectorAdapter
 from bearvision.config import AssignmentConfig, EdgeConfig, VirtualCameramanConfig
 from bearvision.config.models import ClipExtractionConfig
 from bearvision.contracts import ScenarioDefinition, StorageReceipt
-from bearvision.edge.job_package import build_edge_job
 from bearvision.edge.orchestrator import BearVisionOrchestrator, OrchestrationResult
-from bearvision.processing import VirtualCameramanProcessor
+from bearvision.processing import VirtualCameramanJobProcessor, VirtualCameramanProcessor
 from bearvision.ports import JobQueue
 
 from bearvision.server import (
@@ -33,7 +31,8 @@ from .runner import (
     evaluate_expectations,
 )
 from .scenario_inputs import generate_bear_tag_series
-from .video import RecordedVideoCamera, RecordedVideoFrameSource
+from .gopro import SimulatedGoProController
+from .video import RecordedVideoFrameSource
 
 
 class VideoScenarioRunner:
@@ -45,11 +44,10 @@ class VideoScenarioRunner:
         *,
         orchestrator: BearVisionOrchestrator,
         clock: VirtualClock,
-        camera: RecordedVideoCamera,
+        camera: GoProCameraAdapter,
         frame_source: RecordedVideoFrameSource,
         queue: JobQueue,
         worker: ServerWorker | None,
-        post_processor: VirtualCameramanProcessor,
     ) -> None:
         self.scenario = scenario
         self.orchestrator = orchestrator
@@ -58,7 +56,6 @@ class VideoScenarioRunner:
         self.frame_source = frame_source
         self.queue = queue
         self.worker = worker
-        self.post_processor = post_processor
 
     @classmethod
     def from_scenario(
@@ -67,7 +64,7 @@ class VideoScenarioRunner:
         *,
         assignment_policy: AssignmentConfig | None = None,
         edge_config: EdgeConfig | None = None,
-        recording_duration_s: float = 5.0,
+        recording_duration_s: float | None = None,
         repository_root: Path | None = None,
         capture_dir: Path | None = None,
         job_queue: JobQueue | None = None,
@@ -76,11 +73,11 @@ class VideoScenarioRunner:
         if scenario.video is None:
             raise ValueError("video scenario requires video configuration")
         if scenario.components.detector != "yolo":
-            raise ValueError("recorded video currently requires the YOLO detector")
+            raise ValueError("video regression requires the YOLO detector")
         if scenario.components.bear_tag != "synthetic":
             raise ValueError("video regression currently requires synthetic BearTag data")
-        if scenario.components.camera != "recorded_video":
-            raise ValueError("video regression currently requires camera=recorded_video")
+        if scenario.components.camera != "simulated_gopro":
+            raise ValueError("video regression requires camera=simulated_gopro")
         if scenario.components.storage != "memory":
             raise ValueError("video regression currently requires storage=memory")
 
@@ -99,11 +96,34 @@ class VideoScenarioRunner:
         clipper = FfmpegVideoClipper(
             edge_config.clip_extraction if edge_config else ClipExtractionConfig()
         )
-        camera = RecordedVideoCamera(
-            video_path,
-            clock,
+        capture_root = (capture_dir or root / "temp/captures").resolve()
+        hindsight_enabled = (
+            edge_config.recording.hindsight_enabled if edge_config else True
+        )
+        hindsight_duration_s = (
+            edge_config.recording.hindsight_duration_s if edge_config else 15
+        )
+        recording_duration_s = (
+            recording_duration_s
+            if recording_duration_s is not None
+            else (
+                edge_config.recording.post_detection_duration_s
+                if edge_config
+                else 5.0
+            )
+        )
+        controller = SimulatedGoProController(
+            root_dir=capture_root / ".simulated-gopro-sd",
+            preview_source=video_path,
+            clock=clock,
             clipper=clipper,
-            capture_dir=capture_dir or root / "temp/captures",
+        )
+        camera = GoProCameraAdapter(
+            controller,
+            clock,
+            capture_root,
+            hindsight_enabled=hindsight_enabled,
+            hindsight_duration_s=hindsight_duration_s,
         )
         frame_source = RecordedVideoFrameSource(sample_fps=scenario.video.sample_fps)
         queue: JobQueue = job_queue or InMemoryJobQueue()
@@ -131,21 +151,6 @@ class VideoScenarioRunner:
                 ),
             )
         )
-        orchestrator = BearVisionOrchestrator(
-            clock=clock,
-            camera=camera,
-            scanner=SimulatedTagScanner(()),
-            detector=YoloDetectorAdapter(handler),
-            job_queue=queue,
-            edge_device_id="scenario-video-edge",
-            recording_duration_s=recording_duration_s,
-            observation_retention_s=max(30.0, scenario.duration_s + recording_duration_s),
-            frame_source=frame_source,
-            ble_logging_enabled=False,
-            # The recorded-video scenario uploads only after the virtual
-            # cameraman has produced the smaller processed clip.
-            upload_enabled=False,
-        )
         post_handler = DnnHandler(scenario.detector.model)
         post_handler.confidence_threshold = min(
             0.25, scenario.detector.confidence_threshold
@@ -161,6 +166,26 @@ class VideoScenarioRunner:
             ),
             ffmpeg_path=clipper.ffmpeg_path,
         )
+        orchestrator = BearVisionOrchestrator(
+            clock=clock,
+            camera=camera,
+            scanner=SimulatedTagScanner(()),
+            detector=YoloDetectorAdapter(handler),
+            job_queue=queue,
+            edge_device_id="scenario-video-edge",
+            recording_duration_s=recording_duration_s,
+            capture_pre_roll_s=(hindsight_duration_s if hindsight_enabled else 0),
+            clip_processor=VirtualCameramanJobProcessor(post_processor, capture_root),
+            observation_retention_s=max(
+                30.0,
+                scenario.duration_s
+                + recording_duration_s
+                + (hindsight_duration_s if hindsight_enabled else 0),
+            ),
+            frame_source=frame_source,
+            ble_logging_enabled=False,
+            upload_enabled=True,
+        )
         for observation in observations:
             orchestrator.add_tag_observation(observation)
         return cls(
@@ -175,7 +200,6 @@ class VideoScenarioRunner:
                 if process_server
                 else None
             ),
-            post_processor=post_processor,
         )
 
     def run(self) -> ScenarioRunResult:
@@ -200,129 +224,36 @@ class VideoScenarioRunner:
                 )
                 if self.clock.monotonic() < frame.observed_at_monotonic_s:
                     self.clock.advance_to(frame.observed_at_monotonic_s)
-                detections = await self.orchestrator.detector.detect(frame)
-                if detections:
-                    detection = detections[0]
-                    result = await self.orchestrator.handle_detection(detection)
+                evaluation = await self.orchestrator.evaluate_frame(frame)
+                if evaluation.events:
                     detection_times_s.append(frame.observed_at_monotonic_s)
-                    trace_events.append(
-                        (
-                            frame.observed_at_monotonic_s,
-                            "person_detected",
-                            {
-                                "frame_id": frame.frame_id,
-                                "confidence": detection.confidence,
-                                "bounding_box": detection.bounding_box.model_dump(mode="json"),
-                                "coordinate_space": {
-                                    "width_px": frame.width_px,
-                                    "height_px": frame.height_px,
-                                },
-                            },
-                        )
+                    trace_events.extend(
+                        (event.at_monotonic_s, event.kind, event.payload)
+                        for event in evaluation.events
                     )
-                    results.setdefault(result.request_id, result)
+                if evaluation.result is not None:
+                    results.setdefault(evaluation.result.request_id, evaluation.result)
         except Exception as exc:
             failures.append({"component": "video_scenario", "error": str(exc)})
         finally:
             await self.orchestrator.stop()
 
         for result in results.values():
-            processed = await self.post_processor.process(
-                result.media,
-                result.media.local_path.parent if result.media.local_path else Path("temp/captures"),
-            )
-            assert processed.media.local_path is not None
-            processed_content = processed.media.local_path.read_bytes()
-            adjusted_start_s = (
-                result.clip_start_monotonic_s + processed.length_adjustment.source_start_s
-            )
-            adjusted_end_s = adjusted_start_s + processed.length_adjustment.output_duration_s
-            manifest, packaged_observations = build_edge_job(
-                job_id=result.request_id,
-                edge_device_id=result.manifest.edge_device_id,
-                created_at=result.manifest.created_at,
-                capture_started_at=(
-                    result.manifest.capture_started_at
-                    + timedelta(seconds=processed.length_adjustment.source_start_s)
-                ),
-                capture_ended_at=(
-                    result.manifest.capture_started_at
-                    + timedelta(seconds=processed.length_adjustment.source_end_s)
-                ),
-                clip_start_monotonic_s=adjusted_start_s,
-                video=processed.media,
-                observations=self.orchestrator.observations.between(
-                    adjusted_start_s, adjusted_end_s
-                ),
-            )
-            assert manifest.video.sha256 == hashlib.sha256(processed_content).hexdigest()
-            await self.queue.publish(manifest, processed.media, packaged_observations)
             server_result = await self.worker.run_once() if self.worker is not None else None
             if server_result is not None:
                 assignments.append(server_result)
-            receipt = StorageReceipt(
-                asset_id=processed.media.asset.asset_id,
-                object_key=f"input-queue/ready/{manifest.job_id}",
-                stored_at_utc=manifest.created_at,
-                checksum_sha256=manifest.video.sha256,
-            )
-            receipts.append(receipt)
+            if result.published:
+                receipts.append(
+                    StorageReceipt(
+                        asset_id=result.media.asset.asset_id,
+                        object_key=f"input-queue/ready/{result.manifest.job_id}",
+                        stored_at_utc=result.manifest.created_at,
+                        checksum_sha256=result.manifest.video.sha256,
+                    )
+                )
             trace_events.extend(
-                [
-                    (
-                        result.clip_start_monotonic_s,
-                        "capture_started",
-                        {
-                            "asset_id": result.media.asset.asset_id,
-                            "clip_end_s": result.clip_end_monotonic_s,
-                        },
-                    ),
-                    (
-                        result.clip_end_monotonic_s,
-                        "finalize_clip",
-                        {"request_id": result.request_id},
-                    ),
-                    (
-                        result.clip_end_monotonic_s,
-                        "capture_completed",
-                        {
-                            "asset_id": result.media.asset.asset_id,
-                            "filename": result.media.asset.filename,
-                            "size_bytes": result.media.asset.size_bytes,
-                            "clip_start_s": result.clip_start_monotonic_s,
-                            "clip_duration_s": (
-                                result.clip_end_monotonic_s
-                                - result.clip_start_monotonic_s
-                            ),
-                        },
-                    ),
-                    (
-                        result.clip_end_monotonic_s,
-                        "virtual_cameraman_completed",
-                        {
-                            "source_filename": result.media.asset.filename,
-                            "processed_filename": processed.media.asset.filename,
-                            "tracking_filename": processed.metadata_path.name,
-                            "debug_video_filename": processed.debug_video_path.name,
-                            "source_size_bytes": processed.source_size_bytes,
-                            "processed_size_bytes": processed.processed_size_bytes,
-                            "size_reduction_ratio": processed.reduction_ratio,
-                            "output_width_px": self.post_processor.config.output_width_px,
-                            "output_height_px": self.post_processor.config.output_height_px,
-                            "state_estimator": "kalman_rts_smoother",
-                            "camera_path": "zero_phase_butterworth",
-                            "length_adjustment": processed.length_adjustment.to_dict(),
-                        },
-                    ),
-                    (
-                        result.clip_end_monotonic_s,
-                        "clip_uploaded",
-                        {
-                            "asset_id": receipt.asset_id,
-                            "object_key": receipt.object_key,
-                        },
-                    ),
-                ]
+                (event.at_monotonic_s, event.kind, event.payload)
+                for event in result.events
             )
             if server_result is not None:
                 trace_events.append(
@@ -330,20 +261,6 @@ class VideoScenarioRunner:
                         result.clip_end_monotonic_s,
                         "server_assignment",
                         server_result.model_dump(mode="json", by_alias=True),
-                    )
-                )
-            for tracking_frame in processed.tracking_frames:
-                trace_events.append(
-                    (
-                        result.clip_start_monotonic_s + tracking_frame.source_at_s,
-                        "tracking_observation",
-                        {
-                            **tracking_frame.to_dict(),
-                            "coordinate_space": {
-                                "width_px": processed.source_width_px,
-                                "height_px": processed.source_height_px,
-                            },
-                        },
                     )
                 )
 

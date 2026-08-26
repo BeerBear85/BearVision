@@ -60,7 +60,7 @@ Run a versioned behavioural scenario:
 uv run bearvision-simulate specs/scenarios/single-rider-success.yaml
 ```
 
-Run the recorded-video scenario through the real YOLO detector:
+Run a recorded-video input through the GoPro emulator and real YOLO detector:
 
 ```bash
 uv sync --locked --extra edge --extra dev

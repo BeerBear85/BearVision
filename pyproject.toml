@@ -15,6 +15,7 @@ dependencies = [
 [project.optional-dependencies]
 edge = [
     "numpy>=2,<3",
+    "scipy>=1.14,<2",
     "opencv-python-headless>=4.10,<5",
     "ffmpeg-binaries-compat>=1.1,<2",
     "bleak>=0.22,<2",

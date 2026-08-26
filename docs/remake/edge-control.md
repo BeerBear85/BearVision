@@ -64,8 +64,8 @@ sequenceDiagram
 ```
 
 The scenario is executed deterministically first and its trace is then replayed
-at wall-clock speed. For the recorded-video scenario, React plays the source
-video on the same media timestamps as Python's frame-analysis trace. This is
+at wall-clock speed. For a video scenario, React plays the emulator's preview
+source on the same media timestamps as Python's frame-analysis trace. This is
 sufficient for repeatable UI behaviour testing, but it is not a physical
 real-time simulation.
 
@@ -78,14 +78,15 @@ Each scenario explicitly selects the adapter behind each port:
 | Frames | `synthetic`, `video`, `gopro` |
 | Detector | `declared`, `yolo` |
 | BearTag | `synthetic`, `ble` |
-| Camera | `simulated`, `recorded_video`, `gopro` |
+| Camera | `simulated`, `simulated_gopro`, `gopro` |
 | Storage | `memory`, `box` |
 
 The schema can express future physical/hybrid combinations. The behavioural
 runtime currently implements two deliberately tested compositions only:
 
 - fully synthetic with declared detections;
-- recorded video + real YOLO + synthetic BearTag + in-memory storage.
+- recorded preview + GoPro emulator + real YOLO + synthetic BearTag +
+  in-memory storage.
 
 The GUI's Hardware mode uses the physical composition from `config/edge.yaml`;
 arbitrary mixed physical/simulated compositions are not implemented yet and
@@ -97,9 +98,11 @@ YOLO detects the rider at approximately T+6.0 s; Edge publishes the resulting
 clip and whole-window evidence, after which the simulated server worker assigns
 `rider-video@scenario.invalid`.
 
-The recorded-video camera uses the packaged FFmpeg/FFprobe executables on the
-Edge computer to re-encode exactly T+6.0 through T+11.0. It validates the raw
-result before an atomic rename and leaves the source unchanged.
+The GoPro emulator uses the packaged FFmpeg/FFprobe executables to materialize
+the configured HindSight window plus post-detection recording on its own
+disk-backed SD card. It exposes GoPro-style `100GOPRO/GX01xxxx.MP4` media,
+which the production `GoProCameraAdapter` lists and downloads to the Edge
+capture directory. The preview source remains unchanged.
 
 Before upload, the virtual-cameraman processor runs person detection across the
 whole extracted clip. A forward two-dimensional position/velocity Kalman pass
@@ -113,7 +116,7 @@ low-jitter crop trajectory. It publishes three additional artefacts:
   conservative circular 95% region, and the cyan Butterworth crop window;
 - `*.tracking.json`: frame-level measurements, estimates, covariance and crop.
 
-The current video scenario packages only the processed file. Edge Control lets
+The video scenarios package only the processed file. Edge Control lets
 the operator switch among source, raw extracted clip, upload clip and tracking
 view. A green box means a detected person; rider identity comes later from the
 server worker.
@@ -154,10 +157,12 @@ scenario selector and can be replayed manually like any other video scenario.
 
 ## Windows media runtime
 
-`uv sync --locked --extra edge` installs platform-specific FFmpeg and FFprobe
-binaries inside `.venv`; administrator access and a system-wide FFmpeg install
-are not required. Explicit `BEARVISION_FFMPEG` and `BEARVISION_FFPROBE` paths
-override the packaged binaries when deployment policy requires managed tools.
+`uv sync --locked --extra edge` installs OpenCV, SciPy for the existing BLE
+signal processing, the GoPro SDK and platform-specific FFmpeg/FFprobe binaries
+inside `.venv`; administrator access and a system-wide FFmpeg install are not
+required. Explicit `BEARVISION_FFMPEG` and `BEARVISION_FFPROBE` paths override
+the packaged binaries when deployment policy requires managed tools. The
+emulator needs no dependency beyond this Edge extra.
 
 Encoding policy is independently versioned in `config/edge.yaml` under
 `clip_extraction` and `virtual_cameraman`. The raw extraction uses H.264/AAC,

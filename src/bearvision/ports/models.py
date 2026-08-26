@@ -135,12 +135,28 @@ class ExtractedClip:
 
 
 @dataclass(frozen=True, slots=True)
+class ProcessingTraceEvent:
+    """Immutable trace metadata emitted by a clip processor."""
+
+    kind: str
+    payload: dict[str, Any]
+    source_offset_s: float | None = None
+
+    def __post_init__(self) -> None:
+        if not self.kind.strip():
+            raise ValueError("processing trace event kind must not be empty")
+        if self.source_offset_s is not None and self.source_offset_s < 0:
+            raise ValueError("processing trace source offset must not be negative")
+
+
+@dataclass(frozen=True, slots=True)
 class PreparedClip:
     """Processed media and its retained interval within the source clip."""
 
     media: CapturedMedia
     source_start_offset_s: float
     duration_s: float
+    trace_events: tuple[ProcessingTraceEvent, ...] = ()
 
     def __post_init__(self) -> None:
         if self.source_start_offset_s < 0:

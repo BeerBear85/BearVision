@@ -62,8 +62,15 @@ class ScenarioComponents(BaseModel):
     frames: Literal["synthetic", "video", "gopro"] = "synthetic"
     detector: Literal["declared", "yolo"] = "declared"
     bear_tag: Literal["synthetic", "ble"] = "synthetic"
-    camera: Literal["simulated", "recorded_video", "gopro"] = "simulated"
+    camera: Literal["simulated", "simulated_gopro", "gopro"] = "simulated"
     storage: Literal["memory", "box"] = "memory"
+
+    @model_validator(mode="before")
+    @classmethod
+    def migrate_recorded_video_camera(cls, data: Any) -> Any:
+        if isinstance(data, dict) and data.get("camera") == "recorded_video":
+            return {**data, "camera": "simulated_gopro"}
+        return data
 
 
 class ScenarioVideo(BaseModel):

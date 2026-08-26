@@ -72,6 +72,7 @@ def test_real_video_scenario_declares_estimated_telemetry_for_every_rider(
     assert scenario.components.frames == "video"
     assert scenario.components.detector == "yolo"
     assert scenario.components.bear_tag == "synthetic"
+    assert scenario.components.camera == "simulated_gopro"
     assert scenario.synthetic_bear_tags
     assert scenario.synthetic_bear_tags[0].tag_id == "bear_tag_666"
     assert len({series.tag_id for series in scenario.synthetic_bear_tags}) == len(
