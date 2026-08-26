@@ -46,11 +46,11 @@
 
 ### P2 - Reduce Scenario duplication after the pipeline is unified
 
-- [ ] Extract shared rider-registry/worker assembly, trace ordering, result
+- [x] Extract shared rider-registry/worker assembly, trace ordering, result
   construction and expectation evaluation from the two scenario runners.
-- [ ] Keep the synthetic and recorded-video execution loops separate unless the
+- [x] Keep the synthetic and recorded-video execution loops separate unless the
   resulting shared interface is smaller and clearer than both loops.
-- [ ] Add composition tests for supported component-source combinations. The
+- [x] Add composition tests for supported component-source combinations. The
   disk-backed GoPro is already selectable as `simulated_gopro`; do not reimplement it.
 
 ### P3 - Prove queue semantics before adding another abstraction

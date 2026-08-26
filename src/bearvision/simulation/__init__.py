@@ -11,7 +11,8 @@ from .adapters import (
 )
 from .engine import BehavioralSimulation, Event, TraceEntry
 from .gopro import SimulatedGoProController
-from .runner import ClosedLoopScenarioRunner, ScenarioRunResult
+from .runner import ClosedLoopScenarioRunner
+from .scenario_runtime import ScenarioRunResult
 from .scenario_inputs import generate_bear_tag_series
 
 __all__ = [

@@ -3,32 +3,23 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import timedelta
 from pathlib import Path
 
 from bearvision.adapters import FfmpegVideoClipper, GoProCameraAdapter, YoloDetectorAdapter
 from bearvision.config import AssignmentConfig, EdgeConfig, VirtualCameramanConfig
 from bearvision.config.models import ClipExtractionConfig
-from bearvision.contracts import ScenarioDefinition, StorageReceipt
+from bearvision.contracts import ScenarioDefinition
 from bearvision.edge.orchestrator import BearVisionOrchestrator, OrchestrationResult
 from bearvision.processing import VirtualCameramanJobProcessor, VirtualCameramanProcessor
 from bearvision.ports import JobQueue
 
-from bearvision.server import (
-    BearTagAssignment,
-    BearTagRecord,
-    InMemoryUserRegistry,
-    RegistryData,
-    ServerWorker,
-    UserRecord,
-)
+from bearvision.server import ServerWorker
 from .adapters import InMemoryJobQueue, SimulatedTagScanner, VirtualClock
-from .engine import TraceEntry
-from .runner import (
+from .scenario_runtime import (
     ScenarioRunResult,
-    _scenario_email,
-    _scenario_user_id,
-    evaluate_expectations,
+    TraceEvent,
+    build_scenario_worker,
+    finalize_scenario_run,
 )
 from .scenario_inputs import generate_bear_tag_series
 from .gopro import SimulatedGoProController
@@ -46,7 +37,6 @@ class VideoScenarioRunner:
         clock: VirtualClock,
         camera: GoProCameraAdapter,
         frame_source: RecordedVideoFrameSource,
-        queue: JobQueue,
         worker: ServerWorker | None,
     ) -> None:
         self.scenario = scenario
@@ -54,7 +44,6 @@ class VideoScenarioRunner:
         self.clock = clock
         self.camera = camera
         self.frame_source = frame_source
-        self.queue = queue
         self.worker = worker
 
     @classmethod
@@ -127,30 +116,6 @@ class VideoScenarioRunner:
         )
         frame_source = RecordedVideoFrameSource(sample_fps=scenario.video.sample_fps)
         queue: JobQueue = job_queue or InMemoryJobQueue()
-        users = tuple(
-            UserRecord(
-                id=_scenario_user_id(item.rider_id),
-                email=_scenario_email(item.rider_id),
-                displayName=item.rider_id,
-            )
-            for item in registry
-        )
-        server_registry = InMemoryUserRegistry(
-            RegistryData(
-                users=users,
-                bearTags=tuple(BearTagRecord(id=item.tag_id) for item in registry),
-                assignments=tuple(
-                    BearTagAssignment(
-                        id=f"scenario-{item.tag_id}",
-                        userId=_scenario_user_id(item.rider_id),
-                        bearTagId=item.tag_id,
-                        validFrom=clock.start_utc - timedelta(days=1),
-                        validTo=clock.start_utc + timedelta(days=1),
-                    )
-                    for item in registry
-                ),
-            )
-        )
         post_handler = DnnHandler(scenario.detector.model)
         post_handler.confidence_threshold = min(
             0.25, scenario.detector.confidence_threshold
@@ -194,11 +159,12 @@ class VideoScenarioRunner:
             clock=clock,
             camera=camera,
             frame_source=frame_source,
-            queue=queue,
-            worker=(
-                ServerWorker(queue, server_registry, clock, assignment_policy)
-                if process_server
-                else None
+            worker=build_scenario_worker(
+                entries=registry,
+                queue=queue,
+                clock=clock,
+                assignment_policy=assignment_policy,
+                enabled=process_server,
             ),
         )
 
@@ -206,11 +172,10 @@ class VideoScenarioRunner:
         return asyncio.run(self._run())
 
     async def _run(self) -> ScenarioRunResult:
-        trace_events: list[tuple[float, str, dict]] = []
+        trace_events: list[TraceEvent] = []
         results: dict[str, OrchestrationResult] = {}
         detection_times_s: list[float] = []
         failures: list[dict[str, str]] = []
-        receipts: list[StorageReceipt] = []
         assignments = []
         await self.orchestrator.start()
         try:
@@ -242,15 +207,6 @@ class VideoScenarioRunner:
             server_result = await self.worker.run_once() if self.worker is not None else None
             if server_result is not None:
                 assignments.append(server_result)
-            if result.published:
-                receipts.append(
-                    StorageReceipt(
-                        asset_id=result.media.asset.asset_id,
-                        object_key=f"input-queue/ready/{result.manifest.job_id}",
-                        stored_at_utc=result.manifest.created_at,
-                        checksum_sha256=result.manifest.video.sha256,
-                    )
-                )
             trace_events.extend(
                 (event.at_monotonic_s, event.kind, event.payload)
                 for event in result.events
@@ -264,29 +220,16 @@ class VideoScenarioRunner:
                     )
                 )
 
-        ordered = sorted(enumerate(trace_events), key=lambda item: (item[1][0], item[0]))
-        trace = tuple(
-            TraceEntry(at_s=at_s, sequence=sequence, kind=kind, payload=payload)
-            for sequence, (_, (at_s, kind, payload)) in enumerate(ordered)
-        )
-        assignment_results = tuple(assignments)
         captures = tuple(
             capture.media.asset.asset_id for capture in self.camera.captures.values()
         )
-        uploads = tuple(receipts)
-        expectation_failures = evaluate_expectations(
-            self.scenario,
-            assignment_results,
-            captures,
-            uploads,
+        return finalize_scenario_run(
+            scenario=self.scenario,
+            trace_events=trace_events,
+            assignments=assignments,
+            captures=captures,
+            edge_results=results.values(),
+            failures=failures,
             detection_times_s=tuple(detection_times_s),
             evaluate_server=self.worker is not None,
-        )
-        return ScenarioRunResult(
-            trace=trace,
-            assignments=assignment_results,
-            captures=captures,
-            uploads=uploads,
-            failures=tuple(failures),
-            expectation_failures=expectation_failures,
         )

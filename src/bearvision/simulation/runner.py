@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass
 from datetime import timedelta
-from uuid import NAMESPACE_URL, UUID, uuid5
 
 from bearvision.config import AssignmentConfig
 from bearvision.contracts import (
@@ -13,21 +11,13 @@ from bearvision.contracts import (
     JobResultManifest,
     PersonDetection,
     ScenarioDefinition,
-    StorageReceipt,
     TagObservation,
+    TagRegistryEntry,
     Vector3,
 )
 from bearvision.edge.orchestrator import BearVisionOrchestrator, OrchestrationResult
 from bearvision.ports import ComponentError, JobQueue, VideoFrame
-from bearvision.server import (
-    BearTagAssignment,
-    BearTagRecord,
-    InMemoryUserRegistry,
-    RegistryData,
-    ServerWorker,
-    UserRecord,
-    normalize_user_email,
-)
+from bearvision.server import ServerWorker
 
 from .adapters import (
     InMemoryJobQueue,
@@ -36,97 +26,12 @@ from .adapters import (
     SimulatedTagScanner,
     VirtualClock,
 )
-from .engine import TraceEntry
-
-
-def _scenario_email(rider_id: str) -> str:
-    return normalize_user_email(rider_id if "@" in rider_id else f"{rider_id}@scenario.invalid")
-
-
-def _scenario_user_id(rider_id: str) -> UUID:
-    return uuid5(NAMESPACE_URL, f"bearvision:scenario-user:{_scenario_email(rider_id)}")
-
-
-@dataclass(frozen=True, slots=True)
-class ScenarioRunResult:
-    trace: tuple[TraceEntry, ...]
-    assignments: tuple[JobResultManifest, ...]
-    captures: tuple[str, ...]
-    uploads: tuple[StorageReceipt, ...]
-    failures: tuple[dict[str, str], ...]
-    expectation_failures: tuple[str, ...] = ()
-
-
-def evaluate_expectations(
-    scenario: ScenarioDefinition,
-    assignments: tuple[JobResultManifest, ...],
-    captures: tuple[str, ...],
-    uploads: tuple[StorageReceipt, ...],
-    *,
-    detection_times_s: tuple[float, ...] = (),
-    evaluate_server: bool = True,
-) -> tuple[str, ...]:
-    expected = scenario.expect
-    failures: list[str] = []
-    first = assignments[0] if assignments else None
-    if evaluate_server and expected.rider_ids:
-        expected_user_ids = tuple(_scenario_user_id(rider) for rider in expected.rider_ids)
-        actual_user_ids = tuple(item.selected_user_id for item in assignments)
-        if actual_user_ids != expected_user_ids:
-            failures.append(
-                f"expected rider_ids={expected.rider_ids!r}, got {actual_user_ids!r}"
-            )
-    elif evaluate_server and expected.rider_id is not None:
-        expected_user_id = _scenario_user_id(expected.rider_id)
-        if first is None or first.selected_user_id != expected_user_id:
-            actual = first.selected_user_id if first is not None else None
-            failures.append(f"expected rider_id={expected.rider_id!r}, got {actual!r}")
-    if evaluate_server and expected.bear_tag_ids:
-        actual_tag_ids = tuple(item.selected_bear_tag_id for item in assignments)
-        if actual_tag_ids != expected.bear_tag_ids:
-            failures.append(
-                f"expected bear_tag_ids={expected.bear_tag_ids!r}, got {actual_tag_ids!r}"
-            )
-    elif evaluate_server and expected.bear_tag_id is not None:
-        actual_tag_id = first.selected_bear_tag_id if first is not None else None
-        if actual_tag_id != expected.bear_tag_id:
-            failures.append(
-                f"expected bear_tag_id={expected.bear_tag_id!r}, got {actual_tag_id!r}"
-            )
-    if evaluate_server and expected.assignment_status is not None:
-        actual_status: str | None = None
-        if first is not None:
-            if first.status == "processed":
-                actual_status = "assigned"
-            elif first.error_code == "AMBIGUOUS_BEARTAG":
-                actual_status = "ambiguous"
-            else:
-                actual_status = "unassigned"
-        if actual_status != expected.assignment_status:
-            failures.append(
-                f"expected assignment_status={expected.assignment_status!r}, "
-                f"got {actual_status!r}"
-            )
-    if expected.capture_triggered is not None and bool(captures) != expected.capture_triggered:
-        failures.append(
-            f"expected capture_triggered={expected.capture_triggered}, got {bool(captures)}"
-        )
-    if expected.clip_uploaded is not None and bool(uploads) != expected.clip_uploaded:
-        failures.append(f"expected clip_uploaded={expected.clip_uploaded}, got {bool(uploads)}")
-    if (
-        expected.minimum_person_detections is not None
-        and len(detection_times_s) < expected.minimum_person_detections
-    ):
-        failures.append(
-            f"expected at least {expected.minimum_person_detections} person detections, "
-            f"got {len(detection_times_s)}"
-        )
-    if expected.first_detection_between_s is not None:
-        start, end = expected.first_detection_between_s
-        detection_at = detection_times_s[0] if detection_times_s else None
-        if detection_at is None or not start <= detection_at <= end:
-            failures.append(f"expected first detection in [{start}, {end}], got {detection_at!r}")
-    return tuple(failures)
+from .scenario_runtime import (
+    ScenarioRunResult,
+    TraceEvent,
+    build_scenario_worker,
+    finalize_scenario_run,
+)
 
 
 class ClosedLoopScenarioRunner:
@@ -197,27 +102,9 @@ class ClosedLoopScenarioRunner:
                         confidence=float(item.payload.get("confidence", 0.9)),
                     ),
                 )
-        users = tuple(
-            UserRecord(
-                id=_scenario_user_id(rider),
-                email=_scenario_email(rider),
-                displayName=rider,
-            )
-            for rider in sorted(set(riders_by_tag.values()))
-        )
-        tags = tuple(BearTagRecord(id=tag_id) for tag_id in sorted(riders_by_tag))
-        assignments = tuple(
-            BearTagAssignment(
-                id=f"scenario-{tag_id}",
-                userId=_scenario_user_id(rider),
-                bearTagId=tag_id,
-                validFrom=clock.start_utc - timedelta(days=1),
-                validTo=clock.start_utc + timedelta(days=1),
-            )
-            for tag_id, rider in sorted(riders_by_tag.items())
-        )
-        registry = InMemoryUserRegistry(
-            RegistryData(users=users, bearTags=tags, assignments=assignments)
+        registry_entries = tuple(
+            TagRegistryEntry(tag_id=tag_id, rider_id=rider_id)
+            for tag_id, rider_id in sorted(riders_by_tag.items())
         )
         camera = SimulatedCamera(clock, fail_capture=scenario.faults.camera_capture)
         queue: JobQueue = job_queue or InMemoryJobQueue(
@@ -237,10 +124,12 @@ class ClosedLoopScenarioRunner:
         return cls(
             scenario,
             orchestrator=orchestrator,
-            worker=(
-                ServerWorker(queue, registry, clock, assignment_policy)
-                if process_server
-                else None
+            worker=build_scenario_worker(
+                entries=registry_entries,
+                queue=queue,
+                clock=clock,
+                assignment_policy=assignment_policy,
+                enabled=process_server,
             ),
             clock=clock,
             observations=tuple(sorted(observations, key=lambda item: item.observed_at_monotonic_s)),
@@ -252,7 +141,7 @@ class ClosedLoopScenarioRunner:
         return asyncio.run(self._run())
 
     async def _run(self) -> ScenarioRunResult:
-        trace_events: list[tuple[float, str, dict]] = []
+        trace_events: list[TraceEvent] = []
         edge_results: dict[str, OrchestrationResult] = {}
         failures: list[dict[str, str]] = []
         detection_times: list[float] = []
@@ -316,37 +205,16 @@ class ClosedLoopScenarioRunner:
                     server_result.model_dump(mode="json", by_alias=True),
                 )
             )
-        ordered = sorted(enumerate(trace_events), key=lambda item: (item[1][0], item[0]))
-        trace = tuple(
-            TraceEntry(at_s=at_s, sequence=sequence, kind=kind, payload=payload)
-            for sequence, (_, (at_s, kind, payload)) in enumerate(ordered)
-        )
         captures = tuple(
             capture.media.asset.asset_id for capture in self.camera.captures.values()
         )
-        uploads = tuple(
-            StorageReceipt(
-                asset_id=result.media.asset.asset_id,
-                object_key=f"input-queue/ready/{result.request_id}",
-                stored_at_utc=result.manifest.created_at,
-                checksum_sha256=result.manifest.video.sha256,
-            )
-            for result in edge_results.values()
-            if result.published
-        )
-        expectation_failures = evaluate_expectations(
-            self.scenario,
-            tuple(server_results),
-            captures,
-            uploads,
+        return finalize_scenario_run(
+            scenario=self.scenario,
+            trace_events=trace_events,
+            assignments=server_results,
+            captures=captures,
+            edge_results=edge_results.values(),
+            failures=failures,
             detection_times_s=tuple(detection_times),
             evaluate_server=self.worker is not None,
-        )
-        return ScenarioRunResult(
-            trace=trace,
-            assignments=tuple(server_results),
-            captures=captures,
-            uploads=uploads,
-            failures=tuple(failures),
-            expectation_failures=expectation_failures,
         )
