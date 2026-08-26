@@ -7,7 +7,17 @@ from .errors import (
     InvalidComponentData,
     PermanentComponentError,
 )
-from .models import CapturedMedia, ExtractedClip, PreparedClip, VideoFrame
+from .models import (
+    CapturedClip,
+    CapturedMedia,
+    CaptureWindow,
+    CaptureWindowBasis,
+    CaptureWindowPrecision,
+    ExtractedClip,
+    PreparedClip,
+    VideoFrame,
+    requested_capture_window,
+)
 from .protocols import (
     Camera,
     ClipProcessor,
@@ -16,6 +26,7 @@ from .protocols import (
     FrameSource,
     JobQueue,
     ManagedJobQueue,
+    MediaProbe,
     Storage,
     TagRegistry,
     TagScanner,
@@ -24,7 +35,11 @@ from .protocols import (
 
 __all__ = [
     "Camera",
+    "CapturedClip",
     "CapturedMedia",
+    "CaptureWindow",
+    "CaptureWindowBasis",
+    "CaptureWindowPrecision",
     "ClipProcessor",
     "Clock",
     "ComponentError",
@@ -36,6 +51,7 @@ __all__ = [
     "InvalidComponentData",
     "JobQueue",
     "ManagedJobQueue",
+    "MediaProbe",
     "PermanentComponentError",
     "PreparedClip",
     "Storage",
@@ -43,4 +59,5 @@ __all__ = [
     "TagScanner",
     "VideoFrame",
     "VideoClipper",
+    "requested_capture_window",
 ]

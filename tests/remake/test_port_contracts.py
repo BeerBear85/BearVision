@@ -18,7 +18,11 @@ from bearvision.contracts import (
 )
 from bearvision.ports import (
     Camera,
+    CapturedClip,
     CapturedMedia,
+    CaptureWindow,
+    CaptureWindowBasis,
+    CaptureWindowPrecision,
     Clock,
     Detector,
     Storage,
@@ -57,7 +61,7 @@ class ReferenceClock:
 
 class ReferenceCamera:
     def __init__(self) -> None:
-        self.captures: dict[str, CapturedMedia] = {}
+        self.captures: dict[str, CapturedClip] = {}
 
     async def connect(self) -> None:
         return None
@@ -71,18 +75,35 @@ class ReferenceCamera:
     async def stop_preview(self) -> None:
         return None
 
-    async def capture(self, request: CaptureRequest) -> CapturedMedia:
+    async def capture(self, request: CaptureRequest) -> CapturedClip:
         if request.request_id not in self.captures:
             content = b"reference-video"
-            self.captures[request.request_id] = CapturedMedia(
-                asset=MediaAsset(
-                    asset_id=f"asset-{request.request_id}",
-                    filename=f"{request.request_id}.mp4",
-                    content_type="video/mp4",
-                    size_bytes=len(content),
-                    created_at_utc=NOW,
+            requested_start_s = max(0.0, request.requested_at_monotonic_s - request.pre_roll_s)
+            requested_end_s = request.requested_at_monotonic_s + request.post_roll_s
+            self.captures[request.request_id] = CapturedClip(
+                request_id=request.request_id,
+                media=CapturedMedia(
+                    asset=MediaAsset(
+                        asset_id=f"asset-{request.request_id}",
+                        filename=f"{request.request_id}.mp4",
+                        content_type="video/mp4",
+                        size_bytes=len(content),
+                        created_at_utc=NOW,
+                    ),
+                    content=content,
                 ),
-                content=content,
+                requested_window=CaptureWindow(
+                    requested_start_s,
+                    requested_end_s,
+                    CaptureWindowPrecision.EXACT,
+                    CaptureWindowBasis.DETECTION_REQUEST,
+                ),
+                actual_window=CaptureWindow(
+                    requested_start_s,
+                    requested_end_s,
+                    CaptureWindowPrecision.EXACT,
+                    CaptureWindowBasis.SIMULATED_MEDIA_TIMELINE,
+                ),
             )
         return self.captures[request.request_id]
 
@@ -186,7 +207,9 @@ def test_reference_components_satisfy_runtime_protocols() -> None:
     assert isinstance(ReferenceScanner((observation(),)), TagScanner)
     assert isinstance(ReferenceDetector(), Detector)
     assert isinstance(ReferenceStorage(), Storage)
-    assert isinstance(ReferenceRegistry(TagRegistryEntry(tag_id="tag-17", rider_id="rider-17")), TagRegistry)
+    assert isinstance(
+        ReferenceRegistry(TagRegistryEntry(tag_id="tag-17", rider_id="rider-17")), TagRegistry
+    )
 
 
 def test_reusable_component_contract_suites() -> None:
@@ -199,10 +222,10 @@ def test_reusable_component_contract_suites() -> None:
     frame = VideoFrame("frame-1", 1, 1920, 1080, b"pixels")
 
     asyncio.run(check_clock(clock))
-    media = asyncio.run(check_camera(camera, request()))
+    capture = asyncio.run(check_camera(camera, request()))
     asyncio.run(check_scanner(scanner))
     asyncio.run(check_detector(detector, frame))
-    asyncio.run(check_storage(storage, media, "rider-17/capture-1.mp4"))
+    asyncio.run(check_storage(storage, capture.media, "rider-17/capture-1.mp4"))
     check_registry(registry, "tag-17")
 
 

@@ -18,7 +18,16 @@ from bearvision.contracts import (
     TagObservation,
     TagRegistryEntry,
 )
-from bearvision.ports import CapturedMedia, ComponentUnavailable, VideoFrame
+from bearvision.ports import (
+    CapturedClip,
+    CapturedMedia,
+    CaptureWindow,
+    CaptureWindowBasis,
+    CaptureWindowPrecision,
+    ComponentUnavailable,
+    VideoFrame,
+    requested_capture_window,
+)
 
 
 class VirtualClock:
@@ -54,10 +63,12 @@ class SimulatedCamera:
         self.fail_capture = fail_capture
         self.connected = False
         self.previewing = False
-        self.captures: dict[str, CapturedMedia] = {}
+        self.available_since_monotonic_s: float | None = None
+        self.captures: dict[str, CapturedClip] = {}
 
     async def connect(self) -> None:
         self.connected = True
+        self.available_since_monotonic_s = self.clock.monotonic()
 
     async def disconnect(self) -> None:
         self.previewing = False
@@ -72,23 +83,38 @@ class SimulatedCamera:
     async def stop_preview(self) -> None:
         self.previewing = False
 
-    async def capture(self, request: CaptureRequest) -> CapturedMedia:
+    async def capture(self, request: CaptureRequest) -> CapturedClip:
         if not self.connected:
             raise ComponentUnavailable("simulated camera is disconnected")
         if self.fail_capture:
             raise ComponentUnavailable("injected camera capture failure")
         if request.request_id not in self.captures:
+            assert self.available_since_monotonic_s is not None
+            requested_window = requested_capture_window(
+                request,
+                earliest_available_monotonic_s=self.available_since_monotonic_s,
+            )
             await self.clock.sleep(request.post_roll_s)
             content = f"bearvision-simulated-clip:{request.request_id}".encode()
-            self.captures[request.request_id] = CapturedMedia(
-                asset=MediaAsset(
-                    asset_id=f"asset-{request.request_id}",
-                    filename=f"{request.request_id}.mp4",
-                    content_type="video/mp4",
-                    size_bytes=len(content),
-                    created_at_utc=self.clock.utc_now(),
+            self.captures[request.request_id] = CapturedClip(
+                request_id=request.request_id,
+                media=CapturedMedia(
+                    asset=MediaAsset(
+                        asset_id=f"asset-{request.request_id}",
+                        filename=f"{request.request_id}.mp4",
+                        content_type="video/mp4",
+                        size_bytes=len(content),
+                        created_at_utc=self.clock.utc_now(),
+                    ),
+                    content=content,
                 ),
-                content=content,
+                requested_window=requested_window,
+                actual_window=CaptureWindow(
+                    start_monotonic_s=requested_window.start_monotonic_s,
+                    end_monotonic_s=requested_window.end_monotonic_s,
+                    precision=CaptureWindowPrecision.EXACT,
+                    basis=CaptureWindowBasis.SIMULATED_MEDIA_TIMELINE,
+                ),
             )
         return self.captures[request.request_id]
 
@@ -185,7 +211,9 @@ class InMemoryJobQueue:
         return True
 
     async def acquire_next(self) -> str | None:
-        processing = sorted(job_id for job_id, state in self.states.items() if state == "processing")
+        processing = sorted(
+            job_id for job_id, state in self.states.items() if state == "processing"
+        )
         if processing:
             return processing[0]
         ready = sorted(job_id for job_id, state in self.states.items() if state == "ready")
@@ -215,14 +243,15 @@ class InMemoryJobQueue:
         return True
 
     def snapshot(self) -> dict:
-        counts = {state: 0 for state in ("ready", "processing", "processed", "unresolved", "failed")}
+        counts = {
+            state: 0 for state in ("ready", "processing", "processed", "unresolved", "failed")
+        }
         for state in self.states.values():
             counts[state.split("/", 1)[0]] += 1
         return {
             "counts": counts,
             "jobs": [
-                {"jobId": job_id, "status": state}
-                for job_id, state in sorted(self.states.items())
+                {"jobId": job_id, "status": state} for job_id, state in sorted(self.states.items())
             ],
         }
 

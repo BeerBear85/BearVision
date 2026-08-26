@@ -121,13 +121,13 @@ def build_real_system(
     detector = YoloDetectorAdapter(legacy_detector)
     from bearvision.adapters import FfmpegVideoClipper
 
-    ffmpeg_path = FfmpegVideoClipper(config.clip_extraction).ffmpeg_path
+    media_tools = FfmpegVideoClipper(config.clip_extraction)
     clip_processor = VirtualCameramanJobProcessor(
         VirtualCameramanProcessor(
             detector,
             clock,
             config=config.virtual_cameraman,
-            ffmpeg_path=ffmpeg_path,
+            ffmpeg_path=media_tools.ffmpeg_path,
         ),
         capture_dir,
     )
@@ -139,6 +139,7 @@ def build_real_system(
             capture_dir,
             hindsight_enabled=config.recording.hindsight_enabled,
             hindsight_duration_s=config.recording.hindsight_duration_s,
+            media_probe=media_tools,
         ),
         scanner=KBeaconTagScannerAdapter(beacon_factory(), clock),
         detector=detector,

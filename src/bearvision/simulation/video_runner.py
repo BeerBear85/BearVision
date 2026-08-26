@@ -353,7 +353,9 @@ class VideoScenarioRunner:
             for sequence, (_, (at_s, kind, payload)) in enumerate(ordered)
         )
         assignment_results = tuple(assignments)
-        captures = tuple(media.asset.asset_id for media in self.camera.captures.values())
+        captures = tuple(
+            capture.media.asset.asset_id for capture in self.camera.captures.values()
+        )
         uploads = tuple(receipts)
         expectation_failures = evaluate_expectations(
             self.scenario,

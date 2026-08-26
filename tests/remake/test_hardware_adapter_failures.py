@@ -57,6 +57,15 @@ class RecordingGoPro:
         return path
 
 
+class StaticMediaProbe:
+    def __init__(self, duration_s: float) -> None:
+        self.duration_s = duration_s
+
+    async def duration(self, source: Path) -> float:
+        assert source.is_file()
+        return self.duration_s
+
+
 def test_gopro_non_hindsight_capture_records_waits_and_stops(tmp_path: Path) -> None:
     controller = RecordingGoPro()
     clock = VirtualClock()
@@ -67,12 +76,15 @@ def test_gopro_non_hindsight_capture_records_waits_and_stops(tmp_path: Path) -> 
         hindsight_enabled=False,
     )
 
-    media = asyncio.run(camera.capture(request()))
+    capture = asyncio.run(camera.capture(request()))
 
     assert controller.started == 1
     assert controller.stopped == 1
     assert clock.monotonic() == 1
-    assert media.local_path is not None and media.local_path.read_bytes() == b"recorded"
+    assert (
+        capture.media.local_path is not None
+        and capture.media.local_path.read_bytes() == b"recorded"
+    )
 
 
 def test_gopro_capture_rejects_missing_new_file_and_missing_download(tmp_path: Path) -> None:
@@ -91,6 +103,52 @@ def test_gopro_capture_rejects_missing_new_file_and_missing_download(tmp_path: P
     )
     with pytest.raises(InvalidComponentData, match="download is missing"):
         asyncio.run(camera.capture(request("missing-download")))
+
+
+def test_physical_gopro_timing_is_estimated_from_commands_and_media_duration(
+    tmp_path: Path,
+) -> None:
+    clock = VirtualClock()
+    clock.advance_to(10)
+    camera = GoProCameraAdapter(
+        RecordingGoPro(),
+        clock,
+        tmp_path,
+        hindsight_enabled=False,
+        media_probe=StaticMediaProbe(2),
+    )
+    capture = asyncio.run(
+        camera.capture(
+            CaptureRequest(
+                request_id="capture-probed",
+                requested_at_monotonic_s=10,
+                pre_roll_s=0,
+                post_roll_s=2,
+            )
+        )
+    )
+
+    assert capture.requested_window.start_monotonic_s == 10
+    assert capture.requested_window.end_monotonic_s == 12
+    assert capture.actual_window.start_monotonic_s == 10
+    assert capture.actual_window.end_monotonic_s == 12
+    assert capture.actual_window.precision == "estimated"
+    assert capture.actual_window.basis == "camera_command_timing_and_media_duration"
+
+
+def test_physical_gopro_rejects_media_duration_outside_command_bounds(
+    tmp_path: Path,
+) -> None:
+    camera = GoProCameraAdapter(
+        RecordingGoPro(),
+        VirtualClock(),
+        tmp_path,
+        hindsight_enabled=False,
+        media_probe=StaticMediaProbe(5),
+    )
+
+    with pytest.raises(InvalidComponentData, match="outside the camera-command bounds"):
+        asyncio.run(camera.capture(request("wrong-duration")))
 
 
 @pytest.mark.parametrize(
@@ -179,9 +237,7 @@ def test_box_overwrite_and_failures_are_translated(tmp_path: Path) -> None:
     handler = MemoryBox()
     storage = BoxStorageAdapter(handler, VirtualClock(), tmp_path)
     asyncio.run(storage.upload(content_media("asset-1"), "same.mp4"))
-    overwritten = asyncio.run(
-        storage.upload(content_media("asset-2"), "same.mp4", overwrite=True)
-    )
+    overwritten = asyncio.run(storage.upload(content_media("asset-2"), "same.mp4", overwrite=True))
     assert overwritten.asset_id == "asset-2"
 
     class FailingBox(MemoryBox):

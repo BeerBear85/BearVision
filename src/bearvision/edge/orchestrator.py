@@ -20,6 +20,7 @@ from bearvision.contracts import (
 from bearvision.domain import BearTagObservationBuffer
 from bearvision.ports import (
     Camera,
+    CapturedClip,
     CapturedMedia,
     ClipProcessor,
     Clock,
@@ -58,6 +59,7 @@ class OrchestrationResult:
     clip_end_monotonic_s: float
     manifest: EdgeJobManifest
     observations: tuple[BearTagJobObservation, ...]
+    raw_capture: CapturedClip
     media: CapturedMedia
     published: bool
     states: tuple[EdgeLifecycleState, ...]
@@ -210,27 +212,33 @@ class BearVisionOrchestrator:
 
     async def _record_and_enqueue(self, detection: PersonDetection) -> OrchestrationResult:
         request_id = f"capture-{detection.frame_id}"
-        effective_pre_roll_s = min(
-            self.capture_pre_roll_s, detection.observed_at_monotonic_s
+        timing_reference_monotonic_s = max(
+            self.clock.monotonic(), detection.observed_at_monotonic_s
         )
-        clip_start_s = detection.observed_at_monotonic_s - effective_pre_roll_s
-        clip_end_s = detection.observed_at_monotonic_s + self.recording_duration_s
-        triggered_at = self.clock.utc_now()
-        capture_started_at = triggered_at - timedelta(seconds=effective_pre_roll_s)
-        capture_ended_at = triggered_at + timedelta(seconds=self.recording_duration_s)
-        job_start_s = clip_start_s
-        job_end_s = clip_end_s
+        timing_reference_utc = self.clock.utc_now()
         states = [EdgeLifecycleState.RECORDING]
         self.state = states[-1]
         request = CaptureRequest(
             request_id=request_id,
             requested_at_monotonic_s=detection.observed_at_monotonic_s,
-            pre_roll_s=effective_pre_roll_s,
+            pre_roll_s=self.capture_pre_roll_s,
             post_roll_s=self.recording_duration_s,
         )
         try:
-            media = await self._retry_component(
+            raw_capture = await self._retry_component(
                 "capture clip", lambda: self.camera.capture(request), states
+            )
+            self._validate_camera_capture(request, raw_capture)
+            media = raw_capture.media
+            clip_start_s = raw_capture.actual_window.start_monotonic_s
+            clip_end_s = raw_capture.actual_window.end_monotonic_s
+            job_start_s = clip_start_s
+            job_end_s = clip_end_s
+            capture_started_at = timing_reference_utc + timedelta(
+                seconds=job_start_s - timing_reference_monotonic_s
+            )
+            capture_ended_at = timing_reference_utc + timedelta(
+                seconds=job_end_s - timing_reference_monotonic_s
             )
             if self.clip_processor is not None:
                 clip_processor = self.clip_processor
@@ -276,6 +284,7 @@ class BearVisionOrchestrator:
                 clip_end_monotonic_s=clip_end_s,
                 manifest=manifest,
                 observations=observations,
+                raw_capture=raw_capture,
                 media=media,
                 published=published,
                 states=tuple(states),
@@ -283,6 +292,22 @@ class BearVisionOrchestrator:
         except Exception:
             self.state = EdgeLifecycleState.MONITORING
             raise
+
+    @staticmethod
+    def _validate_camera_capture(
+        request: CaptureRequest,
+        capture: CapturedClip,
+    ) -> None:
+        if capture.request_id != request.request_id:
+            raise InvalidComponentData("camera returned a different capture request id")
+        nominal_start_s = request.requested_at_monotonic_s - request.pre_roll_s
+        if capture.requested_window.start_monotonic_s < nominal_start_s - 1e-9:
+            raise InvalidComponentData("camera requested window exceeds requested pre-roll")
+        if capture.requested_window.start_monotonic_s > request.requested_at_monotonic_s:
+            raise InvalidComponentData("camera requested window starts after detection")
+        expected_end_s = request.requested_at_monotonic_s + request.post_roll_s
+        if abs(capture.requested_window.end_monotonic_s - expected_end_s) > 1e-9:
+            raise InvalidComponentData("camera requested window has the wrong end time")
 
     async def _retry_component(
         self,

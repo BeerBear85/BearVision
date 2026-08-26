@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
-from bearvision.contracts import MediaAsset
+from bearvision.contracts import CaptureRequest, MediaAsset
 
 
 @dataclass(frozen=True, slots=True)
@@ -39,6 +40,78 @@ class CapturedMedia:
     def __post_init__(self) -> None:
         if (self.content is None) == (self.local_path is None):
             raise ValueError("exactly one media source is required")
+
+
+class CaptureWindowPrecision(StrEnum):
+    """How confidently a capture window is aligned to the monotonic timeline."""
+
+    EXACT = "exact"
+    ESTIMATED = "estimated"
+
+
+class CaptureWindowBasis(StrEnum):
+    """Evidence used to place a capture window on the monotonic timeline."""
+
+    DETECTION_REQUEST = "detection_request"
+    SIMULATED_MEDIA_TIMELINE = "simulated_media_timeline"
+    CAMERA_COMMAND_TIMING = "camera_command_timing"
+    CAMERA_COMMAND_TIMING_AND_MEDIA_DURATION = "camera_command_timing_and_media_duration"
+
+
+@dataclass(frozen=True, slots=True)
+class CaptureWindow:
+    """One requested or delivered interval on the process monotonic timeline."""
+
+    start_monotonic_s: float
+    end_monotonic_s: float
+    precision: CaptureWindowPrecision
+    basis: CaptureWindowBasis
+
+    def __post_init__(self) -> None:
+        if self.start_monotonic_s < 0:
+            raise ValueError("capture window start must not be negative")
+        if self.end_monotonic_s <= self.start_monotonic_s:
+            raise ValueError("capture window end must be later than its start")
+
+    @property
+    def duration_s(self) -> float:
+        return self.end_monotonic_s - self.start_monotonic_s
+
+
+def requested_capture_window(
+    request: CaptureRequest,
+    *,
+    earliest_available_monotonic_s: float,
+) -> CaptureWindow:
+    """Build the detection-centred request, clamped to available camera history."""
+
+    if earliest_available_monotonic_s < 0:
+        raise ValueError("earliest available camera time must not be negative")
+    if earliest_available_monotonic_s > request.requested_at_monotonic_s:
+        raise ValueError("camera media starts after the requested detection")
+    return CaptureWindow(
+        start_monotonic_s=max(
+            earliest_available_monotonic_s,
+            request.requested_at_monotonic_s - request.pre_roll_s,
+        ),
+        end_monotonic_s=request.requested_at_monotonic_s + request.post_roll_s,
+        precision=CaptureWindowPrecision.EXACT,
+        basis=CaptureWindowBasis.DETECTION_REQUEST,
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class CapturedClip:
+    """Unmodified camera media plus requested and delivered timing evidence."""
+
+    request_id: str
+    media: CapturedMedia
+    requested_window: CaptureWindow
+    actual_window: CaptureWindow
+
+    def __post_init__(self) -> None:
+        if not self.request_id:
+            raise ValueError("capture request id must not be empty")
 
 
 @dataclass(frozen=True, slots=True)

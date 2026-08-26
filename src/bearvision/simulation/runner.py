@@ -321,7 +321,9 @@ class ClosedLoopScenarioRunner:
             TraceEntry(at_s=at_s, sequence=sequence, kind=kind, payload=payload)
             for sequence, (_, (at_s, kind, payload)) in enumerate(ordered)
         )
-        captures = tuple(media.asset.asset_id for media in self.camera.captures.values())
+        captures = tuple(
+            capture.media.asset.asset_id for capture in self.camera.captures.values()
+        )
         uploads = tuple(
             StorageReceipt(
                 asset_id=result.media.asset.asset_id,

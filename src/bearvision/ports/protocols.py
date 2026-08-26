@@ -19,7 +19,7 @@ from bearvision.contracts import (
     TagRegistryEntry,
 )
 
-from .models import CapturedMedia, ExtractedClip, PreparedClip, VideoFrame
+from .models import CapturedClip, CapturedMedia, ExtractedClip, PreparedClip, VideoFrame
 
 
 @runtime_checkable
@@ -41,7 +41,7 @@ class Camera(Protocol):
 
     async def stop_preview(self) -> None: ...
 
-    async def capture(self, request: CaptureRequest) -> CapturedMedia: ...
+    async def capture(self, request: CaptureRequest) -> CapturedClip: ...
 
 
 @runtime_checkable
@@ -54,6 +54,13 @@ class VideoClipper(Protocol):
         start_s: float,
         duration_s: float,
     ) -> ExtractedClip: ...
+
+
+@runtime_checkable
+class MediaProbe(Protocol):
+    """Read validated timing metadata from a local media file."""
+
+    async def duration(self, source: Path) -> float: ...
 
 
 @runtime_checkable
@@ -127,9 +134,7 @@ class ManagedJobQueue(JobQueue, Protocol):
 
     async def admin_read(self, job_id: str, filename: str) -> bytes: ...
 
-    async def admin_download(
-        self, job_id: str, filename: str, destination: Path
-    ) -> None: ...
+    async def admin_download(self, job_id: str, filename: str, destination: Path) -> None: ...
 
 
 @runtime_checkable

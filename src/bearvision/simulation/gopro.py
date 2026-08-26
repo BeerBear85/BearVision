@@ -41,7 +41,9 @@ class SimulatedGoProController:
         self.previewing = False
         self.encoding = False
         self.hindsight_duration_s = 0
+        self._hindsight_enabled_at_s: float | None = None
         self._capture_start_s: float | None = None
+        self._media_windows: dict[str, tuple[float, float]] = {}
         self._lock = threading.RLock()
         self._load_persistent_state()
 
@@ -71,6 +73,7 @@ class SimulatedGoProController:
         with self._lock:
             self._require_connected()
             self.hindsight_duration_s = duration_s
+            self._hindsight_enabled_at_s = float(self.clock.monotonic())
             self._save_persistent_state()
         return True
 
@@ -81,6 +84,7 @@ class SimulatedGoProController:
         with self._lock:
             self._require_connected()
             self.hindsight_duration_s = 0
+            self._hindsight_enabled_at_s = None
             self._save_persistent_state()
 
     def start_preview(self, port: int = 8554) -> str:
@@ -101,8 +105,14 @@ class SimulatedGoProController:
             if self.encoding:
                 raise RuntimeError("simulated GoPro is already encoding")
             triggered_at_s = float(self.clock.monotonic())
+            earliest_available_s = (
+                self._hindsight_enabled_at_s
+                if self._hindsight_enabled_at_s is not None
+                else triggered_at_s
+            )
             self._capture_start_s = max(
-                0.0, triggered_at_s - float(self.hindsight_duration_s)
+                earliest_available_s,
+                triggered_at_s - float(self.hindsight_duration_s),
             )
             self.encoding = True
 
@@ -119,6 +129,7 @@ class SimulatedGoProController:
         if duration_s <= 0:
             raise RuntimeError("simulated GoPro recording has no duration")
         destination = self.media_dir / self._next_media_filename()
+        camera_file = destination.relative_to(self.root_dir).as_posix()
         try:
             asyncio.run(
                 self.clipper.extract(
@@ -131,6 +142,8 @@ class SimulatedGoProController:
         except Exception:
             destination.unlink(missing_ok=True)
             raise
+        with self._lock:
+            self._media_windows[camera_file] = (capture_start_s, capture_end_s)
 
     def start_hindsight_clip(self, duration: float = 1.0) -> None:
         """Compatibility helper for legacy callers outside the camera adapter."""
@@ -158,6 +171,16 @@ class SimulatedGoProController:
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source, destination)
         return destination
+
+    def get_media_capture_window(self, camera_file: str) -> tuple[float, float]:
+        """Return exact simulator timing for media created in this process."""
+
+        with self._lock:
+            self._require_connected()
+            try:
+                return self._media_windows[camera_file]
+            except KeyError as exc:
+                raise FileNotFoundError(camera_file) from exc
 
     def delete_file(self, camera_file: str) -> None:
         with self._lock:
@@ -193,9 +216,7 @@ class SimulatedGoProController:
         return candidate
 
     def _next_media_filename(self) -> str:
-        existing = {
-            path.name.upper() for path in self.media_dir.glob("GX??????.MP4")
-        }
+        existing = {path.name.upper() for path in self.media_dir.glob("GX??????.MP4")}
         for number in range(1, 10_000):
             filename = f"GX01{number:04d}.MP4"
             if filename not in existing:

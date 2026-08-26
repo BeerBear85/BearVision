@@ -8,3 +8,58 @@
 - Verify model and test-video redistribution rights before a public release.
 - Select the BearVision source-code licence before distribution.
 - Add explicit CI jobs for training, post-processing GUI and physical hardware.
+
+## Architecture review follow-up (2026-08-26)
+
+### P0 - Make the camera capture window explicit and verifiable
+
+- [x] Document the agreed capture contract: the preview frame timestamp is the
+  authoritative detection time; the requested interval is detection time minus
+  configured HindSight through detection time plus post-detection duration.
+- [x] Preserve the original GoPro file unchanged as the raw clip. Record both the
+  requested interval and the actual interval delivered by the camera so processing
+  can trim deterministically and timing differences remain visible.
+- [x] Clamp missing pre-roll to the camera's earliest available media after startup.
+  Later detections during an active capture must not extend its end time.
+- [x] Return the actual captured start/end (or equivalent window metadata) from
+  the `Camera` port instead of returning media without timing evidence.
+- [x] Make GoPro, simulated GoPro and simulated camera validate their effective
+  window, including 0/15/30-second requests and start-of-timeline clamping.
+- [x] Add shared camera contract tests that fail on configured/requested window
+  mismatches and validate downloaded media duration within an explicit tolerance.
+- [x] Update `specs/components/clip-extraction.md`; remove the stale statement
+  that version 3.0 always issues zero pre-roll.
+
+### P1 - Use one Edge capture-to-publish pipeline
+
+- [ ] Extend the orchestration result/event surface with the processing and trace
+  metadata needed by scenario evaluation; do not expose mutable implementation
+  fields such as `detector` and `observations` to runners.
+- [ ] Configure `VideoScenarioRunner` with the same `ClipProcessor` and publishing
+  path as hardware execution.
+- [ ] Remove the runner's second processing, time adjustment, package hashing and
+  `queue.publish()` implementation.
+- [ ] Add parity tests proving hardware-style and recorded-video execution produce
+  equivalent manifests, observation windows, ordering and publish behaviour.
+- [ ] Preserve ADR 0007: `process_server=False` must never run the server worker
+  in-process.
+
+### P2 - Reduce Scenario duplication after the pipeline is unified
+
+- [ ] Extract shared rider-registry/worker assembly, trace ordering, result
+  construction and expectation evaluation from the two scenario runners.
+- [ ] Keep the synthetic and recorded-video execution loops separate unless the
+  resulting shared interface is smaller and clearer than both loops.
+- [ ] Add composition tests for supported component-source combinations. The
+  disk-backed GoPro is already selectable as `simulated_gopro`; do not reimplement it.
+
+### P3 - Prove queue semantics before adding another abstraction
+
+- [ ] Add one reusable `JobQueue` contract suite covering READY-last publication,
+  idempotency, claim/resume, finish, requeue and normalized snapshots.
+- [ ] Run it against Box, filesystem and memory queues; align known drift such as
+  processed-user validation and normalized in-memory snapshot status.
+- [ ] Extract pure package serialization and snapshot formatting helpers where the
+  contract tests demonstrate identical behaviour.
+- [ ] Defer a provider-independent durable queue state-machine module until the
+  low-level provider seam is demonstrably smaller than the current `JobQueue` port.

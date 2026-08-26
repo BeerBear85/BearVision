@@ -68,10 +68,10 @@ def test_simulated_adapters_pass_shared_contract_suites() -> None:
     storage = InMemoryStorage(clock)
 
     asyncio.run(check_clock(clock))
-    media = asyncio.run(check_camera(camera, request))
+    capture = asyncio.run(check_camera(camera, request))
     asyncio.run(check_scanner(SimulatedTagScanner((observation,))))
     asyncio.run(check_detector(SimulatedDetector({"frame-1": (detection,)}), frame))
-    asyncio.run(check_storage(storage, media, "rider-17/clip.mp4"))
+    asyncio.run(check_storage(storage, capture.media, "rider-17/clip.mp4"))
     check_registry(
         InMemoryTagRegistry((TagRegistryEntry(tag_id="tag-17", rider_id="rider-17"),)),
         "tag-17",

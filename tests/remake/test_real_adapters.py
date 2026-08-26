@@ -117,7 +117,7 @@ def capture_request() -> CaptureRequest:
 def test_existing_camera_detector_and_storage_wrappers_pass_contracts(tmp_path: Path) -> None:
     clock = VirtualClock()
     camera = GoProCameraAdapter(StubGoPro(), clock, tmp_path / "captures")
-    media = asyncio.run(check_camera(camera, capture_request()))
+    capture = asyncio.run(check_camera(camera, capture_request()))
     asyncio.run(
         check_detector(
             YoloDetectorAdapter(StubDnn()),
@@ -127,7 +127,7 @@ def test_existing_camera_detector_and_storage_wrappers_pass_contracts(tmp_path: 
     asyncio.run(
         check_storage(
             BoxStorageAdapter(StubBox(), clock, tmp_path / "scratch"),
-            media,
+            capture.media,
             "rider-17/clip.mp4",
         )
     )

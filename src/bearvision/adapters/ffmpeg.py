@@ -32,12 +32,8 @@ class FfmpegVideoClipper:
         if duration_tolerance_s < 0:
             raise ValueError("duration tolerance must not be negative")
         self.config = config
-        self.ffmpeg_path = self._resolve_executable(
-            ffmpeg_path, "BEARVISION_FFMPEG", "ffmpeg"
-        )
-        self.ffprobe_path = self._resolve_executable(
-            ffprobe_path, "BEARVISION_FFPROBE", "ffprobe"
-        )
+        self.ffmpeg_path = self._resolve_executable(ffmpeg_path, "BEARVISION_FFMPEG", "ffmpeg")
+        self.ffprobe_path = self._resolve_executable(ffprobe_path, "BEARVISION_FFPROBE", "ffprobe")
         self.run_command = run_command or self._run_command
         self.duration_tolerance_s = duration_tolerance_s
 
@@ -97,6 +93,18 @@ class FfmpegVideoClipper:
             start_s,
             duration_s,
         )
+
+    async def duration(self, source: Path) -> float:
+        """Return the probed media duration in seconds."""
+
+        source = source.resolve()
+        if not source.is_file():
+            raise InvalidComponentData(f"media source does not exist: {source}")
+        info = await asyncio.to_thread(self._probe, source)
+        duration_s = float(info["duration_s"])
+        if duration_s <= 0:
+            raise InvalidComponentData("media duration must be positive")
+        return duration_s
 
     def _extract_sync(
         self,

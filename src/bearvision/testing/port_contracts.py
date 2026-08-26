@@ -3,7 +3,18 @@
 from __future__ import annotations
 
 from bearvision.contracts import CaptureRequest
-from bearvision.ports import Camera, CapturedMedia, Clock, Detector, Storage, TagRegistry, TagScanner, VideoFrame
+from bearvision.ports import (
+    Camera,
+    CapturedClip,
+    CapturedMedia,
+    CaptureWindowPrecision,
+    Clock,
+    Detector,
+    Storage,
+    TagRegistry,
+    TagScanner,
+    VideoFrame,
+)
 
 
 async def check_clock(clock: Clock) -> None:
@@ -15,14 +26,24 @@ async def check_clock(clock: Clock) -> None:
     assert clock.utc_now().utcoffset() is not None
 
 
-async def check_camera(camera: Camera, request: CaptureRequest) -> CapturedMedia:
+async def check_camera(camera: Camera, request: CaptureRequest) -> CapturedClip:
     await camera.connect()
     preview = await camera.start_preview()
     assert preview
     first = await camera.capture(request)
     second = await camera.capture(request)
     assert first == second, "capture must be idempotent for a stable request_id"
-    assert first.asset.asset_id
+    assert first.request_id == request.request_id
+    assert first.media.asset.asset_id
+    assert first.requested_window.start_monotonic_s >= max(
+        0.0, request.requested_at_monotonic_s - request.pre_roll_s
+    )
+    assert first.requested_window.end_monotonic_s == (
+        request.requested_at_monotonic_s + request.post_roll_s
+    )
+    assert first.actual_window.start_monotonic_s <= request.requested_at_monotonic_s
+    assert first.actual_window.end_monotonic_s >= request.requested_at_monotonic_s
+    assert isinstance(first.actual_window.precision, CaptureWindowPrecision)
     await camera.stop_preview()
     await camera.disconnect()
     return first

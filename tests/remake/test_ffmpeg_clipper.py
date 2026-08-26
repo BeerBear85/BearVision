@@ -222,6 +222,19 @@ def test_negative_duration_tolerance_is_rejected() -> None:
         FfmpegVideoClipper(ClipExtractionConfig(), duration_tolerance_s=-0.1)
 
 
+def test_media_probe_exposes_validated_duration(tmp_path: Path) -> None:
+    source = tmp_path / "source.mp4"
+    source.write_bytes(b"source")
+    clipper = FfmpegVideoClipper(
+        ClipExtractionConfig(),
+        ffmpeg_path="ffmpeg-test",
+        ffprobe_path="ffprobe-test",
+        run_command=FakeMediaCommands(),
+    )
+
+    assert asyncio.run(clipper.duration(source)) == pytest.approx(15.296)
+
+
 def test_executable_resolution_prefers_packaged_runtime(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("BEARVISION_TEST_MEDIA", raising=False)
     monkeypatch.setattr("bearvision.adapters.ffmpeg.shutil.which", lambda _: "managed-tool.exe")
