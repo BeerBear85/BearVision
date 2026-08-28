@@ -55,11 +55,11 @@
 
 ### P3 - Prove queue semantics before adding another abstraction
 
-- [ ] Add one reusable `JobQueue` contract suite covering READY-last publication,
+- [x] Add one reusable `JobQueue` contract suite covering READY-last publication,
   idempotency, claim/resume, finish, requeue and normalized snapshots.
-- [ ] Run it against Box, filesystem and memory queues; align known drift such as
+- [x] Run it against Box, filesystem and memory queues; align known drift such as
   processed-user validation and normalized in-memory snapshot status.
-- [ ] Extract pure package serialization and snapshot formatting helpers where the
+- [x] Extract pure package serialization and snapshot formatting helpers where the
   contract tests demonstrate identical behaviour.
-- [ ] Defer a provider-independent durable queue state-machine module until the
+- [x] Defer a provider-independent durable queue state-machine module until the
   low-level provider seam is demonstrably smaller than the current `JobQueue` port.

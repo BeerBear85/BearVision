@@ -28,6 +28,12 @@ from bearvision.ports import (
     VideoFrame,
     requested_capture_window,
 )
+from bearvision.queueing import (
+    job_package_files,
+    normalize_queue_snapshot,
+    serialize_result,
+    validate_result_destination,
+)
 
 
 class VirtualClock:
@@ -182,6 +188,7 @@ class InMemoryJobQueue:
         self.packages: dict[str, dict[str, bytes]] = {}
         self.states: dict[str, str] = {}
         self.results: dict[str, JobResultManifest] = {}
+        self.processed_users: dict[str, UUID] = {}
 
     async def publish(
         self,
@@ -193,20 +200,9 @@ class InMemoryJobQueue:
             raise ComponentUnavailable("injected job queue publish failure")
         if manifest.job_id in self.states:
             return False
-        if video.content is not None:
-            content = video.content
-        else:
-            assert video.local_path is not None
-            content = video.local_path.read_bytes()
-        ndjson = "".join(
-            item.model_dump_json(by_alias=True) + "\n" for item in observations
-        ).encode()
-        self.packages[manifest.job_id] = {
-            "manifest.json": manifest.model_dump_json(by_alias=True).encode(),
-            manifest.video.filename: content,
-            manifest.observations_filename: ndjson,
-            "READY": b"",
-        }
+        self.packages[manifest.job_id] = dict(
+            job_package_files(manifest, video, observations)
+        )
         self.states[manifest.job_id] = "ready"
         return True
 
@@ -216,7 +212,11 @@ class InMemoryJobQueue:
         )
         if processing:
             return processing[0]
-        ready = sorted(job_id for job_id, state in self.states.items() if state == "ready")
+        ready = sorted(
+            job_id
+            for job_id, state in self.states.items()
+            if state == "ready" and "READY" in self.packages.get(job_id, {})
+        )
         if not ready:
             return None
         self.states[ready[0]] = "processing"
@@ -228,32 +228,35 @@ class InMemoryJobQueue:
     async def finish(
         self, job_id: str, result: JobResultManifest, user_id: UUID | None = None
     ) -> None:
+        validate_result_destination(result, user_id)
         self.results[job_id] = result
-        self.packages[job_id]["result.json"] = result.model_dump_json(by_alias=True).encode()
-        self.states[job_id] = (
-            f"processed/user_{user_id}" if result.status == "processed" else result.status
-        )
+        self.packages[job_id]["result.json"] = serialize_result(result)
+        self.states[job_id] = result.status
+        if result.status == "processed":
+            assert user_id is not None
+            self.processed_users[job_id] = user_id
 
     async def requeue(self, job_id: str) -> bool:
         if self.states.get(job_id) not in {"failed", "unresolved"}:
             return False
         self.states[job_id] = "ready"
         self.results.pop(job_id, None)
+        self.processed_users.pop(job_id, None)
         self.packages[job_id].pop("result.json", None)
         return True
 
     def snapshot(self) -> dict:
-        counts = {
-            state: 0 for state in ("ready", "processing", "processed", "unresolved", "failed")
-        }
-        for state in self.states.values():
-            counts[state.split("/", 1)[0]] += 1
-        return {
-            "counts": counts,
-            "jobs": [
-                {"jobId": job_id, "status": state} for job_id, state in sorted(self.states.items())
-            ],
-        }
+        jobs = []
+        for job_id, status in self.states.items():
+            item = {"jobId": job_id, "status": status}
+            result = self.results.get(job_id)
+            if result is not None:
+                item.update(result.model_dump(mode="json", by_alias=True))
+            user_id = self.processed_users.get(job_id)
+            if user_id is not None:
+                item["userId"] = str(user_id)
+            jobs.append(item)
+        return normalize_queue_snapshot(jobs)
 
 
 class InMemoryTagRegistry:

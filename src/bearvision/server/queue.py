@@ -11,6 +11,12 @@ from uuid import UUID, uuid4
 from bearvision.contracts import BearTagJobObservation, EdgeJobManifest, JobResultManifest
 from bearvision.contracts.identity import user_id_from_storage_folder, user_storage_folder
 from bearvision.ports import CapturedMedia
+from bearvision.queueing import (
+    job_package_files,
+    normalize_queue_snapshot,
+    serialize_result,
+    validate_result_destination,
+)
 
 
 class FileSystemJobQueue:
@@ -102,22 +108,8 @@ class FileSystemJobQueue:
         temporary = uploading / f".{manifest.job_id}.{uuid4().hex}.tmp"
         temporary.mkdir(parents=True)
         try:
-            if video.content is not None:
-                content = video.content
-            else:
-                assert video.local_path is not None
-                content = video.local_path.read_bytes()
-            (temporary / manifest.video.filename).write_bytes(content)
-            (temporary / "manifest.json").write_text(
-                manifest.model_dump_json(by_alias=True, indent=2) + "\n", encoding="utf-8"
-            )
-            ndjson = "".join(
-                json.dumps(item.model_dump(mode="json", by_alias=True), separators=(",", ":"))
-                + "\n"
-                for item in observations
-            )
-            (temporary / manifest.observations_filename).write_text(ndjson, encoding="utf-8")
-            (temporary / "READY").write_bytes(b"")
+            for filename, content in job_package_files(manifest, video, observations):
+                (temporary / filename).write_bytes(content)
             destination = self.root / "input-queue/ready" / manifest.job_id
             if self._terminal_or_active_path(manifest.job_id) is not None:
                 return False
@@ -151,13 +143,13 @@ class FileSystemJobQueue:
     async def finish(
         self, job_id: str, result: JobResultManifest, user_id: UUID | None = None
     ) -> None:
+        validate_result_destination(result, user_id)
         source = self.root / "processing" / job_id
         temporary = source / ".result.json.tmp"
-        temporary.write_text(result.model_dump_json(by_alias=True, indent=2) + "\n", encoding="utf-8")
+        temporary.write_bytes(serialize_result(result))
         os.replace(temporary, source / "result.json")
         if result.status == "processed":
-            if user_id is None:
-                raise ValueError("processed result requires user id")
+            assert user_id is not None
             destination = self.root / "processed" / user_storage_folder(user_id) / job_id
         else:
             destination = self.root / result.status / job_id
@@ -202,7 +194,6 @@ class FileSystemJobQueue:
                 processed.extend(
                     {**item, "userId": str(user_id)} for item in jobs(user_folder)
                 )
-        all_jobs = ready + processing + processed + unresolved + failed
         for state, state_jobs in (
             ("ready", ready),
             ("processing", processing),
@@ -212,13 +203,6 @@ class FileSystemJobQueue:
         ):
             for item in state_jobs:
                 item.setdefault("status", state)
-        return {
-            "counts": {
-                "ready": len(ready),
-                "processing": len(processing),
-                "processed": len(processed),
-                "unresolved": len(unresolved),
-                "failed": len(failed),
-            },
-            "jobs": all_jobs,
-        }
+        return normalize_queue_snapshot(
+            ready + processing + processed + unresolved + failed
+        )

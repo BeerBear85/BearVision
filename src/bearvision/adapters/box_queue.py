@@ -12,6 +12,12 @@ from uuid import UUID
 from bearvision.contracts import BearTagJobObservation, EdgeJobManifest, JobResultManifest
 from bearvision.contracts.identity import user_id_from_storage_folder, user_storage_folder
 from bearvision.ports import CapturedMedia
+from bearvision.queueing import (
+    job_package_files,
+    normalize_queue_snapshot,
+    serialize_result,
+    validate_result_destination,
+)
 
 from ._errors import translated_error
 
@@ -151,30 +157,14 @@ class BoxJobQueue:
             if await self._exists_anywhere(manifest.job_id):
                 return False
             prefix = f"input-queue/uploading/{manifest.job_id}"
-            if video.content is not None:
-                content = video.content
-            else:
-                assert video.local_path is not None
-                content = video.local_path.read_bytes()
-            ndjson = "".join(
-                json.dumps(item.model_dump(mode="json", by_alias=True), separators=(",", ":"))
-                + "\n"
-                for item in observations
-            ).encode()
             # A prior transient failure may have left an incomplete uploading
             # folder. Rewriting its deterministic files safely resumes it.
-            await self._upload_bytes(
-                content, f"{prefix}/{manifest.video.filename}", overwrite=True
-            )
-            await self._upload_bytes(
-                (manifest.model_dump_json(by_alias=True, indent=2) + "\n").encode(),
-                f"{prefix}/manifest.json",
-                overwrite=True,
-            )
-            await self._upload_bytes(
-                ndjson, f"{prefix}/{manifest.observations_filename}", overwrite=True
-            )
-            await self._upload_bytes(b"", f"{prefix}/READY", overwrite=True)
+            for filename, content in job_package_files(manifest, video, observations):
+                await self._upload_bytes(
+                    content,
+                    f"{prefix}/{filename}",
+                    overwrite=True,
+                )
             await asyncio.to_thread(
                 self.handler.move_folder,
                 prefix,
@@ -230,15 +220,15 @@ class BoxJobQueue:
     async def finish(
         self, job_id: str, result: JobResultManifest, user_id: UUID | None = None
     ) -> None:
+        validate_result_destination(result, user_id)
         try:
             await self._upload_bytes(
-                (result.model_dump_json(by_alias=True, indent=2) + "\n").encode(),
+                serialize_result(result),
                 f"processing/{job_id}/result.json",
                 overwrite=True,
             )
             if result.status == "processed":
-                if user_id is None:
-                    raise ValueError("processed result requires user id")
+                assert user_id is not None
                 destination = f"processed/{user_storage_folder(user_id)}/{job_id}"
             else:
                 destination = f"{result.status}/{job_id}"
@@ -319,15 +309,6 @@ class BoxJobQueue:
                     for item in failed
                 ]
             )
-            return {
-                "counts": {
-                    "ready": len(ready),
-                    "processing": len(processing),
-                    "processed": len(processed),
-                    "unresolved": len(unresolved),
-                    "failed": len(failed),
-                },
-                "jobs": jobs,
-            }
+            return normalize_queue_snapshot(jobs)
         except Exception as exc:
             raise translated_error(exc, "inspect Box queue") from exc
