@@ -16,8 +16,16 @@ from bearvision.adapters import (
     YoloDetectorAdapter,
 )
 from bearvision.config import AssignmentConfig, EdgeConfig
-from bearvision.ports import Camera, ClipProcessor, Clock, Detector, FrameSource, JobQueue, TagScanner
-from bearvision.contracts import ScenarioDefinition
+from bearvision.ports import (
+    Camera,
+    ClipProcessor,
+    Clock,
+    Detector,
+    FrameSource,
+    JobQueue,
+    TagScanner,
+)
+from bearvision.contracts import ScenarioDefinition, ScenarioSourceProfile
 from bearvision.processing import VirtualCameramanProcessor
 from .orchestrator import BearVisionOrchestrator
 
@@ -46,7 +54,7 @@ def build_behavioral_system(
     job_queue: JobQueue | None = None,
     process_server: bool = True,
 ) -> "ClosedLoopScenarioRunner | VideoScenarioRunner":
-    if scenario.components.frames == "video":
+    if scenario.source_profile is ScenarioSourceProfile.RECORDED_VIDEO:
         from bearvision.simulation.video_runner import VideoScenarioRunner
 
         return VideoScenarioRunner.from_scenario(
@@ -56,18 +64,6 @@ def build_behavioral_system(
             capture_dir=capture_dir,
             job_queue=job_queue,
             process_server=process_server,
-        )
-    supported_synthetic = (
-        scenario.components.frames == "synthetic"
-        and scenario.components.detector == "declared"
-        and scenario.components.bear_tag == "synthetic"
-        and scenario.components.camera == "simulated"
-        and scenario.components.storage == "memory"
-    )
-    if not supported_synthetic:
-        raise ValueError(
-            "this component-source combination is declared but not implemented as a "
-            "behavioural composition"
         )
     from bearvision.simulation.runner import ClosedLoopScenarioRunner
 

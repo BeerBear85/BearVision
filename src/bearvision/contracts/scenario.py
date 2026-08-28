@@ -2,20 +2,106 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta
+from enum import StrEnum
 from pathlib import Path
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 import yaml
 
-from .models import Vector3
+from .models import BoundingBox, PersonDetection, TagObservation, TagRegistryEntry, Vector3
+
+
+class TagTimelinePayload(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    tag_id: str = Field(min_length=1)
+    rider_id: str | None = Field(default=None, min_length=1)
+    rssi_dbm: int = Field(default=-60, ge=-127, le=20)
+    acceleration_mps2: Vector3 = Field(
+        default_factory=lambda: Vector3(x=0, y=0, z=9.80665)
+    )
+    battery_voltage_mv: int | None = Field(default=None, ge=0, le=10_000)
+
+
+class PersonDetectedTimelinePayload(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    confidence: float = Field(default=0.9, ge=0, le=1)
 
 
 class TimelineEvent(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
     at_s: float = Field(ge=0)
     event: Literal["tag_enters_range", "tag_observation", "person_detected"]
-    payload: dict[str, Any] = Field(default_factory=dict)
+    payload: TagTimelinePayload | PersonDetectedTimelinePayload
+
+    @model_validator(mode="before")
+    @classmethod
+    def validate_payload_shape(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+        event = data.get("event")
+        payload = data.get("payload", {})
+        normalized: TagTimelinePayload | PersonDetectedTimelinePayload
+        if event in {"tag_enters_range", "tag_observation"}:
+            normalized = TagTimelinePayload.model_validate(payload)
+        elif event == "person_detected":
+            normalized = PersonDetectedTimelinePayload.model_validate(payload)
+        else:
+            return data
+        return {**data, "payload": normalized}
+
+    @property
+    def is_tag_observation(self) -> bool:
+        return isinstance(self.payload, TagTimelinePayload)
+
+    def to_tag_observation(self, start_utc: datetime) -> TagObservation | None:
+        if not isinstance(self.payload, TagTimelinePayload):
+            return None
+        return TagObservation(
+            tag_id=self.payload.tag_id,
+            observed_at_utc=start_utc + timedelta(seconds=self.at_s),
+            observed_at_monotonic_s=self.at_s,
+            rssi_dbm=self.payload.rssi_dbm,
+            acceleration_mps2=self.payload.acceleration_mps2,
+            battery_voltage_mv=self.payload.battery_voltage_mv,
+        )
+
+    def to_registry_entry(self) -> TagRegistryEntry | None:
+        if (
+            not isinstance(self.payload, TagTimelinePayload)
+            or self.payload.rider_id is None
+        ):
+            return None
+        return TagRegistryEntry(
+            tag_id=self.payload.tag_id,
+            rider_id=self.payload.rider_id,
+        )
+
+    def to_person_detection(self, frame_id: str) -> PersonDetection | None:
+        if not isinstance(self.payload, PersonDetectedTimelinePayload):
+            return None
+        return PersonDetection(
+            frame_id=frame_id,
+            observed_at_monotonic_s=self.at_s,
+            bounding_box=BoundingBox(
+                x_px=100,
+                y_px=100,
+                width_px=400,
+                height_px=700,
+            ),
+            confidence=self.payload.confidence,
+        )
+
+    def trace_payload(self) -> dict[str, Any]:
+        return self.payload.model_dump(mode="json", exclude_none=True)
+
+
+class ScenarioSourceProfile(StrEnum):
+    SYNTHETIC = "synthetic"
+    RECORDED_VIDEO = "recorded_video"
 
 
 class ScenarioFaults(BaseModel):
@@ -189,8 +275,7 @@ class ScenarioDefinition(BaseModel):
                 or self.generated_from is not None
             ):
                 raise ValueError("video and generated BearTag series require scenario schema 3.x")
-            return self
-        if self.scenario_schema_version == "3.0" and (
+        elif self.scenario_schema_version == "3.0" and (
             self.generated_from is not None
             or any(series.samples for series in self.synthetic_bear_tags)
         ):
@@ -199,15 +284,34 @@ class ScenarioDefinition(BaseModel):
             raise ValueError("video frame source requires a video configuration")
         if self.components.frames != "video" and self.video is not None:
             raise ValueError("video configuration requires components.frames=video")
-        if self.components.detector == "yolo" and self.components.frames == "synthetic":
-            raise ValueError("YOLO requires video or GoPro frames")
+        self.source_profile
         if self.components.detector == "yolo" and any(
             item.event == "person_detected" for item in self.timeline
         ):
             raise ValueError("YOLO scenarios must not declare person_detected timeline events")
         if self.components.bear_tag == "ble" and self.synthetic_bear_tags:
             raise ValueError("physical BLE scenarios cannot include generated BearTag series")
+        if any(item.at_s > self.duration_s for item in self.timeline):
+            raise ValueError("timeline events must occur within scenario duration_s")
         return self
+
+    @property
+    def source_profile(self) -> ScenarioSourceProfile:
+        sources = (
+            self.components.frames,
+            self.components.detector,
+            self.components.bear_tag,
+            self.components.camera,
+            self.components.storage,
+        )
+        if sources == ("synthetic", "declared", "synthetic", "simulated", "memory"):
+            return ScenarioSourceProfile.SYNTHETIC
+        if sources == ("video", "yolo", "synthetic", "simulated_gopro", "memory"):
+            return ScenarioSourceProfile.RECORDED_VIDEO
+        raise ValueError(
+            "this component-source profile is declared but not executable: "
+            + "/".join(sources)
+        )
 
 
 def load_scenario(path: str | Path) -> ScenarioDefinition:

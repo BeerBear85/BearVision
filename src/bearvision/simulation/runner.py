@@ -3,17 +3,15 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import timedelta
 
 from bearvision.config import AssignmentConfig
 from bearvision.contracts import (
-    BoundingBox,
     JobResultManifest,
     PersonDetection,
     ScenarioDefinition,
+    ScenarioSourceProfile,
     TagObservation,
     TagRegistryEntry,
-    Vector3,
 )
 from bearvision.edge.orchestrator import BearVisionOrchestrator, OrchestrationResult
 from bearvision.ports import ComponentError, JobQueue, VideoFrame
@@ -32,6 +30,7 @@ from .scenario_runtime import (
     build_scenario_worker,
     finalize_scenario_run,
 )
+from .scenario_inputs import generate_bear_tag_series
 
 
 class ClosedLoopScenarioRunner:
@@ -66,45 +65,29 @@ class ClosedLoopScenarioRunner:
     ) -> "ClosedLoopScenarioRunner":
         if recording_duration_s <= 0:
             raise ValueError("recording_duration_s must be positive")
+        if scenario.source_profile is not ScenarioSourceProfile.SYNTHETIC:
+            raise ValueError("closed-loop runner requires the synthetic source profile")
         clock = VirtualClock()
-        observations: list[TagObservation] = []
-        riders_by_tag: dict[str, str] = {}
+        generated_observations, generated_registry = generate_bear_tag_series(
+            scenario.synthetic_bear_tags,
+            clock,
+        )
+        observations: list[TagObservation] = list(generated_observations)
+        registry_by_tag = {entry.tag_id: entry for entry in generated_registry}
         detections: dict[str, tuple[PersonDetection, ...]] = {}
         for index, item in enumerate(scenario.timeline):
-            if item.event in {"tag_enters_range", "tag_observation"}:
-                tag_id = str(item.payload["tag_id"])
-                if item.payload.get("rider_id") is not None:
-                    riders_by_tag[tag_id] = str(item.payload["rider_id"])
-                acceleration = item.payload.get("acceleration_mps2", {})
-                observations.append(
-                    TagObservation(
-                        tag_id=tag_id,
-                        observed_at_utc=clock.start_utc + timedelta(seconds=item.at_s),
-                        observed_at_monotonic_s=item.at_s,
-                        rssi_dbm=int(item.payload.get("rssi_dbm", -60)),
-                        acceleration_mps2=Vector3(
-                            x=float(acceleration.get("x", 0)),
-                            y=float(acceleration.get("y", 0)),
-                            z=float(acceleration.get("z", 9.80665)),
-                        ),
-                        battery_voltage_mv=item.payload.get("battery_voltage_mv"),
-                    )
-                )
-            else:
-                frame_id = f"frame-{index}"
-                detections[frame_id] = (
-                    PersonDetection(
-                        frame_id=frame_id,
-                        observed_at_monotonic_s=item.at_s,
-                        bounding_box=BoundingBox(
-                            x_px=100, y_px=100, width_px=400, height_px=700
-                        ),
-                        confidence=float(item.payload.get("confidence", 0.9)),
-                    ),
-                )
-        registry_entries = tuple(
-            TagRegistryEntry(tag_id=tag_id, rider_id=rider_id)
-            for tag_id, rider_id in sorted(riders_by_tag.items())
+            observation = item.to_tag_observation(clock.start_utc)
+            if observation is not None:
+                observations.append(observation)
+            registry_entry = item.to_registry_entry()
+            if registry_entry is not None:
+                registry_by_tag[registry_entry.tag_id] = registry_entry
+            frame_id = f"frame-{index}"
+            detection = item.to_person_detection(frame_id)
+            if detection is not None:
+                detections[frame_id] = (detection,)
+        registry_entries: tuple[TagRegistryEntry, ...] = tuple(
+            registry_by_tag[tag_id] for tag_id in sorted(registry_by_tag)
         )
         camera = SimulatedCamera(clock, fail_capture=scenario.faults.camera_capture)
         queue: JobQueue = job_queue or InMemoryJobQueue(
@@ -152,8 +135,8 @@ class ClosedLoopScenarioRunner:
             for index, item in sorted(
                 enumerate(self.scenario.timeline), key=lambda pair: (pair[1].at_s, pair[0])
             ):
-                trace_events.append((item.at_s, item.event, dict(item.payload)))
-                if item.event in {"tag_enters_range", "tag_observation"}:
+                trace_events.append((item.at_s, item.event, item.trace_payload()))
+                if item.is_tag_observation:
                     continue
                 if self.clock.monotonic() < item.at_s:
                     self.clock.advance_to(item.at_s)

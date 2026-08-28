@@ -8,7 +8,7 @@ from pathlib import Path
 from bearvision.adapters import FfmpegVideoClipper, GoProCameraAdapter, YoloDetectorAdapter
 from bearvision.config import AssignmentConfig, EdgeConfig, VirtualCameramanConfig
 from bearvision.config.models import ClipExtractionConfig
-from bearvision.contracts import ScenarioDefinition
+from bearvision.contracts import ScenarioDefinition, ScenarioSourceProfile
 from bearvision.edge.orchestrator import BearVisionOrchestrator, OrchestrationResult
 from bearvision.processing import VirtualCameramanProcessor
 from bearvision.ports import JobQueue
@@ -59,16 +59,9 @@ class VideoScenarioRunner:
         job_queue: JobQueue | None = None,
         process_server: bool = True,
     ) -> "VideoScenarioRunner":
-        if scenario.video is None:
-            raise ValueError("video scenario requires video configuration")
-        if scenario.components.detector != "yolo":
-            raise ValueError("video regression requires the YOLO detector")
-        if scenario.components.bear_tag != "synthetic":
-            raise ValueError("video regression currently requires synthetic BearTag data")
-        if scenario.components.camera != "simulated_gopro":
-            raise ValueError("video regression requires camera=simulated_gopro")
-        if scenario.components.storage != "memory":
-            raise ValueError("video regression currently requires storage=memory")
+        if scenario.source_profile is not ScenarioSourceProfile.RECORDED_VIDEO:
+            raise ValueError("video runner requires the recorded-video source profile")
+        assert scenario.video is not None
 
         root = repository_root or Path(__file__).resolve().parents[3]
         video_path = (root / scenario.video.path).resolve()

@@ -1,8 +1,9 @@
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
-from bearvision.contracts import load_scenario
+from bearvision.contracts import ScenarioDefinition, load_scenario
 from bearvision.edge import build_behavioral_system
 from bearvision.simulation import runner as synthetic_runner_module
 from bearvision.simulation import video_runner as video_runner_module
@@ -45,40 +46,23 @@ def test_supported_component_combinations_route_to_their_distinct_runners(
 
 
 @pytest.mark.parametrize(
-    ("field", "value"),
+    ("scenario_name", "field", "value"),
     [
-        ("detector", "yolo"),
-        ("bear_tag", "ble"),
-        ("camera", "simulated_gopro"),
-        ("storage", "box"),
+        ("single-rider-success.yaml", "detector", "yolo"),
+        ("single-rider-success.yaml", "bear_tag", "ble"),
+        ("single-rider-success.yaml", "camera", "simulated_gopro"),
+        ("single-rider-success.yaml", "storage", "box"),
+        ("wakeboard-video-yolo.yaml", "storage", "box"),
     ],
 )
-def test_unsupported_synthetic_component_combinations_fail_explicitly(
+def test_unsupported_component_profiles_fail_during_scenario_validation(
+    scenario_name: str,
     field: str,
     value: str,
 ) -> None:
-    scenario = load_scenario(ROOT / "specs/scenarios/single-rider-success.yaml")
-    components = scenario.components.model_copy(update={field: value})
-    unsupported = scenario.model_copy(update={"components": components})
+    scenario = load_scenario(ROOT / "specs/scenarios" / scenario_name)
+    raw = scenario.model_dump(mode="json")
+    raw["components"][field] = value
 
-    with pytest.raises(ValueError, match="declared but not implemented"):
-        build_behavioral_system(unsupported)
-
-
-def test_unsupported_video_component_combination_is_rejected_by_video_runner(
-    monkeypatch,
-) -> None:
-    class VideoRunner:
-        @classmethod
-        def from_scenario(cls, scenario, **kwargs):
-            if scenario.components.storage != "memory":
-                raise ValueError("video regression currently requires storage=memory")
-            raise AssertionError("test requires an unsupported combination")
-
-    monkeypatch.setattr(video_runner_module, "VideoScenarioRunner", VideoRunner)
-    scenario = load_scenario(ROOT / "specs/scenarios/wakeboard-video-yolo.yaml")
-    components = scenario.components.model_copy(update={"storage": "box"})
-    unsupported = scenario.model_copy(update={"components": components})
-
-    with pytest.raises(ValueError, match="requires storage=memory"):
-        build_behavioral_system(unsupported)
+    with pytest.raises(ValidationError, match="declared but not executable"):
+        ScenarioDefinition.model_validate(raw)
