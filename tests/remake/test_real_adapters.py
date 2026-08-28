@@ -19,7 +19,7 @@ from bearvision.contracts import (
 )
 from bearvision.ports import VideoFrame
 from bearvision.simulation import VirtualClock
-from bearvision.processing import VirtualCameramanJobProcessor
+from bearvision.processing import VirtualCameramanProcessor
 from bearvision.testing import check_camera, check_detector, check_scanner, check_storage
 
 
@@ -173,8 +173,8 @@ def test_real_composition_wraps_existing_implementations(tmp_path: Path) -> None
     assert isinstance(components.scanner, KBeaconTagScannerAdapter)
     assert isinstance(components.detector, YoloDetectorAdapter)
     assert isinstance(components.job_queue, BoxJobQueue)
-    assert isinstance(components.clip_processor, VirtualCameramanJobProcessor)
-    assert components.clip_processor.processor.config == config.virtual_cameraman
+    assert isinstance(components.clip_processor, VirtualCameramanProcessor)
+    assert components.clip_processor.config == config.virtual_cameraman
 
     orchestrator = build_real_orchestrator(
         config,

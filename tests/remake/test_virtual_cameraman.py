@@ -1,15 +1,85 @@
+import asyncio
+from datetime import datetime, timezone
 import math
+from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
-from bearvision.processing import (
+from bearvision.config import VirtualCameramanConfig
+from bearvision.contracts import MediaAsset
+from bearvision.processing.virtual_cameraman import (
     KalmanPositionTracker,
     KalmanRtsSmoother,
     PositionMeasurement,
-    VirtualCameramanConfig,
+    VirtualCameramanProcessor,
     ZeroPhaseButterworthCameraSmoother,
     calculate_length_adjustment,
 )
+from bearvision.ports import CapturedMedia, ClipProcessor
+
+
+def test_virtual_cameraman_owns_prepared_clip_mapping_at_clip_processor_seam(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = CapturedMedia(
+        asset=MediaAsset(
+            asset_id="source-1",
+            filename="source.mp4",
+            content_type="video/mp4",
+            size_bytes=1_000,
+            created_at_utc=datetime.now(timezone.utc),
+        ),
+        local_path=tmp_path / "source.mp4",
+    )
+    processed_media = CapturedMedia(
+        asset=MediaAsset(
+            asset_id="processed-source-1",
+            filename="source.virtual-cameraman.mp4",
+            content_type="video/mp4",
+            size_bytes=400,
+            created_at_utc=datetime.now(timezone.utc),
+        ),
+        local_path=tmp_path / "source.virtual-cameraman.mp4",
+    )
+    adjustment = calculate_length_adjustment(
+        [(-1.0, 5.0), (5.0, 5.0), (11.0, 5.0)],
+        frame_width_px=10,
+        frame_height_px=10,
+        fps=1.0,
+        padding_s=0,
+    )
+    internal_result = SimpleNamespace(
+        media=processed_media,
+        metadata_path=tmp_path / "source.tracking.json",
+        debug_video_path=tmp_path / "source.tracking-debug.mp4",
+        source_size_bytes=1_000,
+        processed_size_bytes=400,
+        reduction_ratio=0.6,
+        source_width_px=1920,
+        source_height_px=1080,
+        tracking_frames=(),
+        length_adjustment=adjustment,
+    )
+
+    processor = VirtualCameramanProcessor(object(), object(), tmp_path)
+
+    async def process_media(media: CapturedMedia):
+        assert media is source
+        return internal_result
+
+    monkeypatch.setattr(processor, "_process_media", process_media)
+
+    prepared = asyncio.run(processor.process(source))
+
+    assert isinstance(processor, ClipProcessor)
+    assert prepared.media is processed_media
+    assert prepared.source_start_offset_s == 1.0
+    assert prepared.duration_s == 1.0
+    assert [event.kind for event in prepared.trace_events] == [
+        "virtual_cameraman_completed"
+    ]
+    assert prepared.trace_events[0].payload["size_reduction_ratio"] == 0.6
 
 
 def test_kalman_tracker_reports_finite_95_percent_position_region() -> None:

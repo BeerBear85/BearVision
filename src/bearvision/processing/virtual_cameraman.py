@@ -25,7 +25,14 @@ from typing import Any, Sequence
 
 from bearvision.config import VirtualCameramanConfig
 from bearvision.contracts import BoundingBox, MediaAsset, PersonDetection
-from bearvision.ports import CapturedMedia, Detector, InvalidComponentData, VideoFrame
+from bearvision.ports import (
+    CapturedMedia,
+    Detector,
+    InvalidComponentData,
+    PreparedClip,
+    ProcessingTraceEvent,
+    VideoFrame,
+)
 
 
 CHI_SQUARE_2D_95 = 5.991464547107979
@@ -602,26 +609,69 @@ class ZeroPhaseButterworthCameraSmoother:
 
 
 class VirtualCameramanProcessor:
-    """Track, annotate and crop one extracted local clip."""
+    """Prepare one captured clip behind the Edge ``ClipProcessor`` seam."""
 
     def __init__(
         self,
         detector: Detector,
         clock: Any,
+        output_dir: str | Path,
         *,
         config: VirtualCameramanConfig | None = None,
         ffmpeg_path: str | Path = "ffmpeg",
     ) -> None:
         self.detector = detector
         self.clock = clock
+        self.output_dir = Path(output_dir)
         self.config = config or VirtualCameramanConfig()
         self.ffmpeg_path = str(ffmpeg_path)
 
-    async def process(self, media: CapturedMedia, output_dir: str | Path) -> ProcessedClip:
+    async def process(self, media: CapturedMedia) -> PreparedClip:
+        processed = await self._process_media(media)
+        return PreparedClip(
+            media=processed.media,
+            source_start_offset_s=processed.length_adjustment.source_start_s,
+            duration_s=processed.length_adjustment.output_duration_s,
+            trace_events=(
+                ProcessingTraceEvent(
+                    kind="virtual_cameraman_completed",
+                    payload={
+                        "source_filename": media.asset.filename,
+                        "processed_filename": processed.media.asset.filename,
+                        "tracking_filename": processed.metadata_path.name,
+                        "debug_video_filename": processed.debug_video_path.name,
+                        "source_size_bytes": processed.source_size_bytes,
+                        "processed_size_bytes": processed.processed_size_bytes,
+                        "size_reduction_ratio": processed.reduction_ratio,
+                        "output_width_px": self.config.output_width_px,
+                        "output_height_px": self.config.output_height_px,
+                        "state_estimator": "kalman_rts_smoother",
+                        "camera_path": "zero_phase_butterworth",
+                        "length_adjustment": processed.length_adjustment.to_dict(),
+                    },
+                ),
+                *(
+                    ProcessingTraceEvent(
+                        kind="tracking_observation",
+                        source_offset_s=tracking_frame.source_at_s,
+                        payload={
+                            **tracking_frame.to_dict(),
+                            "coordinate_space": {
+                                "width_px": processed.source_width_px,
+                                "height_px": processed.source_height_px,
+                            },
+                        },
+                    )
+                    for tracking_frame in processed.tracking_frames
+                ),
+            ),
+        )
+
+    async def _process_media(self, media: CapturedMedia) -> ProcessedClip:
         if media.local_path is None:
             raise InvalidComponentData("virtual cameraman requires file-backed media")
         source = media.local_path.resolve()
-        output_dir = Path(output_dir).resolve()
+        output_dir = self.output_dir.resolve()
         output_dir.mkdir(parents=True, exist_ok=True)
         try:
             import cv2

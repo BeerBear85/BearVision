@@ -10,7 +10,7 @@ from bearvision.config import AssignmentConfig, EdgeConfig, VirtualCameramanConf
 from bearvision.config.models import ClipExtractionConfig
 from bearvision.contracts import ScenarioDefinition
 from bearvision.edge.orchestrator import BearVisionOrchestrator, OrchestrationResult
-from bearvision.processing import VirtualCameramanJobProcessor, VirtualCameramanProcessor
+from bearvision.processing import VirtualCameramanProcessor
 from bearvision.ports import JobQueue
 
 from bearvision.server import ServerWorker
@@ -124,6 +124,7 @@ class VideoScenarioRunner:
         post_processor = VirtualCameramanProcessor(
             YoloDetectorAdapter(post_handler),
             clock,
+            capture_root,
             config=(
                 edge_config.virtual_cameraman
                 if edge_config
@@ -140,7 +141,7 @@ class VideoScenarioRunner:
             edge_device_id="scenario-video-edge",
             recording_duration_s=recording_duration_s,
             capture_pre_roll_s=(hindsight_duration_s if hindsight_enabled else 0),
-            clip_processor=VirtualCameramanJobProcessor(post_processor, capture_root),
+            clip_processor=post_processor,
             observation_retention_s=max(
                 30.0,
                 scenario.duration_s

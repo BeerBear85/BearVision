@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from bearvision.contracts import ScenarioComponents, load_scenario
-from bearvision.processing import VirtualCameramanJobProcessor
+from bearvision.processing import VirtualCameramanProcessor
 from bearvision.simulation import VirtualClock, generate_bear_tag_series
 from bearvision.simulation.video_runner import VideoScenarioRunner
 
@@ -97,4 +97,4 @@ def test_video_runner_uses_edge_processing_and_does_not_start_server_when_disabl
 
     assert runner.worker is None
     assert runner.orchestrator.upload_enabled
-    assert isinstance(runner.orchestrator.clip_processor, VirtualCameramanJobProcessor)
+    assert isinstance(runner.orchestrator.clip_processor, VirtualCameramanProcessor)

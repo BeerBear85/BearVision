@@ -18,7 +18,7 @@ from bearvision.adapters import (
 from bearvision.config import AssignmentConfig, EdgeConfig
 from bearvision.ports import Camera, ClipProcessor, Clock, Detector, FrameSource, JobQueue, TagScanner
 from bearvision.contracts import ScenarioDefinition
-from bearvision.processing import VirtualCameramanJobProcessor, VirtualCameramanProcessor
+from bearvision.processing import VirtualCameramanProcessor
 from .orchestrator import BearVisionOrchestrator
 
 if TYPE_CHECKING:
@@ -122,14 +122,12 @@ def build_real_system(
     from bearvision.adapters import FfmpegVideoClipper
 
     media_tools = FfmpegVideoClipper(config.clip_extraction)
-    clip_processor = VirtualCameramanJobProcessor(
-        VirtualCameramanProcessor(
-            detector,
-            clock,
-            config=config.virtual_cameraman,
-            ffmpeg_path=media_tools.ffmpeg_path,
-        ),
+    clip_processor = VirtualCameramanProcessor(
+        detector,
+        clock,
         capture_dir,
+        config=config.virtual_cameraman,
+        ffmpeg_path=media_tools.ffmpeg_path,
     )
     return RealEdgeComponents(
         clock=clock,
