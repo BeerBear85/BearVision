@@ -20,6 +20,7 @@ def test_control_process_replays_versioned_scenario_events(monkeypatch, capsys) 
     events = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
     assert exit_code == 0
     assert events[0]["control_event_version"] == "1.0"
-    assert any(event["kind"] == "job_published" for event in events)
+    assert any(event["kind"] == "clip_uploaded" for event in events)
+    assert all(event["kind"] != "job_published" for event in events)
     assert all(event["kind"] != "server_assignment" for event in events)
     assert sum(sleeps) == 4.5

@@ -135,59 +135,59 @@ class ClosedLoopScenarioRunner:
             for index, item in sorted(
                 enumerate(self.scenario.timeline), key=lambda pair: (pair[1].at_s, pair[0])
             ):
-                trace_events.append((item.at_s, item.event, item.trace_payload()))
                 if item.is_tag_observation:
+                    trace_events.append((item.at_s, item.event, item.trace_payload()))
                     continue
                 if self.clock.monotonic() < item.at_s:
                     self.clock.advance_to(item.at_s)
                 frame = VideoFrame(f"frame-{index}", item.at_s, 1920, 1080, b"simulated-frame")
-                detection_times.append(item.at_s)
                 try:
-                    result = await self.orchestrator.process_frame(frame)
+                    evaluation = await self.orchestrator.evaluate_frame(frame)
                 except ComponentError as exc:
                     component = "job_queue" if self.scenario.faults.storage_upload else "camera"
                     failures.append({"component": component, "error": str(exc)})
                     continue
-                if result is not None:
-                    edge_results.setdefault(result.request_id, result)
+                if evaluation.events:
+                    detection_times.append(item.at_s)
+                    trace_events.extend(
+                        (event.at_monotonic_s, event.kind, event.payload)
+                        for event in evaluation.events
+                    )
+                if evaluation.result is not None:
+                    edge_results.setdefault(evaluation.result.request_id, evaluation.result)
         finally:
             await self.orchestrator.stop()
 
         server_results: list[JobResultManifest] = []
-        if self.worker is not None:
-            while True:
-                processed_result = await self.worker.run_once()
-                if processed_result is None:
-                    break
-                server_results.append(processed_result)
         for edge_result in edge_results.values():
             trace_events.extend(
-                [
-                    (
-                        edge_result.clip_start_monotonic_s,
-                        "capture_started",
-                        {"job_id": edge_result.request_id},
-                    ),
-                    (
-                        edge_result.clip_end_monotonic_s,
-                        "job_published",
-                        edge_result.manifest.model_dump(mode="json", by_alias=True),
-                    ),
-                    (
-                        edge_result.clip_end_monotonic_s,
-                        "capture_completed",
-                        {"asset_id": edge_result.media.asset.asset_id},
-                    ),
-                ]
+                (event.at_monotonic_s, event.kind, event.payload)
+                for event in edge_result.events
             )
-        for server_result in server_results:
-            trace_events.append(
-                (
-                    self.clock.monotonic(),
-                    "server_assignment",
-                    server_result.model_dump(mode="json", by_alias=True),
+            if self.worker is not None:
+                server_result = await self.worker.run_once()
+                if server_result is not None:
+                    server_results.append(server_result)
+                    trace_events.append(
+                        (
+                            edge_result.clip_end_monotonic_s,
+                            "server_assignment",
+                            server_result.model_dump(mode="json", by_alias=True),
+                        )
+                    )
+        if self.worker is not None:
+            while True:
+                server_result = await self.worker.run_once()
+                if server_result is None:
+                    break
+                server_results.append(server_result)
+                trace_events.append(
+                    (
+                        self.clock.monotonic(),
+                        "server_assignment",
+                        server_result.model_dump(mode="json", by_alias=True),
+                    )
                 )
-            )
         captures = tuple(
             capture.media.asset.asset_id for capture in self.camera.captures.values()
         )

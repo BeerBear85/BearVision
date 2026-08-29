@@ -31,6 +31,8 @@ def test_single_rider_scenario_runs_closed_loop_deterministically() -> None:
     assert len(first.captures) == 1
     assert first.uploads[0].object_key.startswith("input-queue/ready/")
     assert not first.failures
+    assert "clip_uploaded" in {item.kind for item in first.trace}
+    assert "job_published" not in {item.kind for item in first.trace}
 
 
 def test_no_tag_is_unassigned_but_detection_is_still_captured() -> None:
