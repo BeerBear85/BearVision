@@ -16,6 +16,7 @@ apps/android/.gradle/
 apps/android/build/
 apps/android/app/build/
 last_used_config.ini
+.*.lock
 
 .claude/settings.local.json
 temp/*

@@ -2,6 +2,7 @@ import asyncio
 from datetime import datetime, timedelta, timezone
 import json
 from pathlib import Path
+import threading
 
 import pytest
 
@@ -178,6 +179,54 @@ def test_assignment_can_be_preflighted_without_writing_registry(tmp_path: Path) 
     assert proposed.id == "assignment-preview"
     assert len(store.load().assignments) == 1
     assert (tmp_path / "registry.json").read_bytes() == original
+
+
+def test_registry_serializes_complete_mutations_across_instances(tmp_path: Path) -> None:
+    path = tmp_path / "registry.json"
+    first_started = threading.Event()
+    release_first = threading.Event()
+    second_finished = threading.Event()
+    errors: list[BaseException] = []
+
+    class SlowRegistry(FileUserRegistry):
+        def _save(self, data) -> None:
+            first_started.set()
+            if not release_first.wait(timeout=5):
+                raise TimeoutError("test did not release the first registry mutation")
+            super()._save(data)
+
+    def create(store: FileUserRegistry, email: str, finished: threading.Event) -> None:
+        try:
+            store.create_user(email, email)
+        except BaseException as exc:
+            errors.append(exc)
+        finally:
+            finished.set()
+
+    first_finished = threading.Event()
+    first = threading.Thread(
+        target=create,
+        args=(SlowRegistry(path), "first@example.com", first_finished),
+    )
+    second = threading.Thread(
+        target=create,
+        args=(FileUserRegistry(path), "second@example.com", second_finished),
+    )
+    first.start()
+    assert first_started.wait(timeout=5)
+    second.start()
+
+    assert not second_finished.wait(timeout=0.1)
+    release_first.set()
+    first.join(timeout=5)
+    second.join(timeout=5)
+
+    assert first_finished.is_set() and second_finished.is_set()
+    assert not errors
+    assert {user.email for user in FileUserRegistry(path).load().users} == {
+        "first@example.com",
+        "second@example.com",
+    }
 
 
 def test_incomplete_and_duplicate_jobs_are_not_processed(tmp_path: Path) -> None:

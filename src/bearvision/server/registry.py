@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from datetime import datetime
 import os
 import json
 from pathlib import Path
 import re
-from typing import Any, Literal
+from typing import Any, Literal, TypeVar
 from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -24,6 +26,37 @@ from bearvision.domain import ALGORITHM_VERSION, TagSelectionStatus, select_bear
 
 
 EMAIL_PATTERN = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
+MutationResult = TypeVar("MutationResult")
+
+
+@contextmanager
+def _exclusive_file_lock(path: Path) -> Iterator[None]:
+    """Hold one cross-process lock for a complete registry transaction."""
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a+b") as stream:
+        stream.seek(0, os.SEEK_END)
+        if stream.tell() == 0:
+            stream.write(b"\0")
+            stream.flush()
+        stream.seek(0)
+        if os.name == "nt":
+            import msvcrt
+
+            msvcrt.locking(stream.fileno(), msvcrt.LK_LOCK, 1)
+            try:
+                yield
+            finally:
+                stream.seek(0)
+                msvcrt.locking(stream.fileno(), msvcrt.LK_UNLCK, 1)
+        else:
+            fcntl: Any = __import__("fcntl")
+
+            fcntl.flock(stream.fileno(), fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                fcntl.flock(stream.fileno(), fcntl.LOCK_UN)
 
 
 def normalize_user_email(value: str) -> str:
@@ -224,10 +257,11 @@ class RegistryData(RegistryModel):
 
 
 class FileUserRegistry:
-    """Small JSON registry with validation and atomic replacement writes."""
+    """Validated JSON registry with transactional cross-process mutations."""
 
     def __init__(self, path: str | Path) -> None:
         self.path = Path(path)
+        self.lock_path = self.path.with_name(f".{self.path.name}.lock")
 
     def load(self) -> RegistryData:
         if not self.path.exists():
@@ -273,68 +307,85 @@ class FileUserRegistry:
 
     def _save(self, data: RegistryData) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        temporary = self.path.with_name(f".{self.path.name}.tmp")
+        temporary = self.path.with_name(f".{self.path.name}.{uuid4().hex}.tmp")
         payload = data.model_dump_json(by_alias=True, indent=2)
-        with temporary.open("w", encoding="utf-8", newline="\n") as stream:
-            stream.write(payload)
-            stream.write("\n")
-            stream.flush()
-            os.fsync(stream.fileno())
-        os.replace(temporary, self.path)
+        try:
+            with temporary.open("w", encoding="utf-8", newline="\n") as stream:
+                stream.write(payload)
+                stream.write("\n")
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.replace(temporary, self.path)
+        finally:
+            temporary.unlink(missing_ok=True)
+
+    def _mutate(
+        self,
+        mutation: Callable[[RegistryData], tuple[MutationResult, RegistryData]],
+    ) -> MutationResult:
+        with _exclusive_file_lock(self.lock_path):
+            result, updated = mutation(self.load())
+            validated = RegistryData.model_validate(updated.model_dump())
+            self._save(validated)
+            return result
 
     def create_user(self, email: str, display_name: str) -> UserRecord:
-        data = self.load()
         item = UserRecord(email=normalize_user_email(email), displayName=display_name.strip())
-        updated = data.model_copy(update={"users": (*data.users, item)})
-        updated = RegistryData.model_validate(updated.model_dump())
-        self._save(updated)
-        return item
+
+        def add(data: RegistryData) -> tuple[UserRecord, RegistryData]:
+            return item, data.model_copy(update={"users": (*data.users, item)})
+
+        return self._mutate(add)
 
     def update_user_email(self, user_id: UUID | str, email: str) -> UserRecord:
-        data = self.load()
         normalized_id = UUID(str(user_id))
-        replacement: UserRecord | None = None
-        users: list[UserRecord] = []
-        for user in data.users:
-            if user.id == normalized_id:
-                replacement = user.model_copy(update={"email": normalize_user_email(email)})
-                users.append(replacement)
-            else:
-                users.append(user)
-        if replacement is None:
-            raise FileNotFoundError("user not found")
-        updated = RegistryData.model_validate(
-            data.model_copy(update={"users": tuple(users)}).model_dump()
-        )
-        self._save(updated)
-        return replacement
+
+        def replace(data: RegistryData) -> tuple[UserRecord, RegistryData]:
+            replacement: UserRecord | None = None
+            users: list[UserRecord] = []
+            for user in data.users:
+                if user.id == normalized_id:
+                    replacement = user.model_copy(update={"email": normalize_user_email(email)})
+                    users.append(replacement)
+                else:
+                    users.append(user)
+            if replacement is None:
+                raise FileNotFoundError("user not found")
+            return replacement, data.model_copy(update={"users": tuple(users)})
+
+        return self._mutate(replace)
 
     def find_user_by_email(self, email: str) -> UserRecord | None:
         normalized = normalize_user_email(email)
         return next((user for user in self.load().users if user.email == normalized), None)
 
     def create_bear_tag(self, tag_id: str) -> BearTagRecord:
-        data = self.load()
         item = BearTagRecord(id=tag_id)
-        updated = data.model_copy(update={"bear_tags": (*data.bear_tags, item)})
-        updated = RegistryData.model_validate(updated.model_dump())
-        self._save(updated)
-        return item
+
+        def add(data: RegistryData) -> tuple[BearTagRecord, RegistryData]:
+            return item, data.model_copy(update={"bear_tags": (*data.bear_tags, item)})
+
+        return self._mutate(add)
 
     def create_assignment(self, assignment: BearTagAssignment) -> BearTagAssignment:
-        normalized, updated = self.validate_assignment(assignment)
-        self._save(updated)
-        return normalized
+        def add(data: RegistryData) -> tuple[BearTagAssignment, RegistryData]:
+            return assignment, self._with_assignment(data, assignment)
+
+        return self._mutate(add)
 
     def validate_assignment(
         self, assignment: BearTagAssignment
     ) -> tuple[BearTagAssignment, RegistryData]:
         """Validate a proposed assignment without mutating the registry."""
 
-        data = self.load()
+        return assignment, self._with_assignment(self.load(), assignment)
+
+    @staticmethod
+    def _with_assignment(
+        data: RegistryData, assignment: BearTagAssignment
+    ) -> RegistryData:
         updated = data.model_copy(update={"assignments": (*data.assignments, assignment)})
-        updated = RegistryData.model_validate(updated.model_dump())
-        return assignment, updated
+        return RegistryData.model_validate(updated.model_dump())
 
 class InMemoryUserRegistry:
     """Validated registry adapter for deterministic server simulations."""
