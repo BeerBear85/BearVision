@@ -9,8 +9,6 @@ from bearvision.contracts import (
     EdgeJobManifest,
     JobResultManifest,
     JobVideo,
-    RiderAssignment,
-    RiderAssignmentStatus,
     TagObservation,
     Vector3,
 )
@@ -41,39 +39,20 @@ def test_tag_observation_is_strict_and_unit_bounded() -> None:
         )
 
 
-def test_ble_assignment_never_hides_ambiguity() -> None:
-    ambiguous = RiderAssignment(
-        status=RiderAssignmentStatus.AMBIGUOUS,
-        assigned_at_monotonic_s=8,
-        candidate_tag_ids=("tag-17", "tag-22"),
-        reason="multiple registered tags qualify",
-    )
-    assert ambiguous.rider_id is None
-
-    with pytest.raises(ValidationError):
-        RiderAssignment(
-            status=RiderAssignmentStatus.AMBIGUOUS,
-            assigned_at_monotonic_s=8,
-            rider_id="rider-17",
-            tag_id="tag-17",
-            reason="invalid hidden assignment",
-        )
-
-
 def test_contracts_generate_json_schema() -> None:
     schema = TagObservation.model_json_schema()
     assert schema["properties"]["contract_schema_version"]["const"] == "2.0"
     assert "rssi_dbm" in schema["properties"]
 
 
-def test_capture_can_start_before_rider_assignment_is_known() -> None:
+def test_capture_request_contains_no_rider_identity() -> None:
     request = CaptureRequest(
         request_id="capture-frame-1",
         requested_at_monotonic_s=4,
         pre_roll_s=0,
         post_roll_s=5,
     )
-    assert request.assignment is None
+    assert "assignment" not in request.model_dump()
 
 
 def test_edge_job_rejects_non_utc_time_unsafe_filename_and_non_video_media() -> None:

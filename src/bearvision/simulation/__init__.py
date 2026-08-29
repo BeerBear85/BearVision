@@ -3,7 +3,6 @@
 from .adapters import (
     InMemoryJobQueue,
     InMemoryStorage,
-    InMemoryTagRegistry,
     SimulatedCamera,
     SimulatedDetector,
     SimulatedTagScanner,
@@ -21,7 +20,6 @@ __all__ = [
     "Event",
     "InMemoryJobQueue",
     "InMemoryStorage",
-    "InMemoryTagRegistry",
     "SimulatedCamera",
     "SimulatedDetector",
     "SimulatedGoProController",

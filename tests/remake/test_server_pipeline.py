@@ -97,6 +97,33 @@ def test_complete_job_is_scored_and_moved_to_normalized_user(tmp_path: Path) -> 
     assert queue.snapshot()["counts"]["processed"] == 1
 
 
+def test_identity_decision_uses_one_immutable_registry_snapshot(tmp_path: Path) -> None:
+    queue = FileSystemJobQueue(tmp_path / "BearVision")
+    store = registry(tmp_path / "registry.json")
+    snapshot = store.load()
+    assert asyncio.run(publish(queue))
+
+    class OneReadRegistry:
+        def __init__(self) -> None:
+            self.reads = 0
+
+        def load(self):
+            self.reads += 1
+            if self.reads > 1:
+                raise AssertionError("one job reloaded identity state")
+            return snapshot
+
+    one_read_registry = OneReadRegistry()
+
+    result = asyncio.run(
+        ServerWorker(queue, one_read_registry, VirtualClock(START)).run_once()
+    )
+
+    assert result is not None and result.status == "processed"
+    assert result.selected_user_id == snapshot.users[0].id
+    assert one_read_registry.reads == 1
+
+
 def test_missing_assignment_and_boundary_are_unresolved(tmp_path: Path) -> None:
     for name, store, code in (
         ("missing", FileUserRegistry(tmp_path / "missing.json"), "NO_VALID_ASSIGNMENT"),

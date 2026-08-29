@@ -9,11 +9,8 @@ from bearvision.contracts import (
     CaptureRequest,
     MediaAsset,
     PersonDetection,
-    RiderAssignment,
-    RiderAssignmentStatus,
     StorageReceipt,
     TagObservation,
-    TagRegistryEntry,
     Vector3,
 )
 from bearvision.ports import (
@@ -26,7 +23,6 @@ from bearvision.ports import (
     Clock,
     Detector,
     Storage,
-    TagRegistry,
     TagScanner,
     VideoFrame,
 )
@@ -34,7 +30,6 @@ from bearvision.testing import (
     check_camera,
     check_clock,
     check_detector,
-    check_registry,
     check_scanner,
     check_storage,
 )
@@ -159,35 +154,12 @@ class ReferenceStorage:
         self.objects.pop(object_key, None)
 
 
-class ReferenceRegistry:
-    def __init__(self, entry: TagRegistryEntry) -> None:
-        self.entry = entry
-
-    def resolve(self, tag_id: str) -> TagRegistryEntry | None:
-        return self.entry if self.entry.tag_id == tag_id and self.entry.enabled else None
-
-    def entries(self):
-        return (self.entry,)
-
-
-def assignment() -> RiderAssignment:
-    return RiderAssignment(
-        status=RiderAssignmentStatus.ASSIGNED,
-        assigned_at_monotonic_s=1,
-        rider_id="rider-17",
-        tag_id="tag-17",
-        candidate_tag_ids=("tag-17",),
-        reason="one registered tag qualifies",
-    )
-
-
 def request() -> CaptureRequest:
     return CaptureRequest(
         request_id="capture-1",
         requested_at_monotonic_s=1,
         pre_roll_s=15,
         post_roll_s=5,
-        assignment=assignment(),
     )
 
 
@@ -207,9 +179,6 @@ def test_reference_components_satisfy_runtime_protocols() -> None:
     assert isinstance(ReferenceScanner((observation(),)), TagScanner)
     assert isinstance(ReferenceDetector(), Detector)
     assert isinstance(ReferenceStorage(), Storage)
-    assert isinstance(
-        ReferenceRegistry(TagRegistryEntry(tag_id="tag-17", rider_id="rider-17")), TagRegistry
-    )
 
 
 def test_reusable_component_contract_suites() -> None:
@@ -218,7 +187,6 @@ def test_reusable_component_contract_suites() -> None:
     scanner = ReferenceScanner((observation(),))
     detector = ReferenceDetector()
     storage = ReferenceStorage()
-    registry = ReferenceRegistry(TagRegistryEntry(tag_id="tag-17", rider_id="rider-17"))
     frame = VideoFrame("frame-1", 1, 1920, 1080, b"pixels")
 
     asyncio.run(check_clock(clock))
@@ -226,7 +194,6 @@ def test_reusable_component_contract_suites() -> None:
     asyncio.run(check_scanner(scanner))
     asyncio.run(check_detector(detector, frame))
     asyncio.run(check_storage(storage, capture.media, "rider-17/capture-1.mp4"))
-    check_registry(registry, "tag-17")
 
 
 def test_captured_media_requires_exactly_one_source() -> None:

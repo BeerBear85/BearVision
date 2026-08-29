@@ -12,11 +12,7 @@ from bearvision.adapters import (
 )
 from bearvision.config import load_edge_config
 from bearvision.edge import BearVisionOrchestrator, build_real_orchestrator, build_real_system
-from bearvision.contracts import (
-    CaptureRequest,
-    RiderAssignment,
-    RiderAssignmentStatus,
-)
+from bearvision.contracts import CaptureRequest
 from bearvision.ports import VideoFrame
 from bearvision.simulation import VirtualClock
 from bearvision.processing import VirtualCameramanProcessor
@@ -97,20 +93,11 @@ class StubBeacon:
 
 
 def capture_request() -> CaptureRequest:
-    assignment = RiderAssignment(
-        status=RiderAssignmentStatus.ASSIGNED,
-        assigned_at_monotonic_s=1,
-        rider_id="rider-17",
-        tag_id="tag-17",
-        candidate_tag_ids=("tag-17",),
-        reason="one tag",
-    )
     return CaptureRequest(
         request_id="capture-1",
         requested_at_monotonic_s=1,
         pre_roll_s=15,
         post_roll_s=1,
-        assignment=assignment,
     )
 
 

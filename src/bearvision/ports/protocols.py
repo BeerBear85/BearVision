@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Iterable
+from collections.abc import AsyncIterator
 from datetime import datetime
 from pathlib import Path
 from typing import Protocol, runtime_checkable
@@ -16,7 +16,6 @@ from bearvision.contracts import (
     PersonDetection,
     StorageReceipt,
     TagObservation,
-    TagRegistryEntry,
 )
 
 from .models import CapturedClip, CapturedMedia, ExtractedClip, PreparedClip, VideoFrame
@@ -135,10 +134,3 @@ class ManagedJobQueue(JobQueue, Protocol):
     async def admin_read(self, job_id: str, filename: str) -> bytes: ...
 
     async def admin_download(self, job_id: str, filename: str, destination: Path) -> None: ...
-
-
-@runtime_checkable
-class TagRegistry(Protocol):
-    def resolve(self, tag_id: str) -> TagRegistryEntry | None: ...
-
-    def entries(self) -> Iterable[TagRegistryEntry]: ...

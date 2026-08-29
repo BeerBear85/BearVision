@@ -11,7 +11,6 @@ from bearvision.ports import (
     Clock,
     Detector,
     Storage,
-    TagRegistry,
     TagScanner,
     VideoFrame,
 )
@@ -68,11 +67,3 @@ async def check_storage(storage: Storage, media: CapturedMedia, object_key: str)
     assert first.asset_id == media.asset.asset_id
     assert await storage.download(object_key)
     await storage.delete(object_key)
-
-
-def check_registry(registry: TagRegistry, known_tag_id: str) -> None:
-    entry = registry.resolve(known_tag_id)
-    assert entry is not None
-    assert entry.tag_id == known_tag_id
-    assert registry.resolve("missing-tag") is None
-    assert entry in tuple(registry.entries())

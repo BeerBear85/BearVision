@@ -29,7 +29,6 @@ from .protocols import (
     ManagedJobQueue,
     MediaProbe,
     Storage,
-    TagRegistry,
     TagScanner,
     VideoClipper,
 )
@@ -57,7 +56,6 @@ __all__ = [
     "PreparedClip",
     "ProcessingTraceEvent",
     "Storage",
-    "TagRegistry",
     "TagScanner",
     "VideoFrame",
     "VideoClipper",

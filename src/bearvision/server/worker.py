@@ -13,22 +13,17 @@ from bearvision.contracts import (
     BearTagJobObservation,
     EdgeJobManifest,
     JobResultManifest,
-    TagObservation,
 )
-from bearvision.domain import ALGORITHM_VERSION, TagSelectionStatus, select_bear_tag
+from bearvision.domain import ALGORITHM_VERSION
 from bearvision.ports import Clock, ComponentTimeout, ComponentUnavailable, JobQueue
 
 from typing import Protocol
 
-from .registry import BearTagAssignment, RegistryData
+from .registry import RegistryData
 
 
 class UserRegistryReader(Protocol):
     def load(self) -> RegistryData: ...
-
-    def resolve_clip(self, tag_id: str, started_at, ended_at) -> BearTagAssignment | None: ...
-
-    def intersects_assignment(self, tag_id: str, started_at, ended_at) -> bool: ...
 
 
 class InvalidJob(ValueError):
@@ -105,81 +100,12 @@ class ServerWorker:
         manifest: EdgeJobManifest,
         job_observations: tuple[BearTagJobObservation, ...],
     ) -> JobResultManifest:
-        registry = self.registry.load()
-        observations = tuple(
-            TagObservation(
-                tag_id=item.bear_tag_id,
-                observed_at_utc=item.observed_at(manifest),
-                observed_at_monotonic_s=item.offset_ms / 1000,
-                rssi_dbm=item.rssi_dbm,
-                acceleration_mps2=item.acceleration_mps2,
-            )
-            for item in job_observations
-        )
-        selection = select_bear_tag(
-            observations,
-            (item.id for item in registry.bear_tags),
-            clip_start_monotonic_s=0,
-            clip_end_monotonic_s=manifest.duration.total_seconds(),
-            **self.assignment_policy.model_dump(),
-        )
-        processed_at = self.clock.utc_now().astimezone(timezone.utc)
-        if selection.status is TagSelectionStatus.UNASSIGNED:
-            return JobResultManifest(
-                jobId=manifest.job_id,
-                status="unresolved",
-                processedAt=processed_at,
-                algorithmVersion=ALGORITHM_VERSION,
-                candidates=selection.evidence,
-                reason=selection.reason,
-                errorCode="NO_QUALIFIED_BEARTAG",
-            )
-        if selection.status is TagSelectionStatus.AMBIGUOUS:
-            return JobResultManifest(
-                jobId=manifest.job_id,
-                status="unresolved",
-                processedAt=processed_at,
-                algorithmVersion=ALGORITHM_VERSION,
-                candidates=selection.evidence,
-                reason=selection.reason,
-                errorCode="AMBIGUOUS_BEARTAG",
-            )
-        assert selection.selected_tag_id is not None
-        assignment = self.registry.resolve_clip(
-            selection.selected_tag_id,
-            manifest.capture_started_at,
-            manifest.capture_ended_at,
-        )
-        if assignment is None:
-            intersects = self.registry.intersects_assignment(
-                selection.selected_tag_id,
-                manifest.capture_started_at,
-                manifest.capture_ended_at,
-            )
-            return JobResultManifest(
-                jobId=manifest.job_id,
-                status="unresolved",
-                processedAt=processed_at,
-                algorithmVersion=ALGORITHM_VERSION,
-                selectedBearTagId=selection.selected_tag_id,
-                candidates=selection.evidence,
-                reason=(
-                    "clip crosses a BearTag assignment boundary"
-                    if intersects
-                    else "selected BearTag has no assignment covering the complete clip"
-                ),
-                errorCode="ASSIGNMENT_BOUNDARY" if intersects else "NO_VALID_ASSIGNMENT",
-            )
-        return JobResultManifest(
-            jobId=manifest.job_id,
-            status="processed",
-            processedAt=processed_at,
-            algorithmVersion=ALGORITHM_VERSION,
-            selectedBearTagId=selection.selected_tag_id,
-            selectedUserId=assignment.user_id,
-            assignmentId=assignment.id,
-            candidates=selection.evidence,
-            reason=f"{selection.reason}; one assignment covers the complete clip",
+        snapshot = self.registry.load()
+        return snapshot.decide_job(
+            manifest,
+            job_observations,
+            assignment_policy=self.assignment_policy,
+            processed_at=self.clock.utc_now().astimezone(timezone.utc),
         )
 
     def _failure(self, job_id: str, code: str, reason: str) -> JobResultManifest:

@@ -5,16 +5,12 @@ from bearvision.contracts import (
     BoundingBox,
     CaptureRequest,
     PersonDetection,
-    RiderAssignment,
-    RiderAssignmentStatus,
     TagObservation,
-    TagRegistryEntry,
     Vector3,
 )
 from bearvision.ports import VideoFrame
 from bearvision.simulation import (
     InMemoryStorage,
-    InMemoryTagRegistry,
     SimulatedCamera,
     SimulatedDetector,
     SimulatedTagScanner,
@@ -24,7 +20,6 @@ from bearvision.testing import (
     check_camera,
     check_clock,
     check_detector,
-    check_registry,
     check_scanner,
     check_storage,
 )
@@ -35,20 +30,11 @@ NOW = datetime(2026, 8, 12, tzinfo=timezone.utc)
 
 def test_simulated_adapters_pass_shared_contract_suites() -> None:
     clock = VirtualClock(NOW)
-    assignment = RiderAssignment(
-        status=RiderAssignmentStatus.ASSIGNED,
-        assigned_at_monotonic_s=1,
-        rider_id="rider-17",
-        tag_id="tag-17",
-        candidate_tag_ids=("tag-17",),
-        reason="one registered tag qualifies",
-    )
     request = CaptureRequest(
         request_id="capture-1",
         requested_at_monotonic_s=1,
         pre_roll_s=15,
         post_roll_s=5,
-        assignment=assignment,
     )
     observation = TagObservation(
         tag_id="tag-17",
@@ -72,7 +58,3 @@ def test_simulated_adapters_pass_shared_contract_suites() -> None:
     asyncio.run(check_scanner(SimulatedTagScanner((observation,))))
     asyncio.run(check_detector(SimulatedDetector({"frame-1": (detection,)}), frame))
     asyncio.run(check_storage(storage, capture.media, "rider-17/clip.mp4"))
-    check_registry(
-        InMemoryTagRegistry((TagRegistryEntry(tag_id="tag-17", rider_id="rider-17"),)),
-        "tag-17",
-    )

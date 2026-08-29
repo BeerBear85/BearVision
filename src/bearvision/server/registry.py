@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 import os
 import json
 from pathlib import Path
@@ -11,7 +12,15 @@ from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from bearvision.config import AssignmentConfig
+from bearvision.contracts import (
+    BearTagJobObservation,
+    EdgeJobManifest,
+    JobResultManifest,
+    TagObservation,
+)
 from bearvision.contracts.time import UtcDatetime
+from bearvision.domain import ALGORITHM_VERSION, TagSelectionStatus, select_bear_tag
 
 
 EMAIL_PATTERN = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
@@ -63,6 +72,8 @@ class BearTagAssignment(RegistryModel):
 
 
 class RegistryData(RegistryModel):
+    """One immutable identity snapshot used for a complete server decision."""
+
     schema_version: Literal[2] = Field(alias="schemaVersion", default=2)
     users: tuple[UserRecord, ...] = ()
     bear_tags: tuple[BearTagRecord, ...] = Field(alias="bearTags", default=())
@@ -97,6 +108,119 @@ class RegistryData(RegistryModel):
                     f"overlapping assignments for BearTag {current.bear_tag_id}"
                 )
         return self
+
+    def decide_job(
+        self,
+        manifest: EdgeJobManifest,
+        job_observations: tuple[BearTagJobObservation, ...],
+        *,
+        assignment_policy: AssignmentConfig,
+        processed_at: datetime,
+    ) -> JobResultManifest:
+        """Select and historically resolve identity using only this snapshot."""
+
+        observations = tuple(
+            TagObservation(
+                tag_id=item.bear_tag_id,
+                observed_at_utc=item.observed_at(manifest),
+                observed_at_monotonic_s=item.offset_ms / 1000,
+                rssi_dbm=item.rssi_dbm,
+                acceleration_mps2=item.acceleration_mps2,
+            )
+            for item in job_observations
+        )
+        selection = select_bear_tag(
+            observations,
+            (item.id for item in self.bear_tags),
+            clip_start_monotonic_s=0,
+            clip_end_monotonic_s=manifest.duration.total_seconds(),
+            **assignment_policy.model_dump(),
+        )
+        if selection.status is TagSelectionStatus.UNASSIGNED:
+            return JobResultManifest(
+                jobId=manifest.job_id,
+                status="unresolved",
+                processedAt=processed_at,
+                algorithmVersion=ALGORITHM_VERSION,
+                candidates=selection.evidence,
+                reason=selection.reason,
+                errorCode="NO_QUALIFIED_BEARTAG",
+            )
+        if selection.status is TagSelectionStatus.AMBIGUOUS:
+            return JobResultManifest(
+                jobId=manifest.job_id,
+                status="unresolved",
+                processedAt=processed_at,
+                algorithmVersion=ALGORITHM_VERSION,
+                candidates=selection.evidence,
+                reason=selection.reason,
+                errorCode="AMBIGUOUS_BEARTAG",
+            )
+        assert selection.selected_tag_id is not None
+        assignment = self._resolve_clip(
+            selection.selected_tag_id,
+            manifest.capture_started_at,
+            manifest.capture_ended_at,
+        )
+        if assignment is None:
+            intersects = self._intersects_assignment(
+                selection.selected_tag_id,
+                manifest.capture_started_at,
+                manifest.capture_ended_at,
+            )
+            return JobResultManifest(
+                jobId=manifest.job_id,
+                status="unresolved",
+                processedAt=processed_at,
+                algorithmVersion=ALGORITHM_VERSION,
+                selectedBearTagId=selection.selected_tag_id,
+                candidates=selection.evidence,
+                reason=(
+                    "clip crosses a BearTag assignment boundary"
+                    if intersects
+                    else "selected BearTag has no assignment covering the complete clip"
+                ),
+                errorCode="ASSIGNMENT_BOUNDARY" if intersects else "NO_VALID_ASSIGNMENT",
+            )
+        return JobResultManifest(
+            jobId=manifest.job_id,
+            status="processed",
+            processedAt=processed_at,
+            algorithmVersion=ALGORITHM_VERSION,
+            selectedBearTagId=selection.selected_tag_id,
+            selectedUserId=assignment.user_id,
+            assignmentId=assignment.id,
+            candidates=selection.evidence,
+            reason=f"{selection.reason}; one assignment covers the complete clip",
+        )
+
+    def _resolve_clip(
+        self,
+        tag_id: str,
+        started_at: datetime,
+        ended_at: datetime,
+    ) -> BearTagAssignment | None:
+        matches = [
+            item
+            for item in self.assignments
+            if item.bear_tag_id == tag_id
+            and item.valid_from <= started_at
+            and ended_at <= item.valid_to
+        ]
+        return matches[0] if len(matches) == 1 else None
+
+    def _intersects_assignment(
+        self,
+        tag_id: str,
+        started_at: datetime,
+        ended_at: datetime,
+    ) -> bool:
+        return any(
+            item.bear_tag_id == tag_id
+            and item.valid_from < ended_at
+            and started_at < item.valid_to
+            for item in self.assignments
+        )
 
 
 class FileUserRegistry:
@@ -212,27 +336,6 @@ class FileUserRegistry:
         updated = RegistryData.model_validate(updated.model_dump())
         return assignment, updated
 
-    def resolve_clip(self, tag_id: str, started_at, ended_at) -> BearTagAssignment | None:
-        """Return the sole assignment covering the complete half-open clip interval."""
-
-        matches = [
-            item
-            for item in self.load().assignments
-            if item.bear_tag_id == tag_id
-            and item.valid_from <= started_at
-            and ended_at <= item.valid_to
-        ]
-        return matches[0] if len(matches) == 1 else None
-
-    def intersects_assignment(self, tag_id: str, started_at, ended_at) -> bool:
-        return any(
-            item.bear_tag_id == tag_id
-            and item.valid_from < ended_at
-            and started_at < item.valid_to
-            for item in self.load().assignments
-        )
-
-
 class InMemoryUserRegistry:
     """Validated registry adapter for deterministic server simulations."""
 
@@ -241,21 +344,3 @@ class InMemoryUserRegistry:
 
     def load(self) -> RegistryData:
         return self.data
-
-    def resolve_clip(self, tag_id: str, started_at, ended_at) -> BearTagAssignment | None:
-        matches = [
-            item
-            for item in self.data.assignments
-            if item.bear_tag_id == tag_id
-            and item.valid_from <= started_at
-            and ended_at <= item.valid_to
-        ]
-        return matches[0] if len(matches) == 1 else None
-
-    def intersects_assignment(self, tag_id: str, started_at, ended_at) -> bool:
-        return any(
-            item.bear_tag_id == tag_id
-            and item.valid_from < ended_at
-            and started_at < item.valid_to
-            for item in self.data.assignments
-        )

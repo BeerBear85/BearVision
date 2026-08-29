@@ -16,7 +16,6 @@ from bearvision.contracts import (
     PersonDetection,
     StorageReceipt,
     TagObservation,
-    TagRegistryEntry,
 )
 from bearvision.ports import (
     CapturedClip,
@@ -257,15 +256,3 @@ class InMemoryJobQueue:
                 item["userId"] = str(user_id)
             jobs.append(item)
         return normalize_queue_snapshot(jobs)
-
-
-class InMemoryTagRegistry:
-    def __init__(self, entries: Iterable[TagRegistryEntry]) -> None:
-        self._entries = {entry.tag_id: entry for entry in entries}
-
-    def resolve(self, tag_id: str) -> TagRegistryEntry | None:
-        entry = self._entries.get(tag_id)
-        return entry if entry is not None and entry.enabled else None
-
-    def entries(self):
-        return tuple(self._entries.values())
