@@ -29,63 +29,20 @@ export function pythonCommand() {
   return existsSync(candidate) ? candidate : "python";
 }
 
-export function adminArgs(command, body = {}) {
-  if (command === "create-user") return [command, "--email", body.email, "--display-name", body.displayName];
-  if (command === "update-user-email") return [
-    command, "--user-id", body.userId, "--email", body.email,
-  ];
-  if (command === "create-tag") return [command, "--id", body.id];
-  if (command === "create-assignment" || command === "validate-assignment") return [
-    command,
-    ...(body.id ? ["--id", body.id] : []),
-    "--user-id", body.userId,
-    "--bear-tag-id", body.bearTagId,
-    "--valid-from", body.validFrom,
-    "--valid-to", body.validTo,
-  ];
-  if (command === "requeue") return [command, "--job-id", body.jobId];
-  if (command === "list-jobs") return [
-    command,
-    "--page", String(body.page ?? 1),
-    "--page-size", String(body.pageSize ?? 24),
-    ...(body.status ? ["--status", body.status] : []),
-    ...(body.query ? ["--query", body.query] : []),
-    ...(body.userId ? ["--user-id", body.userId] : []),
-  ];
-  if (command === "job-detail") return [command, "--job-id", body.jobId];
-  if (command === "list-users") return [
-    command,
-    "--page", String(body.page ?? 1),
-    "--page-size", String(body.pageSize ?? 50),
-    ...(body.query ? ["--query", body.query] : []),
-  ];
-  if (command === "materialize-media") return [
-    command, "--job-id", body.jobId, "--kind", body.kind,
-  ];
-  if (command === "list-user-videos") return [
-    command,
-    "--user-id", body.userId,
-    "--page", String(body.page ?? 1),
-    "--page-size", String(body.pageSize ?? 50),
-  ];
-  if (command === "materialize-user-media") return [
-    command,
-    "--user-id", body.userId,
-    "--job-id", body.jobId,
-    "--kind", body.kind,
-  ];
-  return [command];
+export function adminRequest(command, body = {}) {
+  return { ...body, commandSchemaVersion: "1.0", command };
 }
 
 function runPython(command, body) {
   return new Promise((resolvePromise, reject) => {
-    const args = ["-m", "bearvision.server.cli", "--config", configPath, ...adminArgs(command, body)];
+    const args = ["-m", "bearvision.server.cli", "--config", configPath, "execute"];
     const child = spawn(pythonCommand(), args, { cwd: repoRoot, windowsHide: true });
     let stdout = "";
     let stderr = "";
     child.stdout.on("data", (chunk) => { stdout += chunk; });
     child.stderr.on("data", (chunk) => { stderr += chunk; });
     child.on("error", reject);
+    child.stdin.end(JSON.stringify(adminRequest(command, body)));
     child.on("close", (code) => {
       if (code !== 0) {
         try { reject(new Error(JSON.parse(stderr).error)); }

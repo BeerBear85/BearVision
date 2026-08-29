@@ -32,6 +32,7 @@ the process boundary as UTC ISO 8601 strings.
 ## Process boundary
 
 Node does not inspect Box, generate thumbnails, validate assignments or derive
-job presentation data. Each route maps to a fixed `bearvision.server.cli`
-command. Python returns JSON or a path inside its verified media cache; Node
-only performs HTTP presentation and range streaming.
+job presentation data. Each route sends one versioned JSON command envelope to
+the `bearvision.server.cli execute` seam over stdin. Python owns command
+validation, dispatch and typed read models, returning JSON or a path inside its
+verified media cache. Node only performs HTTP presentation and range streaming.
