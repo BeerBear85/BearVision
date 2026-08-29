@@ -9,6 +9,7 @@ from .adapters import (
     VirtualClock,
 )
 from .engine import BehavioralSimulation, Event, TraceEntry
+from .execution import ReplayEvent, ReplayOptions, ScenarioExecution
 from .gopro import SimulatedGoProController
 from .runner import ClosedLoopScenarioRunner
 from .scenario_runtime import ScenarioRunResult
@@ -25,6 +26,9 @@ __all__ = [
     "SimulatedGoProController",
     "SimulatedTagScanner",
     "ScenarioRunResult",
+    "ReplayEvent",
+    "ReplayOptions",
+    "ScenarioExecution",
     "TraceEntry",
     "VirtualClock",
     "generate_bear_tag_series",

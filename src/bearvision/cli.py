@@ -7,11 +7,10 @@ import asyncio
 import json
 import logging
 from pathlib import Path
-import time
 
 from bearvision.config import load_edge_config
-from bearvision.contracts import load_scenario
-from bearvision.edge import build_behavioral_system, build_real_orchestrator
+from bearvision.edge import build_real_orchestrator
+from bearvision.simulation import ReplayOptions, ScenarioExecution
 
 
 def edge_main() -> int:
@@ -53,24 +52,21 @@ def simulate_main() -> int:
         help="Playback speed used with --realtime (1.0 is wall-clock speed)",
     )
     args = parser.parse_args()
-    if args.speed <= 0:
-        parser.error("--speed must be positive")
-    result = build_behavioral_system(
-        load_scenario(args.scenario),
-        edge_config=load_edge_config(args.config),
-    ).run()
-    previous_at_s = 0.0
-    for entry in result.trace:
-        if args.realtime:
-            time.sleep(max(0.0, entry.at_s - previous_at_s) / args.speed)
-        previous_at_s = entry.at_s
+    try:
+        replay = ReplayOptions(
+            realtime=args.realtime,
+            speed=args.speed,
+            include_server_assignments=True,
+        )
+    except ValueError as exc:
+        parser.error(str(exc))
+    execution = ScenarioExecution.run(args.scenario, config_path=args.config)
+    for event in execution.replay(replay):
         print(
             json.dumps(
-                {"at_s": entry.at_s, "kind": entry.kind, "payload": entry.payload},
+                {"at_s": event.at_s, "kind": event.kind, "payload": event.payload},
                 default=str,
             ),
             flush=True,
         )
-    for failure in result.expectation_failures:
-        logging.error("Expectation failed: %s", failure)
-    return 1 if result.failures or result.expectation_failures else 0
+    return execution.exit_code
