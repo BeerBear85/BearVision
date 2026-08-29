@@ -43,8 +43,8 @@ uv run mypy
 
 The CI coverage figure combines the fast behavioural suite with the heavier
 real-video/YOLO suite. It measures both executed lines and decision branches;
-CI rejects combined coverage below 85 %. Reproduce it after installing the
-Edge extra:
+CI rejects combined coverage below 85 %. Reproduce it from the development
+environment:
 
 ```bash
 uv run coverage erase
@@ -63,7 +63,7 @@ uv run bearvision-simulate specs/scenarios/single-rider-success.yaml
 Run a recorded-video input through the GoPro emulator and real YOLO detector:
 
 ```bash
-uv sync --locked --extra edge --extra dev
+uv sync --locked --extra dev
 uv run python -m bearvision.control simulate specs/scenarios/wakeboard-video-yolo.yaml
 ```
 
@@ -116,14 +116,14 @@ the read models, registry validation, Box downloads, checksum verification and
 FFmpeg thumbnail generation. Node only streams cached media with HTTP byte
 ranges so browser seeking works.
 
-Install edge dependencies and start the production service:
+Install the runtime and start the production service:
 
 ```bash
-uv sync --locked --extra edge
+uv sync --locked
 uv run bearvision-edge --config config/edge.yaml
 ```
 
-The Edge extra includes packaged FFmpeg and FFprobe binaries for local clip
+The base runtime includes packaged FFmpeg and FFprobe binaries for local clip
 extraction; no system-wide installation or administrator access is required.
 Override them with `BEARVISION_FFMPEG` and `BEARVISION_FFPROBE` if needed.
 

@@ -25,7 +25,7 @@ jobs:
           python-version: "3.12"
       - name: Install locked development environment
         uses: astral-sh/setup-uv@v6
-      - run: uv sync --locked --extra edge --extra dev
+      - run: uv sync --locked --extra dev
       - name: Lint active package
         run: uv run ruff check src tests/remake tests/vision tests/end2end
       - name: Type-check active package
@@ -53,7 +53,7 @@ jobs:
         with:
           python-version: "3.12"
       - uses: astral-sh/setup-uv@v6
-      - run: uv sync --locked --extra edge --extra dev
+      - run: uv sync --locked --extra dev
       - name: Run behavioural and vision suites with combined coverage
         run: |
           uv run coverage erase

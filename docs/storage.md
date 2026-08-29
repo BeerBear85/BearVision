@@ -31,7 +31,7 @@ The focused storage test exercises both the in-memory substitute and the real
 Box adapter without running the complete recording workflow:
 
 ```bash
-uv sync --locked --extra edge --extra dev
+uv sync --locked --extra dev
 uv run pytest tests/cloud/test_box_drive.py -v
 ```
 

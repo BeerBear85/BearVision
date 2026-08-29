@@ -157,12 +157,12 @@ scenario selector and can be replayed manually like any other video scenario.
 
 ## Windows media runtime
 
-`uv sync --locked --extra edge` installs OpenCV, SciPy for the existing BLE
+`uv sync --locked` installs OpenCV, SciPy for the existing BLE
 signal processing, the GoPro SDK and platform-specific FFmpeg/FFprobe binaries
 inside `.venv`; administrator access and a system-wide FFmpeg install are not
 required. Explicit `BEARVISION_FFMPEG` and `BEARVISION_FFPROBE` paths override
 the packaged binaries when deployment policy requires managed tools. The
-emulator needs no dependency beyond this Edge extra.
+emulator uses the same base runtime.
 
 Encoding policy is independently versioned in `config/edge.yaml` under
 `clip_extraction` and `virtual_cameraman`. The raw extraction uses H.264/AAC,

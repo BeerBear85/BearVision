@@ -40,8 +40,16 @@ name = "bearvision"
 version = "3.0.0.dev0"
 source = { editable = "." }
 dependencies = [
+    { name = "bleak" },
+    { name = "boxsdk", extra = ["jwt"] },
+    { name = "ffmpeg-binaries-compat" },
+    { name = "numpy" },
+    { name = "open-gopro" },
+    { name = "opencv-python-headless" },
     { name = "pydantic" },
     { name = "pyyaml" },
+    { name = "scipy" },
+    { name = "truststore", marker = "sys_platform == 'win32'" },
 ]
 
 [package.optional-dependencies]
@@ -51,16 +59,6 @@ dev = [
     { name = "pytest-cov" },
     { name = "ruff" },
     { name = "types-pyyaml" },
-]
-edge = [
-    { name = "bleak" },
-    { name = "boxsdk", extra = ["jwt"] },
-    { name = "ffmpeg-binaries-compat" },
-    { name = "numpy" },
-    { name = "open-gopro" },
-    { name = "opencv-python-headless" },
-    { name = "scipy" },
-    { name = "truststore", marker = "sys_platform == 'win32'" },
 ]
 gui = [
     { name = "opencv-python" },
@@ -74,28 +72,28 @@ training = [
 
 [package.metadata]
 requires-dist = [
-    { name = "bleak", marker = "extra == 'edge'", specifier = ">=0.22,<2" },
-    { name = "boxsdk", extras = ["jwt"], marker = "extra == 'edge'", specifier = ">=3.9,<4" },
-    { name = "ffmpeg-binaries-compat", marker = "extra == 'edge'", specifier = ">=1.1,<2" },
+    { name = "bleak", specifier = ">=0.22,<2" },
+    { name = "boxsdk", extras = ["jwt"], specifier = ">=3.9,<4" },
+    { name = "ffmpeg-binaries-compat", specifier = ">=1.1,<2" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.17,<2" },
-    { name = "numpy", marker = "extra == 'edge'", specifier = ">=2,<3" },
+    { name = "numpy", specifier = ">=2,<3" },
     { name = "numpy", marker = "extra == 'training'", specifier = ">=2,<3" },
-    { name = "open-gopro", marker = "extra == 'edge'", specifier = ">=0.18,<1" },
+    { name = "open-gopro", specifier = ">=0.18,<1" },
     { name = "opencv-python", marker = "extra == 'gui'", specifier = ">=4.10,<5" },
-    { name = "opencv-python-headless", marker = "extra == 'edge'", specifier = ">=4.10,<5" },
+    { name = "opencv-python-headless", specifier = ">=4.10,<5" },
     { name = "pydantic", specifier = ">=2.8,<3" },
     { name = "pyside6", marker = "extra == 'gui'", specifier = ">=6.8,<7" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8,<10" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=6,<8" },
     { name = "pyyaml", specifier = ">=6,<7" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.12,<1" },
-    { name = "scipy", marker = "extra == 'edge'", specifier = ">=1.14,<2" },
+    { name = "scipy", specifier = ">=1.14,<2" },
     { name = "scipy", marker = "extra == 'training'", specifier = ">=1.14,<2" },
-    { name = "truststore", marker = "sys_platform == 'win32' and extra == 'edge'", specifier = ">=0.10,<1" },
+    { name = "truststore", marker = "sys_platform == 'win32'", specifier = ">=0.10,<1" },
     { name = "types-pyyaml", marker = "extra == 'dev'", specifier = ">=6.0,<7" },
     { name = "ultralytics", marker = "extra == 'training'", specifier = ">=8.3,<9" },
 ]
-provides-extras = ["edge", "gui", "training", "dev"]
+provides-extras = ["gui", "training", "dev"]
 
 [[package]]
 name = "bleak"
