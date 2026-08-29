@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 from pathlib import Path
 from typing import Any
 
@@ -47,43 +48,54 @@ class GoProCameraAdapter:
         self._available_since_monotonic_s: float | None = None
         self._captures: dict[str, CapturedClip] = {}
 
+    @staticmethod
+    async def _call(method: Any, *args: Any) -> Any:
+        """Await native async integrations and isolate legacy sync fakes."""
+
+        if inspect.iscoroutinefunction(method):
+            return await method(*args)
+        return await asyncio.to_thread(method, *args)
+
     async def connect(self) -> None:
         connected = False
         try:
-            await asyncio.to_thread(self.controller.connect)
+            await self._call(self.controller.connect)
             connected = True
             if self.hindsight_enabled:
-                enabled = await asyncio.to_thread(
+                enabled = await self._call(
                     self.controller.enable_hindsight, self.hindsight_duration_s
                 )
                 if enabled is False:
                     raise RuntimeError("GoPro did not enable HindSight")
             else:
-                await asyncio.to_thread(self.controller.disableHindsightMode)
+                disable = getattr(self.controller, "disable_hindsight", None)
+                if disable is None:
+                    disable = self.controller.disableHindsightMode
+                await self._call(disable)
             self._available_since_monotonic_s = self.clock.monotonic()
         except Exception as exc:
             if connected:
                 try:
-                    await asyncio.to_thread(self.controller.disconnect)
+                    await self._call(self.controller.disconnect)
                 except Exception:
                     pass
             raise translated_error(exc, "connect GoPro") from exc
 
     async def disconnect(self) -> None:
         try:
-            await asyncio.to_thread(self.controller.disconnect)
+            await self._call(self.controller.disconnect)
         except Exception as exc:
             raise translated_error(exc, "disconnect GoPro") from exc
 
     async def start_preview(self) -> str:
         try:
-            return await asyncio.to_thread(self.controller.start_preview)
+            return await self._call(self.controller.start_preview)
         except Exception as exc:
             raise translated_error(exc, "start GoPro preview") from exc
 
     async def stop_preview(self) -> None:
         try:
-            await asyncio.to_thread(self.controller.stop_preview)
+            await self._call(self.controller.stop_preview)
         except Exception as exc:
             raise translated_error(exc, "stop GoPro preview") from exc
 
@@ -112,23 +124,23 @@ class GoProCameraAdapter:
                 request,
                 earliest_available_monotonic_s=earliest_available_s,
             )
-            before = set(await asyncio.to_thread(self.controller.list_videos))
+            before = set(await self._call(self.controller.list_videos))
             recording_started = False
             start_command_before_s = self.clock.monotonic()
             start_command_after_s = start_command_before_s
             stop_command_before_s = start_command_before_s
             stop_command_after_s = start_command_before_s
             try:
-                await asyncio.to_thread(self.controller.start_recording)
+                await self._call(self.controller.start_recording)
                 recording_started = True
                 start_command_after_s = self.clock.monotonic()
                 await self.clock.sleep(request.post_roll_s)
             finally:
                 if recording_started:
                     stop_command_before_s = self.clock.monotonic()
-                    await asyncio.to_thread(self.controller.stop_recording)
+                    await self._call(self.controller.stop_recording)
                     stop_command_after_s = self.clock.monotonic()
-            after = list(await asyncio.to_thread(self.controller.list_videos))
+            after = list(await self._call(self.controller.list_videos))
             new_files = [name for name in after if name not in before]
             if not new_files:
                 raise InvalidComponentData("GoPro capture produced no new media file")
@@ -136,7 +148,7 @@ class GoProCameraAdapter:
             self.capture_dir.mkdir(parents=True, exist_ok=True)
             destination = self.capture_dir / f"{request.request_id}-{Path(camera_file).name}"
             local_path = Path(
-                await asyncio.to_thread(
+                await self._call(
                     self.controller.download_file, camera_file, str(destination)
                 )
             )
@@ -193,7 +205,7 @@ class GoProCameraAdapter:
     ) -> CaptureWindow:
         exact_window_reader = getattr(self.controller, "get_media_capture_window", None)
         if callable(exact_window_reader):
-            start_s, end_s = await asyncio.to_thread(exact_window_reader, camera_file)
+            start_s, end_s = await self._call(exact_window_reader, camera_file)
             window = CaptureWindow(
                 start_monotonic_s=float(start_s),
                 end_monotonic_s=float(end_s),

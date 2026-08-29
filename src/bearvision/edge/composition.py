@@ -88,9 +88,9 @@ def build_real_system(
     """Instantiate existing hardware implementations behind BearVision 3 ports."""
 
     if gopro_factory is None:
-        from bearvision.integrations.gopro_controller import GoProController
+        from bearvision.integrations.async_gopro import AsyncGoProController
 
-        gopro_factory = GoProController
+        gopro_factory = AsyncGoProController
     if beacon_factory is None:
         beacon_factory = BleakKBeaconSource
     if detector_factory is None:

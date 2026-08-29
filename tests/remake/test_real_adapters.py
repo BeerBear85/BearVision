@@ -1,5 +1,6 @@
 import asyncio
 from pathlib import Path
+import threading
 from types import SimpleNamespace
 
 
@@ -13,10 +14,12 @@ from bearvision.adapters import (
 from bearvision.config import load_edge_config
 from bearvision.edge import BearVisionOrchestrator, build_real_orchestrator, build_real_system
 from bearvision.contracts import CaptureRequest
+from bearvision.integrations.async_gopro import AsyncGoProController
 from bearvision.ports import VideoFrame
 from bearvision.simulation import VirtualClock
 from bearvision.processing import VirtualCameramanProcessor
 from bearvision.testing import check_camera, check_detector, check_scanner, check_storage
+from tests.stubs.gopro import FakeGoPro
 
 
 class StubGoPro:
@@ -53,6 +56,47 @@ class StubGoPro:
         self.files.append("GX010001.MP4")
 
     def download_file(self, camera_file, local_path):
+        path = Path(local_path)
+        path.write_bytes(b"gopro-video")
+        return path
+
+
+class AsyncStubGoPro(StubGoPro):
+    def __init__(self) -> None:
+        super().__init__()
+        self.thread_ids: list[int] = []
+
+    async def connect(self):
+        self.thread_ids.append(threading.get_ident())
+
+    async def disconnect(self):
+        self.thread_ids.append(threading.get_ident())
+
+    async def start_preview(self):
+        self.thread_ids.append(threading.get_ident())
+        return "udp://camera:8554"
+
+    async def stop_preview(self):
+        self.thread_ids.append(threading.get_ident())
+
+    async def enable_hindsight(self, duration):
+        self.thread_ids.append(threading.get_ident())
+        self.hindsight_duration_s = duration
+        return True
+
+    async def list_videos(self):
+        self.thread_ids.append(threading.get_ident())
+        return list(self.files)
+
+    async def start_recording(self):
+        self.thread_ids.append(threading.get_ident())
+
+    async def stop_recording(self):
+        self.thread_ids.append(threading.get_ident())
+        self.files.append("GX010001.MP4")
+
+    async def download_file(self, camera_file, local_path):
+        self.thread_ids.append(threading.get_ident())
         path = Path(local_path)
         path.write_bytes(b"gopro-video")
         return path
@@ -118,6 +162,41 @@ def test_existing_camera_detector_and_storage_wrappers_pass_contracts(tmp_path: 
             "rider-17/clip.mp4",
         )
     )
+
+
+def test_async_camera_integration_stays_on_the_runtime_event_loop(tmp_path: Path) -> None:
+    async def exercise() -> None:
+        runtime_thread = threading.get_ident()
+        controller = AsyncStubGoPro()
+        camera = GoProCameraAdapter(controller, VirtualClock(), tmp_path / "captures")
+
+        await check_camera(camera, capture_request())
+
+        assert controller.thread_ids
+        assert set(controller.thread_ids) == {runtime_thread}
+
+    asyncio.run(exercise())
+
+
+def test_async_gopro_controller_maps_the_sdk_without_a_thread_bridge(
+    tmp_path: Path,
+) -> None:
+    async def exercise() -> None:
+        sdk = FakeGoPro()
+        controller = AsyncGoProController(gopro=sdk)
+        destination = tmp_path / "download.mp4"
+
+        await controller.connect()
+        assert await controller.enable_hindsight(15)
+        await controller.start_recording()
+        await controller.stop_recording()
+        assert await controller.list_videos() == ["DCIM/100GOPRO/GOPR0001.MP4"]
+        assert await controller.download_file("GOPR0001.MP4", str(destination)) == destination
+        await controller.disconnect()
+
+        assert destination.read_text(encoding="utf-8") == "data"
+
+    asyncio.run(exercise())
 
 
 def test_existing_beacon_wrapper_converts_acceleration_and_voltage() -> None:
