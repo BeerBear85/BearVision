@@ -308,6 +308,14 @@ class BoxHandler:
         if file_id:
             self._client.file(file_id).delete()
 
+    def delete_folder(self, remote_path: str) -> None:
+        """Remove a queue folder and all of its contents if it exists."""
+
+        self.connect()
+        folder_id = self._find_folder_id(remote_path.strip("/"))
+        if folder_id is not None:
+            self._client.folder(folder_id).delete(recursive=True)
+
     def list_files(self, remote_path: str = "") -> list:
         """
         Purpose:

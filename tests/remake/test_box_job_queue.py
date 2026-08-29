@@ -60,6 +60,11 @@ class MemoryBoxFolders:
     def delete_file(self, path):
         del self.files[path.strip("/")]
 
+    def delete_folder(self, path):
+        prefix = path.strip("/") + "/"
+        for item in [item for item in self.files if item.startswith(prefix)]:
+            del self.files[item]
+
 
 def test_box_queue_commits_with_ready_then_claims_complete_folder(tmp_path: Path) -> None:
     now = datetime(2026, 7, 1, tzinfo=timezone.utc)

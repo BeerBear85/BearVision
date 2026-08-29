@@ -16,7 +16,7 @@ from bearvision.contracts import (
 )
 from bearvision.edge.job_package import build_edge_job
 from bearvision.ports import CapturedMedia, JobQueue
-from bearvision.queueing import job_package_files
+from bearvision.queueing import StoreBackedJobQueue, job_package_files
 from bearvision.server import FileSystemJobQueue
 from bearvision.simulation import InMemoryJobQueue
 
@@ -73,6 +73,11 @@ class MemoryBoxFolders:
 
     def delete_file(self, path):
         del self.files[path.strip("/")]
+
+    def delete_folder(self, path):
+        prefix = path.strip("/") + "/"
+        for item in [item for item in self.files if item.startswith(prefix)]:
+            del self.files[item]
 
 
 @dataclass(frozen=True, slots=True)
@@ -199,6 +204,24 @@ def terminal_result(job_id: str, status: str) -> JobResultManifest:
         reason=f"contract {status}",
         errorCode=f"CONTRACT_{status.upper()}",
     )
+
+
+def test_durable_provider_adapters_share_one_queue_lifecycle() -> None:
+    lifecycle_methods = (
+        "admin_list_jobs",
+        "admin_read",
+        "admin_download",
+        "publish",
+        "acquire_next",
+        "read",
+        "finish",
+        "requeue",
+        "snapshot",
+    )
+
+    for adapter in (FileSystemJobQueue, BoxJobQueue):
+        for method in lifecycle_methods:
+            assert getattr(adapter, method) is getattr(StoreBackedJobQueue, method)
 
 
 def test_job_queue_contract_publishes_complete_packages_idempotently_and_resumes_claim(
