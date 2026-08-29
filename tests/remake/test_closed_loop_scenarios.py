@@ -1,8 +1,7 @@
 from pathlib import Path
 
 from bearvision.contracts import ScenarioDefinition, load_scenario
-from bearvision.edge import build_behavioral_system
-from bearvision.simulation import ClosedLoopScenarioRunner
+from bearvision.simulation import ClosedLoopScenarioRunner, build_behavioral_system
 
 
 ROOT = Path(__file__).resolve().parents[2]

@@ -10,9 +10,9 @@ from typing import Any
 
 from bearvision.config import load_edge_config
 from bearvision.contracts import RuntimeEventKind, load_scenario
-from bearvision.edge import build_behavioral_system
 from bearvision.server import FileSystemJobQueue
 
+from .composition import build_behavioral_system
 from .scenario_runtime import ScenarioRunResult
 
 

@@ -2,7 +2,6 @@
 
 from .composition import (
     RealEdgeComponents,
-    build_behavioral_system,
     build_real_orchestrator,
     build_real_system,
 )
@@ -21,7 +20,6 @@ __all__ = [
     "OrchestrationEvent",
     "OrchestrationResult",
     "RealEdgeComponents",
-    "build_behavioral_system",
     "build_real_orchestrator",
     "build_real_system",
 ]

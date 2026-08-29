@@ -9,6 +9,7 @@ from .adapters import (
     VirtualClock,
 )
 from .engine import BehavioralSimulation, Event, TraceEntry
+from .composition import build_behavioral_system
 from .execution import ReplayEvent, ReplayOptions, ScenarioExecution
 from .gopro import SimulatedGoProController
 from .runner import ClosedLoopScenarioRunner
@@ -17,6 +18,7 @@ from .scenario_inputs import generate_bear_tag_series
 
 __all__ = [
     "BehavioralSimulation",
+    "build_behavioral_system",
     "ClosedLoopScenarioRunner",
     "Event",
     "InMemoryJobQueue",

@@ -3,13 +3,18 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
+import bearvision.edge as edge_package
 from bearvision.contracts import ScenarioDefinition, load_scenario
-from bearvision.edge import build_behavioral_system
+from bearvision.simulation import build_behavioral_system
 from bearvision.simulation import runner as synthetic_runner_module
 from bearvision.simulation import video_runner as video_runner_module
 
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+def test_behavioral_composition_is_not_exposed_by_the_edge_package() -> None:
+    assert not hasattr(edge_package, "build_behavioral_system")
 
 
 def test_supported_component_combinations_route_to_their_distinct_runners(

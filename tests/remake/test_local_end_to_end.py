@@ -4,7 +4,7 @@ from pathlib import Path
 from uuid import NAMESPACE_URL, uuid5
 
 from bearvision.contracts import load_scenario
-from bearvision.edge import build_behavioral_system
+from bearvision.simulation import build_behavioral_system
 from bearvision.server import (
     BearTagAssignment,
     BearTagRecord,

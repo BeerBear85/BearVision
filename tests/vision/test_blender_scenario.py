@@ -7,7 +7,7 @@ import pytest
 
 from bearvision.config import load_edge_config
 from bearvision.contracts import load_scenario
-from bearvision.edge import build_behavioral_system
+from bearvision.simulation import build_behavioral_system
 
 cv2 = pytest.importorskip("cv2")
 

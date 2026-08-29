@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, TYPE_CHECKING
+from typing import Any, Callable
 
 from bearvision.adapters import (
     BoxJobQueue,
@@ -15,7 +15,7 @@ from bearvision.adapters import (
     SystemClock,
     YoloDetectorAdapter,
 )
-from bearvision.config import AssignmentConfig, EdgeConfig
+from bearvision.config import EdgeConfig
 from bearvision.ports import (
     Camera,
     ClipProcessor,
@@ -25,13 +25,8 @@ from bearvision.ports import (
     JobQueue,
     TagScanner,
 )
-from bearvision.contracts import ScenarioDefinition, ScenarioSourceProfile
 from bearvision.processing import VirtualCameramanProcessor
 from .orchestrator import BearVisionOrchestrator
-
-if TYPE_CHECKING:
-    from bearvision.simulation.runner import ClosedLoopScenarioRunner
-    from bearvision.simulation.video_runner import VideoScenarioRunner
 
 
 @dataclass(frozen=True, slots=True)
@@ -43,36 +38,6 @@ class RealEdgeComponents:
     job_queue: JobQueue
     clip_processor: ClipProcessor
     frame_source: FrameSource
-
-
-def build_behavioral_system(
-    scenario: ScenarioDefinition,
-    server_assignment_policy: AssignmentConfig | None = None,
-    *,
-    edge_config: EdgeConfig | None = None,
-    capture_dir: Path | None = None,
-    job_queue: JobQueue | None = None,
-    process_server: bool = True,
-) -> "ClosedLoopScenarioRunner | VideoScenarioRunner":
-    if scenario.source_profile is ScenarioSourceProfile.RECORDED_VIDEO:
-        from bearvision.simulation.video_runner import VideoScenarioRunner
-
-        return VideoScenarioRunner.from_scenario(
-            scenario,
-            assignment_policy=server_assignment_policy,
-            edge_config=edge_config,
-            capture_dir=capture_dir,
-            job_queue=job_queue,
-            process_server=process_server,
-        )
-    from bearvision.simulation.runner import ClosedLoopScenarioRunner
-
-    return ClosedLoopScenarioRunner.from_scenario(
-        scenario,
-        assignment_policy=server_assignment_policy,
-        job_queue=job_queue,
-        process_server=process_server,
-    )
 
 
 def build_real_system(

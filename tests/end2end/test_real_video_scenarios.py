@@ -12,7 +12,7 @@ from bearvision.adapters import FfmpegVideoClipper
 from bearvision.config import load_edge_config
 from bearvision.config.models import ClipExtractionConfig
 from bearvision.contracts import ScenarioDefinition, load_scenario
-from bearvision.edge import build_behavioral_system
+from bearvision.simulation import build_behavioral_system
 from bearvision.server import FileSystemJobQueue
 
 
