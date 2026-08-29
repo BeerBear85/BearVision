@@ -7,6 +7,7 @@ import { createInterface } from "node:readline";
 import { parse as parseYaml } from "yaml";
 import { ControlState } from "./control-state.mjs";
 import { parseByteRange, safeLeafPath } from "./media-files.mjs";
+import { parseRuntimeEventLine } from "./runtime-events.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const appRoot = resolve(here, "..");
@@ -145,8 +146,8 @@ function attachOutput(stream, source) {
   lines.on("line", (line) => {
     if (!line.trim()) return;
     try {
-      const parsed = JSON.parse(line);
-      publish(parsed.kind ?? "runtime_event", parsed.payload ?? {}, parsed.at_s ?? null);
+      const parsed = parseRuntimeEventLine(line);
+      publish(parsed.kind, parsed.payload, parsed.at_s);
     } catch {
       publish("runtime_log", { source, message: line });
     }

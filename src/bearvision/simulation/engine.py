@@ -10,6 +10,8 @@ import itertools
 import random
 from typing import Any
 
+from bearvision.contracts import RuntimeEventKind
+
 
 Payload = Mapping[str, Any]
 
@@ -19,7 +21,7 @@ class Event:
     """An event scheduled at an absolute virtual time."""
 
     at_s: float
-    kind: str
+    kind: RuntimeEventKind
     payload: Payload = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -35,7 +37,7 @@ class TraceEntry:
 
     at_s: float
     sequence: int
-    kind: str
+    kind: RuntimeEventKind
     payload: dict[str, Any]
 
 
@@ -68,7 +70,7 @@ class BehavioralSimulation:
 
         return tuple(self._trace)
 
-    def subscribe(self, kind: str, handler: EventHandler) -> None:
+    def subscribe(self, kind: RuntimeEventKind, handler: EventHandler) -> None:
         """Register a handler for one event kind."""
 
         if not kind.strip():

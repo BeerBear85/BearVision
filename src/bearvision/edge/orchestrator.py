@@ -15,6 +15,7 @@ from bearvision.contracts import (
     CaptureRequest,
     EdgeJobManifest,
     PersonDetection,
+    RuntimeEventKind,
     TagObservation,
 )
 from bearvision.domain import BearTagObservationBuffer
@@ -58,7 +59,7 @@ class OrchestrationEvent:
     """Stable trace evidence exposed without leaking orchestrator internals."""
 
     at_monotonic_s: float
-    kind: str
+    kind: RuntimeEventKind
     payload: dict[str, Any]
 
     def __post_init__(self) -> None:

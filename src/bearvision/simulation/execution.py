@@ -9,7 +9,7 @@ import time
 from typing import Any
 
 from bearvision.config import load_edge_config
-from bearvision.contracts import load_scenario
+from bearvision.contracts import RuntimeEventKind, load_scenario
 from bearvision.edge import build_behavioral_system
 from bearvision.server import FileSystemJobQueue
 
@@ -19,7 +19,7 @@ from .scenario_runtime import ScenarioRunResult
 @dataclass(frozen=True, slots=True)
 class ReplayEvent:
     at_s: float | None
-    kind: str
+    kind: RuntimeEventKind
     payload: dict[str, Any]
 
 

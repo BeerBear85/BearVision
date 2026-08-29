@@ -19,6 +19,7 @@ from .jobs import (
     JobResultManifest,
     JobVideo,
 )
+from .control_events import RuntimeEventKind, serialize_runtime_event
 from .scenario import (
     GeneratedScenarioSource,
     ScenarioDefinition,
@@ -48,6 +49,7 @@ __all__ = [
     "JobVideo",
     "MediaAsset",
     "PersonDetection",
+    "RuntimeEventKind",
     "ScenarioDefinition",
     "ScenarioComponents",
     "ScenarioDetector",
@@ -64,4 +66,5 @@ __all__ = [
     "SyntheticMotionWindow",
     "Vector3",
     "load_scenario",
+    "serialize_runtime_event",
 ]

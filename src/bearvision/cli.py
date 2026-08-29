@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import json
 import logging
 from pathlib import Path
 
 from bearvision.config import load_edge_config
+from bearvision.contracts import serialize_runtime_event
 from bearvision.edge import build_real_orchestrator
 from bearvision.simulation import ReplayOptions, ScenarioExecution
 
@@ -63,10 +63,7 @@ def simulate_main() -> int:
     execution = ScenarioExecution.run(args.scenario, config_path=args.config)
     for event in execution.replay(replay):
         print(
-            json.dumps(
-                {"at_s": event.at_s, "kind": event.kind, "payload": event.payload},
-                default=str,
-            ),
+            serialize_runtime_event(event.kind, event.payload, at_s=event.at_s),
             flush=True,
         )
     return execution.exit_code

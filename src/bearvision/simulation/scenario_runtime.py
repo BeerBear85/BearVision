@@ -11,6 +11,7 @@ from uuid import NAMESPACE_URL, UUID, uuid5
 from bearvision.config import AssignmentConfig
 from bearvision.contracts import (
     JobResultManifest,
+    RuntimeEventKind,
     ScenarioDefinition,
     StorageReceipt,
     TagRegistryEntry,
@@ -30,7 +31,7 @@ from bearvision.server import (
 from .engine import TraceEntry
 
 
-TraceEvent: TypeAlias = tuple[float, str, dict[str, Any]]
+TraceEvent: TypeAlias = tuple[float, RuntimeEventKind, dict[str, Any]]
 
 
 def scenario_email(rider_id: str) -> str:

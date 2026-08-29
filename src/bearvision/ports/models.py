@@ -7,7 +7,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
-from bearvision.contracts import CaptureRequest, MediaAsset
+from bearvision.contracts import CaptureRequest, MediaAsset, RuntimeEventKind
 
 
 @dataclass(frozen=True, slots=True)
@@ -138,7 +138,7 @@ class ExtractedClip:
 class ProcessingTraceEvent:
     """Immutable trace metadata emitted by a clip processor."""
 
-    kind: str
+    kind: RuntimeEventKind
     payload: dict[str, Any]
     source_offset_s: float | None = None
 

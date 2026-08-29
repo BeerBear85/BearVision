@@ -4,28 +4,22 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import json
 import logging
 from pathlib import Path
 
 from bearvision.config import load_edge_config
+from bearvision.contracts import RuntimeEventKind, serialize_runtime_event
 from bearvision.edge import build_real_orchestrator
 from bearvision.simulation import ReplayOptions, ScenarioExecution
 
 
-def emit(kind: str, payload: dict | None = None, *, at_s: float | None = None) -> None:
-    print(
-        json.dumps(
-            {
-                "control_event_version": "1.0",
-                "at_s": at_s,
-                "kind": kind,
-                "payload": payload or {},
-            },
-            default=str,
-        ),
-        flush=True,
-    )
+def emit(
+    kind: RuntimeEventKind,
+    payload: dict | None = None,
+    *,
+    at_s: float | None = None,
+) -> None:
+    print(serialize_runtime_event(kind, payload or {}, at_s=at_s), flush=True)
 
 
 def simulate(
