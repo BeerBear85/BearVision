@@ -174,6 +174,7 @@ apt-get install --yes --no-install-recommends \
     ffmpeg \
     git \
     libglib2.0-0 \
+    libgl1 \
     rsync
 
 if ! id "$SERVICE_USER" >/dev/null 2>&1; then

@@ -7,7 +7,7 @@ import it.
 ## Environment
 
 ```bash
-uv sync --locked --extra training --extra gui
+uv sync --locked --extra dev
 ```
 
 ## Annotation

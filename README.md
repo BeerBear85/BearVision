@@ -42,6 +42,13 @@ uv run ruff check src tests/remake tests/vision tests/end2end
 uv run mypy
 ```
 
+An existing environment that previously installed both OpenCV distributions
+needs one repair sync after pulling this change:
+
+```bash
+uv sync --locked --extra dev --reinstall-package opencv-python
+```
+
 The CI coverage figure combines the fast behavioural suite with the heavier
 real-video/YOLO suite. It measures both executed lines and decision branches;
 CI rejects combined coverage below 85 %. Reproduce it from the development
@@ -153,7 +160,7 @@ annotating footage and fine-tuning YOLO offline. It is not imported or executed
 by the Edge or server runtimes:
 
 ```bash
-uv sync --extra training --extra gui
+uv sync --locked --extra dev
 uv run python pretraining/annotation/annotation_gui_pyqt.py
 uv run python pretraining/run_training_gui.py
 ```

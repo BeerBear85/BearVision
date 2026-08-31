@@ -22,7 +22,7 @@ class RecordedVideoFrameSource:
         try:
             import cv2
         except ImportError as exc:  # pragma: no cover - optional Edge dependency
-            raise ComponentUnavailable("opencv-python-headless is required") from exc
+            raise ComponentUnavailable("opencv-python is required") from exc
         capture = await asyncio.to_thread(cv2.VideoCapture, preview_source)
         if not capture.isOpened():
             await asyncio.to_thread(capture.release)
@@ -42,7 +42,7 @@ class RecordedVideoFrameSource:
         try:
             import cv2
         except ImportError as exc:  # pragma: no cover - optional Edge dependency
-            raise ComponentUnavailable("opencv-python-headless is required") from exc
+            raise ComponentUnavailable("opencv-python is required") from exc
         source_fps = float(self._capture.get(cv2.CAP_PROP_FPS))
         if source_fps <= 0:
             raise ComponentUnavailable("recorded video reports an invalid frame rate")

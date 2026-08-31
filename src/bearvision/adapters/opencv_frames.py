@@ -33,7 +33,7 @@ class OpenCvPreviewFrameSource:
         try:
             import cv2
         except ImportError as exc:  # pragma: no cover - production dependency
-            raise ComponentUnavailable("opencv-python-headless is required for preview frames") from exc
+            raise ComponentUnavailable("opencv-python is required for preview frames") from exc
         capture = await asyncio.to_thread(cv2.VideoCapture, preview_source)
         self._capture = capture
         if not capture.isOpened():
