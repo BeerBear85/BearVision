@@ -28,5 +28,6 @@ runtime. Training must never happen on an Edge or server process.
 Run the offline workflow tests explicitly:
 
 ```bash
+uv run ruff check pretraining tests/offline_yolo
 uv run pytest tests/offline_yolo
 ```

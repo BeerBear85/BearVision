@@ -1,5 +1,4 @@
 """Trajectory generation and filtering for annotation pipeline."""
-import json
 import time
 import logging
 from pathlib import Path
@@ -11,7 +10,7 @@ from scipy.interpolate import CubicSpline
 from scipy.signal import butter, filtfilt
 
 # Import configuration classes
-from annotation_config import PipelineConfig, TrajectoryConfig
+from annotation_config import PipelineConfig
 
 
 logger = logging.getLogger(__name__)

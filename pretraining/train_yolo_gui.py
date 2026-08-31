@@ -5,14 +5,14 @@ import sys
 import subprocess
 import yaml
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Dict, Any
 
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QLineEdit, QPushButton, QFrame, QFileDialog, QMessageBox,
-    QSpinBox, QDoubleSpinBox, QComboBox, QTextEdit, QScrollArea, QMenuBar
+    QSpinBox, QDoubleSpinBox, QComboBox, QTextEdit
 )
-from PySide6.QtCore import Qt, QTimer, Signal, QObject
+from PySide6.QtCore import Qt, Signal, QObject
 from PySide6.QtGui import QFont, QAction
 
 
@@ -411,7 +411,7 @@ class TrainYoloGUI(QMainWindow):
                 with open(self.config_file, 'r') as f:
                     config = yaml.safe_load(f)
                     self._apply_config(config)
-            except Exception as e:
+            except Exception:
                 # Ignore errors loading default config
                 pass
 

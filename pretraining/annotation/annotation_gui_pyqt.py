@@ -2,7 +2,6 @@
 
 import threading
 import sys
-import os
 import copy
 from pathlib import Path
 from typing import Callable
@@ -11,11 +10,11 @@ import cv2
 import numpy as np
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QLabel, QLineEdit, QPushButton, QFrame, QFileDialog, QMessageBox,
+    QLabel, QPushButton, QFrame, QFileDialog, QMessageBox,
     QSplitter, QScrollArea
 )
 from PySide6.QtCore import Qt, QTimer, Signal, QObject
-from PySide6.QtGui import QFont, QPixmap, QImage
+from PySide6.QtGui import QPixmap, QImage
 
 import annotation_pipeline as ap
 
@@ -296,7 +295,7 @@ class AnnotationGUI(QMainWindow):
                 QMessageBox.information(
                     self,
                     "Deletion Complete",
-                    f"Successfully cleared output directory and debug log file."
+                    "Successfully cleared output directory and debug log file."
                 )
                 
             except Exception as e:

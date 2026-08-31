@@ -1,6 +1,6 @@
 """Configuration classes for the annotation pipeline."""
 from dataclasses import dataclass, field
-from typing import List, Any
+from typing import List
 
 
 @dataclass

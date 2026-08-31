@@ -151,7 +151,6 @@ def _process_videos(cfg: PipelineConfig, processors: dict, frame_callback, gui_m
     qf = processors['quality_filter'] 
     yolo = processors['yolo']
     gap_detector = processors['gap_detector']
-    original_video_fps = processors['original_video_fps']
     
     items: List[Dict[str, Any]] = []
     
@@ -366,7 +365,6 @@ def _export_results(cfg: PipelineConfig, exporter, segments: List[Dict], items: 
     for seg_data in segments:
         track_id += 1
         seg_trajectory = seg_data.get('trajectory', [])
-        seg_final_item = seg_data.get('final_item')
         seg_det_points = seg_data['det_points']
         seg_items = seg_data.get('items', [])
         
@@ -526,19 +524,6 @@ def main(argv: list[str] | None = None) -> None:
 # Backward compatibility re-exports
 # Re-export the original status instance and classes/functions
 PipelineStatus = PipelineStatusClass
-from processors import VidIngest, QualityFilter, PreLabelYOLO
-from exporters import DatasetExporter, CvatExporter
-from filters import filter_small_person_boxes
-from config_loader import load_config
-
-# Re-export configuration classes for backward compatibility
-SamplingConfig = SamplingConfig
-QualityConfig = QualityConfig
-YoloConfig = YoloConfig  
-ExportConfig = ExportConfig
-TrajectoryConfig = TrajectoryConfig
-PipelineConfig = PipelineConfig
-LoggingConfig = LoggingConfig
 
 # Make key functions available at module level
 __all__ = [

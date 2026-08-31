@@ -83,6 +83,8 @@ jobs:
           python-version: "3.12"
       - uses: astral-sh/setup-uv@v6
       - run: uv sync --locked --extra dev --extra training --extra gui
+      - name: Lint offline annotation and fine-tuning tools
+        run: uv run ruff check pretraining tests/offline_yolo
       - name: Verify offline annotation and fine-tuning tools
         run: uv run pytest tests/offline_yolo -q
 
