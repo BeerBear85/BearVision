@@ -32,7 +32,8 @@ runtime and have been moved to a separate local archive.
 
 ## Development
 
-Python 3.12 and `uv` are the reference development environment.
+Python 3.12 and `uv` are the reference development environment on Windows and
+64-bit Linux. The same runtime and configuration contracts apply on both.
 
 ```bash
 uv sync --locked --extra dev
@@ -116,12 +117,27 @@ the read models, registry validation, Box downloads, checksum verification and
 FFmpeg thumbnail generation. Node only streams cached media with HTTP byte
 ranges so browser seeking works.
 
-Install the runtime and start the production service:
+Install the runtime and start it directly on Windows or Linux:
 
 ```bash
 uv sync --locked
 uv run bearvision-edge --config config/edge.yaml
 ```
+
+For a systemd-managed 64-bit Raspberry Pi OS deployment on a Raspberry Pi 4 or
+5, run the Linux provisioning script from a complete checkout:
+
+```bash
+sudo bash scripts/setup-raspberry-pi.sh --device-id edge-pi-1
+```
+
+It deploys only the active runtime files and selected YOLO model, installs the
+locked Python runtime, configures Raspberry Pi OS FFmpeg and
+creates an unprivileged `bearvision-edge` systemd service. Existing files under
+`/etc/bearvision` are preserved. Add Box credentials to
+`/etc/bearvision/bearvision.env`, connect the GoPro and BLE adapter, and start
+the service with `sudo systemctl start bearvision-edge`. Use `--start` to start
+it immediately during provisioning.
 
 The base runtime includes packaged FFmpeg and FFprobe binaries for local clip
 extraction; no system-wide installation or administrator access is required.

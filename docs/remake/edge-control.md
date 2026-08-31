@@ -16,15 +16,16 @@ The normative UX/UI baseline and acceptance checks are in
 
 ## Deployment boundary
 
-The Edge computer hosts both runtimes. BearVision 3 targets a small Windows
-computer for both development and production deployment. Hardware sizing is a
-benchmarking question, not an application-architecture decision.
+The Edge computer hosts both runtimes. BearVision 3 supports Windows and 64-bit
+Linux for development and production deployment. Hardware sizing and physical
+adapter validation are device-profile questions, not application-architecture
+decisions.
 
 ```mermaid
 flowchart LR
     operator["Operator browser"] <-->|"HTTP and live events"| node["Thin Node.js control server"]
 
-    subgraph edgeComputer["Small Windows Edge computer"]
+    subgraph edgeComputer["Windows or Linux Edge computer"]
         node -->|"Start, stop and observe"| python["Python BearVision 3 runtime"]
         react["React GUI"] -->|"Static build"| node
         scenarios["Versioned YAML scenarios"] -->|"Selected scenario"| node

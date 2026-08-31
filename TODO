@@ -2,7 +2,7 @@
 
 - Calibrate BearTag motion/RSSI thresholds from labelled field clips.
 - Run end-to-end hardware tests with GoPro preview, capture, BLE and Box.
-- Benchmark the selected small Windows Edge computer with GoPro preview, YOLO and BLE active together.
+- Benchmark each selected Windows or Linux Edge computer with GoPro preview, YOLO and BLE active together.
 - Build one synchronized scenario bundle from an existing test video, detections and approximately 10 Hz BearTag data.
 - Proxy the real GoPro preview through Edge Control and add authentication before remote network exposure.
 - Verify model and test-video redistribution rights before a public release.
