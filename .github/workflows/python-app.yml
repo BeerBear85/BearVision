@@ -68,6 +68,20 @@ jobs:
           name: python-coverage-${{ matrix.os }}
           path: coverage-${{ matrix.os }}.xml
 
+  offline-yolo:
+    runs-on: windows-latest
+    env:
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --locked --extra dev --extra training --extra gui
+      - name: Verify offline annotation and fine-tuning tools
+        run: uv run pytest tests/offline_yolo -q
+
   edge-control:
     runs-on: windows-latest
     defaults:

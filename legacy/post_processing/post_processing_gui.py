@@ -54,8 +54,8 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, QThread, Signal, QTimer
 from PySide6.QtGui import QFont, QImage, QPixmap
 
-# Add code/modules to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "code", "modules"))
+# Keep the unsupported legacy implementation self-contained.
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "modules"))
 from PostProcessingPipeline import PostProcessingPipeline
 from PostProcessingConfig import PostProcessingConfig
 

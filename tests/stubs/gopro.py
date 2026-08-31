@@ -162,4 +162,4 @@ class FakeGoPro:
         if not self._serial:
             from open_gopro.domain.exceptions import GoProNotOpened
             raise GoProNotOpened("Serial / IP has not yet been discovered")
-        return f"http://172.24.106.51:8080/gopro"
+        return "http://172.24.106.51:8080/gopro"

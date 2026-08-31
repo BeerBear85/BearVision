@@ -12,7 +12,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from bearvision.contracts import load_scenario
 from bearvision.config import load_edge_config
-from bearvision.edge import build_behavioral_system
+from bearvision.simulation import build_behavioral_system
 
 
 def main() -> int:

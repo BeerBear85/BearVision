@@ -8,14 +8,13 @@ that trajectories are generated immediately when gaps are detected.
 import sys
 import tempfile
 from pathlib import Path
-import json
 import numpy as np
 
 # Add the annotation module path
 MODULE_PATH = Path(__file__).resolve().parent.parent.parent / 'pretraining' / 'annotation'
 sys.path.append(str(MODULE_PATH))
 
-import annotation_pipeline as ap
+import annotation_pipeline as ap  # noqa: E402
 
 
 def test_realtime_gap_detection():
@@ -43,7 +42,8 @@ def test_realtime_gap_detection():
             }
             trajectory_calls.append(call_info)
             print(f"📈 Trajectory {track_id} generated: frames {call_info['first_frame']}-{call_info['last_frame']}, detections: {call_info['detection_frames']}")
-            return f"{tmpdir}/trajectory_{track_id}.jpg"
+            final_item = segment_items[-1] if segment_items else None
+            return f"{tmpdir}/trajectory_{track_id}.jpg", [], final_item
         
         # Mock the trajectory generation function
         ap.generate_trajectory_during_processing = mock_generate_trajectory
@@ -104,13 +104,13 @@ def test_realtime_gap_detection():
             ap.VidIngest = lambda videos, config: MockIngest()
             ap.PreLabelYOLO = lambda config: MockYOLO()
             
-            print(f"🎯 Expected behavior:")
-            print(f"   - Segment 1: frames 0-30 (31 frames)")
-            print(f"   - Gap detected at frame 60 (30 frames after last detection at frame 30)")
-            print(f"   - Segment 2: frames 61-90 (30 frames)")  
-            print(f"   - Gap detected at frame 120 (30 frames after last detection at frame 90)")
-            print(f"   - Segment 3: frames 121-150 (30 frames)")
-            print(f"   - Final trajectory at end-of-video")
+            print("🎯 Expected behavior:")
+            print("   - Segment 1: frames 0-30 (31 frames)")
+            print("   - Gap detected at frame 60 (30 frames after last detection at frame 30)")
+            print("   - Segment 2: frames 61-90 (30 frames)")
+            print("   - Gap detected at frame 120 (30 frames after last detection at frame 90)")
+            print("   - Segment 3: frames 121-150 (30 frames)")
+            print("   - Final trajectory at end-of-video")
             print()
             
             # Run the pipeline
@@ -128,8 +128,6 @@ def test_realtime_gap_detection():
             assert len(trajectory_calls) >= 2, f"Expected at least 2 trajectories, got {len(trajectory_calls)}"
             
             # Check that trajectories were generated for the expected segments
-            detection_ranges = [call['detection_frames'] for call in trajectory_calls]
-            
             print()
             print("✅ Real-time gap detection working correctly!")
             print("   Trajectories generated immediately when gaps detected")
@@ -137,11 +135,6 @@ def test_realtime_gap_detection():
         finally:
             # Restore original function
             ap.generate_trajectory_during_processing = original_generate
-
-
-def test_realtime_gap_detection_pytest():
-    """Pytest-compatible version of the real-time gap detection test."""
-    test_realtime_gap_detection()
 
 
 if __name__ == '__main__':

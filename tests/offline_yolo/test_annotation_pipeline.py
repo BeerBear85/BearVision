@@ -10,7 +10,7 @@ from tests.stubs import ultralytics  # noqa: F401
 
 MODULE_PATH = Path(__file__).resolve().parents[2] / 'pretraining' / 'annotation'
 sys.path.append(str(MODULE_PATH))
-import annotation_pipeline as ap
+import annotation_pipeline as ap  # noqa: E402
 
 
 def create_dummy_video(path, num_frames=5, fps=5, size=(64, 64)):
@@ -51,9 +51,18 @@ def create_dummy_video(path, num_frames=5, fps=5, size=(64, 64)):
 
 def test_load_config(tmp_path):
     cfg_path = tmp_path / 'cfg.yaml'
-    cfg_path.write_text('videos:\n  - a.mp4\nsampling:\n  fps: 2.0\n')
+    cfg_path.write_text(
+        'config_schema_version: "2.0"\n'
+        'config_kind: bearvision-annotation\n'
+        'videos:\n  - a.mp4\nsampling:\n  fps: 2.0\n'
+    )
     loaded = ap.load_config(str(cfg_path))
-    assert loaded == {'videos': ['a.mp4'], 'sampling': {'fps': 2.0}}
+    assert loaded == {
+        'config_schema_version': '2.0',
+        'config_kind': 'bearvision-annotation',
+        'videos': ['a.mp4'],
+        'sampling': {'fps': 2.0},
+    }
 
 
 def test_vid_ingest_fps(tmp_path):
@@ -221,7 +230,7 @@ def test_run_filters_tiny_person_detections(tmp_path):
     imgs = list((dataset_dir / 'images').glob('*'))
     lbls = list((dataset_dir / 'labels').glob('*'))
     assert not imgs and not lbls
-    recs = [json.loads(l) for l in (dataset_dir / 'debug.jsonl').read_text().splitlines()]
+    recs = [json.loads(line) for line in (dataset_dir / 'debug.jsonl').read_text().splitlines()]
     assert recs and recs[0]['discarded_boxes']
 
 
@@ -244,7 +253,7 @@ def test_run_respects_custom_min_diagonal_ratio(tmp_path):
     imgs = list((dataset_dir / 'images').glob('*'))
     lbls = list((dataset_dir / 'labels').glob('*'))
     assert imgs and lbls
-    recs = [json.loads(l) for l in (dataset_dir / 'debug.jsonl').read_text().splitlines()]
+    recs = [json.loads(line) for line in (dataset_dir / 'debug.jsonl').read_text().splitlines()]
     assert not recs[0].get('discarded_boxes')
 
 
@@ -390,7 +399,7 @@ def test_split_trajectories_on_detection_gap(tmp_path):
         ap.run(cfg)
 
     debug_path = tmp_path / 'dataset' / 'debug.jsonl'
-    records = [json.loads(l) for l in debug_path.read_text().splitlines()]
+    records = [json.loads(line) for line in debug_path.read_text().splitlines()]
     track_ids = {b['track_id'] for r in records for b in r['labels']}
     assert track_ids == {1, 2}
     track1_frames = [r['frame_idx'] for r in records if r['labels'][0]['track_id'] == 1]
@@ -431,7 +440,7 @@ def test_first_detection_starts_trajectory_segment(tmp_path):
         ap.run(cfg)
 
     debug_path = tmp_path / 'dataset' / 'debug.jsonl'
-    records = [json.loads(l) for l in debug_path.read_text().splitlines()]
+    records = [json.loads(line) for line in debug_path.read_text().splitlines()]
     
     # Should have at least one record with a track_id (trajectory started)
     assert any('labels' in r and r['labels'] and 'track_id' in r['labels'][0] for r in records)
@@ -618,7 +627,7 @@ def test_first_segment_starts_from_first_detection_not_video_beginning(tmp_path)
         ap.run(cfg)
 
     debug_path = tmp_path / 'dataset' / 'debug.jsonl'
-    records = [json.loads(l) for l in debug_path.read_text().splitlines()]
+    records = [json.loads(line) for line in debug_path.read_text().splitlines()]
     
     # Get all records with track_id 1 (first segment)
     track1_records = [r for r in records if 'labels' in r and r['labels'] and r['labels'][0].get('track_id') == 1]

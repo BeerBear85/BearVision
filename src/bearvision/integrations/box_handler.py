@@ -4,7 +4,7 @@ import os
 import base64
 import json
 from pathlib import Path
-from typing import Optional, TYPE_CHECKING
+from typing import Any, Optional, TYPE_CHECKING
 import logging
 from configparser import ConfigParser
 import importlib
@@ -29,23 +29,16 @@ class BoxHandler:
         creating the object.
     """
 
-    def __init__(self, config: Optional[dict] = None):
+    def __init__(self, config: dict[str, Any] | ConfigParser):
         """
         Purpose:
             Initialize the handler with Box configuration.
         Inputs:
-            config (Optional[dict]): Mapping or ``ConfigParser`` with a
-                ``BOX`` section. When omitted, configuration is loaded
-                via :class:`ConfigurationHandler`.
+            config (dict | ConfigParser): Validated storage configuration with
+                a ``BOX`` section.
         Outputs:
             None
         """
-        if config is None:
-            # Compatibility for the legacy GUI. Production always supplies a
-            # validated BearVision 3 storage configuration.
-            from ConfigurationHandler import ConfigurationHandler
-
-            config = ConfigurationHandler.get_configuration()
         self.config = config
         self.client: Optional["Client"] = None
         self.root_id: Optional[str] = None

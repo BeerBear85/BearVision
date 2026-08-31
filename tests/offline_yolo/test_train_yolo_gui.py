@@ -213,6 +213,8 @@ class TestTrainYoloGUI:
     def test_apply_config(self, gui):
         """Test applying configuration to GUI elements."""
         config = {
+            "config_schema_version": "2.0",
+            "config_kind": "bearvision-training",
             "data_dir": "/new/test/path",
             "model": "yolov8s.pt",
             "epochs": 200,
@@ -237,6 +239,8 @@ class TestTrainYoloGUI:
     def test_load_config_if_exists_file_present(self, gui):
         """Test loading config when file exists."""
         config_data = {
+            "config_schema_version": "2.0",
+            "config_kind": "bearvision-training",
             "model": "yolov8m.pt",
             "epochs": 75,
             "batch": 24
@@ -270,6 +274,8 @@ class TestTrainYoloGUI:
     def test_load_config_dialog_success(self, gui):
         """Test successful config loading via dialog."""
         config_data = {
+            "config_schema_version": "2.0",
+            "config_kind": "bearvision-training",
             "model": "yolov8l.pt",
             "epochs": 150
         }

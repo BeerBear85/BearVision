@@ -1,22 +1,18 @@
 """Tests for trajectory gap detection and generation during video processing."""
 
-import json
 import sys
 import tempfile
 from pathlib import Path
 from unittest import mock
-from unittest.mock import Mock
 
 import cv2
 import numpy as np
-import pytest
 
 from tests.stubs import ultralytics  # noqa: F401
 
 MODULE_PATH = Path(__file__).resolve().parents[2] / 'pretraining' / 'annotation'
 sys.path.append(str(MODULE_PATH))
-import annotation_pipeline as ap
-import trajectory_handler as th
+import annotation_pipeline as ap  # noqa: E402
 
 
 def create_test_video_with_gaps(path, frame_segments, fps=30, size=(64, 64)):

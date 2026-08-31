@@ -3,7 +3,6 @@
 from pathlib import Path
 from typing import Iterator, List, Dict, Any
 import cv2
-import sys
 import logging
 from ultralytics import YOLO
 
@@ -13,12 +12,9 @@ from annotation_config import SamplingConfig, QualityConfig, YoloConfig
 # Import status tracking
 from status import track
 
-# Import DnnHandler for optional ONNX inference
-MODULE_DIR = Path(__file__).resolve().parents[2] / "code" / "modules"
-if str(MODULE_DIR) not in sys.path:
-    sys.path.append(str(MODULE_DIR))
+# Reuse the active ONNX detector without importing the legacy application.
 try:
-    from DnnHandler import DnnHandler
+    from bearvision.integrations.opencv_dnn import DnnHandler
 except Exception:  # pragma: no cover - DnnHandler might not be available
     DnnHandler = None
 

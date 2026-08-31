@@ -15,8 +15,8 @@ from pathlib import Path
 import pytest
 import json
 
-# Add code/modules to path
-MODULE_DIR = Path(__file__).resolve().parents[2] / 'code' / 'modules'
+# The archived test exercises only the archived implementation.
+MODULE_DIR = Path(__file__).resolve().parents[1] / 'modules'
 if str(MODULE_DIR) not in sys.path:
     sys.path.insert(0, str(MODULE_DIR))
 
@@ -26,7 +26,7 @@ from PostProcessingPipeline import PostProcessingPipeline
 
 # Test video path (same as trajectory regression tests)
 TEST_VIDEO = (
-    Path(__file__).resolve().parents[2]
+    Path(__file__).resolve().parents[3]
     / 'tests'
     / 'end2end'
     / 'input_video'

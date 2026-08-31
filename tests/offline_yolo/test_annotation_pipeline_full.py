@@ -2,7 +2,6 @@ import sys
 from pathlib import Path
 from unittest import mock
 
-import numpy as np
 import yaml
 import shutil
 
@@ -10,13 +9,15 @@ from tests.stubs import ultralytics  # noqa: F401
 
 MODULE_PATH = Path(__file__).resolve().parents[2] / 'pretraining' / 'annotation'
 sys.path.append(str(MODULE_PATH))
-import annotation_pipeline as ap
+import annotation_pipeline as ap  # noqa: E402
 
 
 def test_pipeline_full(tmp_path):
     cfg_path = tmp_path / 'cfg.yaml'
     dataset_dir = tmp_path / 'dataset'
     cfg = {
+        'config_schema_version': '2.0',
+        'config_kind': 'bearvision-annotation',
         'videos': ['tests/data/TestMovie1.mp4'],
         'sampling': {'fps': 3.0},
         'quality': {'blur': 0.0, 'luma_min': 0, 'luma_max': 255},

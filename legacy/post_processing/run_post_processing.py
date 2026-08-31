@@ -27,8 +27,8 @@ import logging
 import sys
 from pathlib import Path
 
-# Add code/modules to Python path
-MODULE_DIR = Path(__file__).resolve().parent / 'code' / 'modules'
+# Keep the unsupported legacy implementation self-contained.
+MODULE_DIR = Path(__file__).resolve().parent / 'modules'
 if str(MODULE_DIR) not in sys.path:
     sys.path.insert(0, str(MODULE_DIR))
 

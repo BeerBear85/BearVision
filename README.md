@@ -130,21 +130,33 @@ Override them with `BEARVISION_FFMPEG` and `BEARVISION_FFPROBE` if needed.
 Real operation additionally requires a supported GoPro, BLE hardware, valid Box
 credentials and a populated server user registry.
 
-## Training, annotation and post-processing
+## Offline YOLO fine-tuning and annotation
 
-These remain part of version 3.0, but are separate workflows from the edge
-runtime:
+The `pretraining/` workspace is retained exclusively for preparing datasets,
+annotating footage and fine-tuning YOLO offline. It is not imported or executed
+by the Edge or server runtimes:
 
 ```bash
 uv sync --extra training --extra gui
 uv run python pretraining/annotation/annotation_gui_pyqt.py
-uv run python run_train_gui.py
-uv run python run_post_processing.py INPUT.mp4 OUTPUT.json
-uv run python post_processing_gui.py
+uv run python pretraining/run_training_gui.py
 ```
 
-Their versioned configuration files live in `config/`. Test videos remain under
-`test/` and `tests/data/` and are stored using Git LFS.
+Its configuration lives in `config/annotation-example.yaml`. Offline workflow
+tests live in `tests/offline_yolo/`. Test videos remain under `test/` and
+`tests/data/` and are stored using Git LFS.
+
+## Legacy code
+
+Unsupported pre-3.0 post-processing tools are preserved under
+`legacy/post_processing/` for reference only. They are not installed, imported
+by the active package, collected by the default test suite or covered by CI.
+The supported virtual-cameraman implementation lives in
+`src/bearvision/processing/virtual_cameraman.py`.
+
+The previous Edge application, its modules and old hardware/unit tests are
+similarly preserved under `legacy/edge_v2/`. Checked-in ONNX files remain under
+`code/dnn_models/` as active model assets, not executable legacy code.
 
 ## Specifications
 

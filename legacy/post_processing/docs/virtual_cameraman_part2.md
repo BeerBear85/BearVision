@@ -1,4 +1,6 @@
-# Virtual Cameraman - Part 2: Cropping, Rendering, Config, and CI Test
+# Legacy Virtual Cameraman - Part 2: Cropping, Rendering, Config, and CI Test
+
+> Unsupported pre-3.0 documentation. Paths and commands below are historical.
 
 ## Overview
 

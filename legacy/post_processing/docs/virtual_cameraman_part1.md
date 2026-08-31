@@ -1,4 +1,6 @@
-# Virtual Cameraman - Part 1: Trajectory, Fixed Boxes, and Metadata
+# Legacy Virtual Cameraman - Part 1: Trajectory, Fixed Boxes, and Metadata
+
+> Unsupported pre-3.0 documentation. Paths and commands below are historical.
 
 ## Overview
 

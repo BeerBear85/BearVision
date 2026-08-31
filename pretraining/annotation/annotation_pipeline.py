@@ -2,8 +2,6 @@
 
 import json
 import argparse
-import sys
-from pathlib import Path
 from typing import List, Dict, Any, Callable
 import cv2
 import numpy as np
@@ -39,12 +37,9 @@ from exporters import DatasetExporter, CvatExporter
 from filters import filter_small_person_boxes
 from logging_setup import setup_logging
 
-# Import DnnHandler for testing compatibility
-MODULE_DIR = Path(__file__).resolve().parents[2] / "code" / "modules"
-if str(MODULE_DIR) not in sys.path:
-    sys.path.append(str(MODULE_DIR))
+# Reuse the active ONNX detector without importing the legacy application.
 try:
-    from DnnHandler import DnnHandler
+    from bearvision.integrations.opencv_dnn import DnnHandler
 except Exception:  # pragma: no cover - DnnHandler might not be available
     DnnHandler = None
 

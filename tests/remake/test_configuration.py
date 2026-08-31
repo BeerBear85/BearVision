@@ -7,7 +7,6 @@ import yaml
 from bearvision.config import load_edge_config, load_server_config
 from bearvision.config.models import AssignmentConfig
 from bearvision.config.migrate import add_version_header, migrate_edge_data, write_yaml
-from ConfigurationHandler import ConfigurationHandler
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -50,15 +49,6 @@ def test_all_active_configs_start_with_independent_version_header() -> None:
         lines = (REPO_ROOT / "config" / name).read_text(encoding="utf-8").splitlines()
         assert lines[0] == f'config_schema_version: "{version}"'
         assert lines[1].startswith("config_kind: bearvision-")
-
-
-def test_legacy_configuration_consumer_reads_versioned_edge_config(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.chdir(tmp_path)
-    translated = ConfigurationHandler.read_config_file(REPO_ROOT / "config" / "edge.yaml")
-    assert translated.get("EDGE_APPLICATION", "yolo_model") == "yolov8n"
-    assert translated.get("BOX", "root_folder") == "bearvision_files"
 
 
 def test_missing_or_unsupported_config_version_is_rejected(tmp_path: Path) -> None:
