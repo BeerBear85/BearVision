@@ -7,7 +7,7 @@
 - Proxy the real GoPro preview through Edge Control and add authentication before remote network exposure.
 - Verify model and test-video redistribution rights before a public release.
 - Select the BearVision source-code licence before distribution.
-- Add explicit CI jobs for training, post-processing GUI and physical hardware.
+- Add opt-in verification for credentialed Box and physical hardware.
 
 ## Architecture review follow-up (2026-08-26)
 
