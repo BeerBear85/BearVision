@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
+from contextlib import suppress
 from dataclasses import dataclass
 from datetime import timedelta
 from enum import StrEnum
@@ -26,6 +27,7 @@ from bearvision.ports import (
     ClipProcessor,
     Clock,
     ComponentError,
+    ComponentUnavailable,
     Detector,
     FrameSource,
     InvalidComponentData,
@@ -151,47 +153,105 @@ class BearVisionOrchestrator:
         self._clip_lock = asyncio.Lock()
         self._results: dict[str, OrchestrationResult] = {}
         self._completed_clips: list[OrchestrationResult] = []
+        self._camera_connected = False
+        self._preview_started = False
+        self._frame_source_open = False
 
     async def start(self) -> None:
         await self._retry_component("connect camera", self.camera.connect, [])
+        self._camera_connected = True
         if self.preview_enabled:
             preview_source = await self._retry_component(
                 "start camera preview", self.camera.start_preview, []
             )
+            self._preview_started = True
             if self.frame_source is not None:
                 frame_source = self.frame_source
                 await self._retry_component(
                     "open preview frame source", lambda: frame_source.open(preview_source), []
                 )
+                self._frame_source_open = True
         self._tag_task = asyncio.create_task(self.consume_tag_observations())
         self.state = EdgeLifecycleState.MONITORING
 
     async def run(self) -> None:
         if self.frame_source is None:
             raise RuntimeError("run() requires a configured frame source")
-        await self.start()
         try:
-            async for frame in self.frame_source.frames():
+            await self.start()
+            frames = self.frame_source.frames().__aiter__()
+            while True:
+                try:
+                    frame = await self._next_frame_or_tag_failure(frames)
+                except StopAsyncIteration:
+                    break
                 await self.process_frame(frame)
         finally:
             await self.stop()
 
     async def stop(self) -> None:
-        if self._active_clip is not None:
-            await self._active_clip
-        if self._tag_task is not None:
-            self._tag_task.cancel()
+        errors: list[BaseException] = []
+
+        async def attempt(name: str, operation: Callable[[], Awaitable[Any]]) -> None:
             try:
-                await self._tag_task
+                await operation()
+            except BaseException as exc:
+                logger.warning("%s failed during Edge shutdown", name, exc_info=True)
+                errors.append(exc)
+
+        if self._active_clip is not None:
+            active_clip = self._active_clip
+            await attempt("active clip completion", lambda: active_clip)
+        if self._tag_task is not None:
+            tag_task = self._tag_task
+            self._tag_task = None
+            tag_task.cancel()
+            try:
+                await tag_task
             except asyncio.CancelledError:
                 pass
-            self._tag_task = None
-        if self.frame_source is not None:
-            await self.frame_source.close()
-        if self.preview_enabled:
-            await self.camera.stop_preview()
-        await self.camera.disconnect()
+            except BaseException as exc:
+                logger.warning(
+                    "BearTag observation task failed during Edge shutdown",
+                    exc_info=True,
+                )
+                errors.append(exc)
+        if self.frame_source is not None and self._frame_source_open:
+            frame_source = self.frame_source
+            self._frame_source_open = False
+            await attempt("preview frame source", frame_source.close)
+        if self._preview_started:
+            self._preview_started = False
+            await attempt("camera preview", self.camera.stop_preview)
+        if self._camera_connected:
+            self._camera_connected = False
+            await attempt("camera connection", self.camera.disconnect)
         self.state = EdgeLifecycleState.STOPPED
+        if errors:
+            raise errors[0]
+
+    async def _next_frame_or_tag_failure(
+        self, frames: AsyncIterator[VideoFrame]
+    ) -> VideoFrame:
+        frame_task: asyncio.Future[VideoFrame] = asyncio.ensure_future(anext(frames))
+        tag_task = self._tag_task
+        if tag_task is None:
+            return await frame_task
+        done, _ = await asyncio.wait(
+            (frame_task, tag_task), return_when=asyncio.FIRST_COMPLETED
+        )
+        if tag_task in done:
+            self._tag_task = None
+            frame_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await frame_task
+            if tag_task.cancelled():
+                raise ComponentUnavailable("BearTag observation stream was cancelled")
+            failure = tag_task.exception()
+            if failure is not None:
+                raise failure
+            raise ComponentUnavailable("BearTag observation stream ended unexpectedly")
+        return await frame_task
 
     def add_tag_observation(self, observation: TagObservation) -> None:
         self.observations.append(observation)

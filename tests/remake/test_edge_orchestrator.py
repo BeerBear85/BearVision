@@ -1,4 +1,5 @@
 import asyncio
+from contextlib import suppress
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 
@@ -523,5 +524,147 @@ def test_feature_flags_suppress_unwanted_work() -> None:
         assert not camera.previewing
         assert await disabled.process_frame(VideoFrame("ignored", 0, 10, 10, b"x")) is None
         await disabled.stop()
+
+    asyncio.run(exercise())
+
+
+def test_run_cleans_up_partially_started_hardware() -> None:
+    async def exercise() -> None:
+        class FailingFrameSource:
+            async def open(self, preview_source: str) -> None:
+                raise ComponentUnavailable(f"cannot open {preview_source}")
+
+            async def close(self) -> None:
+                raise AssertionError("a frame source that never opened must not be closed")
+
+            async def frames(self):
+                if False:
+                    yield VideoFrame("unused", 0, 1, 1, b"")
+
+        clock = VirtualClock(NOW)
+        camera = SimulatedCamera(clock)
+        orchestrator = BearVisionOrchestrator(
+            clock=clock,
+            camera=camera,
+            scanner=SimulatedTagScanner(()),
+            detector=SimulatedDetector({}),
+            job_queue=InMemoryJobQueue(),
+            edge_device_id="edge-test",
+            recording_duration_s=5,
+            frame_source=FailingFrameSource(),
+        )
+
+        try:
+            await orchestrator.run()
+        except ComponentUnavailable:
+            pass
+        else:
+            raise AssertionError("preview startup failure was not propagated")
+
+        assert not camera.connected
+        assert not camera.previewing
+        assert orchestrator.state is EdgeLifecycleState.STOPPED
+
+    asyncio.run(exercise())
+
+
+def test_run_stops_immediately_when_bear_tag_stream_fails() -> None:
+    async def exercise() -> None:
+        class BlockingFrameSource:
+            def __init__(self) -> None:
+                self.opened = False
+                self.closed = False
+
+            async def open(self, preview_source: str) -> None:
+                self.opened = True
+
+            async def close(self) -> None:
+                self.closed = True
+
+            async def frames(self):
+                await asyncio.Event().wait()
+                if False:
+                    yield VideoFrame("unused", 0, 1, 1, b"")
+
+        class FailingScanner:
+            async def observations(self):
+                if False:
+                    yield observation("unused", 0, active=False, rssi_dbm=-100)
+                raise ComponentUnavailable("BLE adapter stopped")
+
+        clock = VirtualClock(NOW)
+        camera = SimulatedCamera(clock)
+        frame_source = BlockingFrameSource()
+        orchestrator = BearVisionOrchestrator(
+            clock=clock,
+            camera=camera,
+            scanner=FailingScanner(),
+            detector=SimulatedDetector({}),
+            job_queue=InMemoryJobQueue(),
+            edge_device_id="edge-test",
+            recording_duration_s=5,
+            frame_source=frame_source,
+        )
+
+        running = asyncio.create_task(orchestrator.run())
+        try:
+            try:
+                await asyncio.wait_for(asyncio.shield(running), timeout=0.1)
+            except ComponentUnavailable as exc:
+                assert "BLE adapter stopped" in str(exc)
+            except TimeoutError:
+                raise AssertionError("BLE failure was not supervised") from None
+            else:
+                raise AssertionError("BLE failure was not propagated")
+        finally:
+            if not running.done():
+                running.cancel()
+                with suppress(asyncio.CancelledError):
+                    await running
+
+        assert frame_source.closed
+        assert not camera.connected
+        assert orchestrator.state is EdgeLifecycleState.STOPPED
+
+    asyncio.run(exercise())
+
+
+def test_stop_attempts_every_cleanup_after_one_cleanup_fails() -> None:
+    async def exercise() -> None:
+        class FailingCloseFrameSource:
+            async def open(self, preview_source: str) -> None:
+                return None
+
+            async def close(self) -> None:
+                raise RuntimeError("frame cleanup failed")
+
+            async def frames(self):
+                if False:
+                    yield VideoFrame("unused", 0, 1, 1, b"")
+
+        clock = VirtualClock(NOW)
+        camera = SimulatedCamera(clock)
+        orchestrator = BearVisionOrchestrator(
+            clock=clock,
+            camera=camera,
+            scanner=SimulatedTagScanner(()),
+            detector=SimulatedDetector({}),
+            job_queue=InMemoryJobQueue(),
+            edge_device_id="edge-test",
+            recording_duration_s=5,
+            frame_source=FailingCloseFrameSource(),
+        )
+        await orchestrator.start()
+
+        try:
+            await orchestrator.stop()
+        except RuntimeError as exc:
+            assert "frame cleanup failed" in str(exc)
+        else:
+            raise AssertionError("cleanup failure was not propagated")
+
+        assert not camera.connected
+        assert not camera.previewing
+        assert orchestrator.state is EdgeLifecycleState.STOPPED
 
     asyncio.run(exercise())
