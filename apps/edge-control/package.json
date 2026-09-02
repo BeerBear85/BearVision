@@ -8,14 +8,17 @@
     "build": "vite build",
     "dev": "vite --host 127.0.0.1",
     "serve": "node server/server.mjs",
-    "test": "node --test server/*.test.mjs"
+    "test": "node --test server/*.test.mjs",
+    "test:e2e": "pnpm build && playwright test"
   },
   "dependencies": {
     "@vitejs/plugin-react": "latest",
-    "vite": "latest",
     "react": "latest",
     "react-dom": "latest",
+    "vite": "latest",
     "yaml": "latest"
   },
-  "devDependencies": {}
+  "devDependencies": {
+    "@playwright/test": "^1.62.1"
+  }
 }

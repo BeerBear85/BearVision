@@ -264,7 +264,16 @@ function App() {
 
   function updateSnapshot(next) {
     if (!next) return;
-    setState((current) => ({ ...current, ...next }));
+    setState((current) => {
+      if (
+        Number.isFinite(next.sequence)
+        && Number.isFinite(current.sequence)
+        && next.sequence < current.sequence
+      ) {
+        return current;
+      }
+      return { ...current, ...next };
+    });
   }
 
   useEffect(() => {

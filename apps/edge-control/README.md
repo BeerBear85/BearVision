@@ -38,3 +38,15 @@ the Python runtime publishes four JPEG snapshots per second through the Node ser
 Automatic component retries are disabled. Failures remain visible until Python
 reports resolution or the operator restarts the exited runtime. Edge Control has
 no authentication; expose port 4310 only on a trusted local network.
+
+## Tests
+
+```powershell
+corepack pnpm test
+corepack pnpm exec playwright install chromium
+corepack pnpm test:e2e
+```
+
+The Playwright suite exercises the built application through its public HTTP and
+SSE interfaces. On Windows it falls back to an installed Chrome when the bundled
+Playwright Chromium is unavailable.

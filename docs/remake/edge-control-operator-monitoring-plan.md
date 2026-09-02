@@ -1,6 +1,7 @@
 # Edge Control operator monitoring and recovery plan
 
-Status: MVP implemented on 2026-09-02; remaining hardening is listed below.
+Status: MVP and browser interaction coverage implemented on 2026-09-02;
+remaining hardening is listed below.
 
 ## Problem
 
@@ -261,15 +262,21 @@ behavioural coverage.
 
 ## Remaining hardening
 
-- Add automated browser interaction coverage; the MVP was manually verified at
-  desktop and 320 px widths, while repository tests still include source-level
-  UI assertions.
 - Carry run and occurrence metadata directly in the Python lifecycle envelope;
   the MVP currently attaches `run_id` and `emitted_at` at the authoritative Node
   run-state boundary.
 - Decide a deployment-specific cleanup policy for force-stopped partial files.
   The API currently reports whether partial artefacts were retained and avoids
   deleting operator evidence automatically.
+
+## Completed hardening
+
+- Added Playwright coverage for the complete simulation lifecycle, critical
+  readiness blocking, explicit warning acknowledgement, persistent failures,
+  safe retry, restart, delayed force-stop confirmation, refresh restoration,
+  keyboard operation and the 320 px layout.
+- Prevented stale HTTP command responses from replacing newer authoritative SSE
+  snapshots by comparing control-event sequence numbers in the browser.
 
 ## Delivery slices and dependencies
 
