@@ -18,8 +18,15 @@ The current version supports:
 - simulation/hardware mode selection while idle;
 - discovery of versioned YAML scenarios under `specs/scenarios`;
 - wall-clock replay of behavioural scenario traces;
-- live state and event log over Server-Sent Events;
-- starting and stopping the Python runtime as a child process.
+- a live pipeline, stage elapsed time and persistent failure cards;
+- Python-owned hardware readiness with critical blocking checks and explicit
+  warning acknowledgements;
+- real, bounded GoPro preview-frame and BLE scanner handshakes before hardware
+  start, with guaranteed camera cleanup and no recording or media mutation;
+- durable active/recent run state restored after refresh or server restart;
+- replayable live state over Server-Sent Events without per-event polling;
+- guarded graceful stop, force-stop, whole-runtime restart and safe publication
+  retry;
 - live GoPro hardware preview as throttled JPEG snapshots;
 - recorded scenario video, extracted clips, processed upload clips and tracking
   evidence when the selected scenario produces them;
@@ -27,3 +34,7 @@ The current version supports:
 
 The hardware preview is intentionally operator-grade rather than full frame rate:
 the Python runtime publishes four JPEG snapshots per second through the Node server.
+
+Automatic component retries are disabled. Failures remain visible until Python
+reports resolution or the operator restarts the exited runtime. Edge Control has
+no authentication; expose port 4310 only on a trusted local network.

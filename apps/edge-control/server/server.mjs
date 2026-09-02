@@ -3,32 +3,17 @@ import { createReadStream, existsSync, readFileSync, readdirSync, rmSync, statSy
 import { createServer } from "node:http";
 import { dirname, extname, join, normalize, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { createInterface } from "node:readline";
 import { parse as parseYaml } from "yaml";
-import { createRuntimeLogLevelClassifier } from "../src/log-level.js";
-import { ControlState } from "./control-state.mjs";
-import { assertGoProUsbConnected } from "./hardware-preflight.mjs";
-import { parseByteRange, safeLeafPath } from "./media-files.mjs";
-import { parseRuntimeEventLine } from "./runtime-events.mjs";
+
+import { EventStream } from "./event-stream.mjs";
+import { safeLeafPath, parseByteRange } from "./media-files.mjs";
+import { ControlError, ReadinessService } from "./readiness-service.mjs";
+import { RunState } from "./run-state.mjs";
+import { RuntimeSupervisor } from "./runtime-supervisor.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const appRoot = resolve(here, "..");
-const repoRoot = resolve(appRoot, "..", "..");
-const distRoot = join(appRoot, "dist");
-const scenarioRoot = join(repoRoot, "specs", "scenarios");
-const configPath = process.env.BEARVISION_CONFIG_PATH
-  ?? join(repoRoot, "config", "edge.yaml");
-const captureRoot = process.env.BEARVISION_CAPTURE_ROOT
-  ?? join(repoRoot, "temp", "captures");
-const scratchRoot = process.env.BEARVISION_SCRATCH_ROOT
-  ?? join(repoRoot, "temp", "scratch");
-const localQueueRoot = process.env.BEARVISION_LOCAL_QUEUE_ROOT
-  ?? join(repoRoot, "temp", "simulation-queue");
-const previewFramePath = join(scratchRoot, "live-preview.jpg");
-const port = Number(process.env.BEARVISION_CONTROL_PORT ?? 4310);
-const state = new ControlState();
-const clients = new Set();
-let child = null;
+const defaultAppRoot = resolve(here, "..");
+const defaultRepoRoot = resolve(defaultAppRoot, "..", "..");
 
 const mimeTypes = {
   ".css": "text/css; charset=utf-8",
@@ -41,82 +26,42 @@ const mimeTypes = {
   ".svg": "image/svg+xml",
 };
 
-function pythonCommand() {
-  if (process.env.BEARVISION_PYTHON) return process.env.BEARVISION_PYTHON;
-  const candidates = process.platform === "win32"
-    ? [join(repoRoot, ".venv", "Scripts", "python.exe")]
-    : [join(repoRoot, ".venv", "bin", "python")];
-  return candidates.find(existsSync) ?? "python";
-}
-
 function writeJson(response, status, body) {
   response.writeHead(status, { "content-type": "application/json; charset=utf-8" });
   response.end(JSON.stringify(body));
+}
+
+function writeError(response, error) {
+  const status = Number.isInteger(error.status) ? error.status : 400;
+  writeJson(response, status, {
+    code: error.code ?? "INVALID_REQUEST",
+    error: error.message,
+    corrective_action: error.correctiveAction ?? null,
+    details: error.details ?? null,
+  });
 }
 
 async function readJson(request) {
   let body = "";
   for await (const chunk of request) {
     body += chunk;
-    if (body.length > 64 * 1024) throw new Error("request body is too large");
+    if (body.length > 64 * 1024) {
+      throw new ControlError("REQUEST_TOO_LARGE", "Request body is too large.", { status: 413 });
+    }
   }
-  return body ? JSON.parse(body) : {};
-}
-
-function publish(kind, payload = {}, at_s = null) {
-  const event = {
-    control_event_version: "1.0",
-    sequence: state.sequence + 1,
-    emitted_at: new Date().toISOString(),
-    at_s,
-    kind,
-    payload,
-  };
-  state.record(event);
-  const message = `data: ${JSON.stringify(state.lastEvent)}\n\n`;
-  for (const response of clients) response.write(message);
-}
-
-function scenarios() {
-  return readdirSync(scenarioRoot)
-    .filter((name) => name.endsWith(".yaml") && statSync(join(scenarioRoot, name)).isFile())
-    .sort();
-}
-
-function safeScenario(name) {
-  if (!scenarios().includes(name)) throw new Error("unknown scenario");
-  return join(scenarioRoot, name);
-}
-
-function scenarioDetails(name) {
-  const document = parseYaml(readFileSync(safeScenario(name), "utf8"));
-  const videoPath = document.video?.path ?? null;
-  return {
-    name,
-    scenario_schema_version: document.scenario_schema_version,
-    components: document.components ?? {
-      frames: "synthetic",
-      detector: "declared",
-      bear_tag: "synthetic",
-      camera: "simulated",
-      storage: "memory",
-    },
-    video_url: videoPath ? `/api/scenarios/${encodeURIComponent(name)}/video` : null,
-    generated_from: document.generated_from ?? null,
-  };
-}
-
-function scenarioVideo(name) {
-  const document = parseYaml(readFileSync(safeScenario(name), "utf8"));
-  if (!document.video?.path) throw new Error("scenario has no video");
-  const candidate = resolve(repoRoot, document.video.path);
-  if (!candidate.startsWith(`${repoRoot}\\`) && !candidate.startsWith(`${repoRoot}/`)) {
-    throw new Error("scenario video must stay inside the repository");
+  try {
+    return body ? JSON.parse(body) : {};
+  } catch {
+    throw new ControlError("INVALID_JSON", "Request body must be valid JSON.");
   }
-  if (!existsSync(candidate) || !statSync(candidate).isFile()) {
-    throw new Error("scenario video does not exist");
-  }
-  return candidate;
+}
+
+function pythonCommand(repoRoot) {
+  if (process.env.BEARVISION_PYTHON) return process.env.BEARVISION_PYTHON;
+  const candidates = process.platform === "win32"
+    ? [join(repoRoot, ".venv", "Scripts", "python.exe")]
+    : [join(repoRoot, ".venv", "bin", "python")];
+  return candidates.find(existsSync) ?? "python";
 }
 
 function serveMedia(request, response, filePath) {
@@ -139,157 +84,307 @@ function serveMedia(request, response, filePath) {
     response.end();
     return;
   }
-  const { start, end } = parsed;
   response.writeHead(206, {
     "accept-ranges": "bytes",
-    "content-length": end - start + 1,
-    "content-range": `bytes ${start}-${end}/${size}`,
+    "content-length": parsed.end - parsed.start + 1,
+    "content-range": `bytes ${parsed.start}-${parsed.end}/${size}`,
     "content-type": mimeTypes[extname(filePath)] ?? "application/octet-stream",
   });
-  createReadStream(filePath, { start, end }).pipe(response);
+  createReadStream(filePath, parsed).pipe(response);
 }
 
-function attachOutput(stream, source) {
-  const lines = createInterface({ input: stream });
-  const classifyLogLevel = createRuntimeLogLevelClassifier();
-  lines.on("line", (line) => {
-    if (!line.trim()) return;
-    try {
-      const parsed = parseRuntimeEventLine(line);
-      publish(parsed.kind, parsed.payload, parsed.at_s);
-    } catch {
-      publish("runtime_log", { source, level: classifyLogLevel(line), message: line });
-    }
-  });
-}
-
-function startRuntime(mode, scenarioName = null) {
-  if (mode === "hardware") rmSync(previewFramePath, { force: true });
-  state.start({ mode, scenario: scenarioName });
-  const args = mode === "simulation"
-    ? [
-      "-m", "bearvision.control", "simulate", safeScenario(scenarioName),
-      "--realtime", "--local-queue-root", localQueueRoot, "--config", configPath,
-    ]
-    : [
-      "-m", "bearvision.control", "hardware", "--config", configPath,
-      "--capture-dir", captureRoot, "--scratch-dir", scratchRoot,
-    ];
-  child = spawn(pythonCommand(), args, { cwd: repoRoot, env: process.env, stdio: ["ignore", "pipe", "pipe"] });
-  attachOutput(child.stdout, "stdout");
-  attachOutput(child.stderr, "stderr");
-  publish("runtime_started", { mode, scenario: scenarioName, pid: child.pid });
-  child.on("error", (error) => publish("runtime_failed", { message: error.message }));
-  child.on("exit", (code, signal) => {
-    publish(code === 0 ? "runtime_completed" : "runtime_failed", { code, signal });
-    state.stop(code === 0 ? "completed" : "failed");
-    const stopped = `data: ${JSON.stringify(state.lastEvent)}\n\n`;
-    for (const response of clients) response.write(stopped);
-    child = null;
-  });
-}
-
-function stopRuntime() {
-  if (!child) throw new Error("no runtime is active");
-  publish("stop_requested", { pid: child.pid });
-  child.kill("SIGTERM");
-}
-
-function serveStatic(request, response) {
-  const pathname = new URL(request.url, "http://localhost").pathname;
-  const requested = pathname === "/" ? "index.html" : pathname.slice(1);
-  const candidate = resolve(distRoot, normalize(requested));
-  const filePath = candidate.startsWith(distRoot) && existsSync(candidate) && statSync(candidate).isFile()
-    ? candidate
-    : join(distRoot, "index.html");
-  if (!existsSync(filePath)) {
-    writeJson(response, 503, { error: "GUI is not built; run pnpm build" });
-    return;
-  }
-  response.writeHead(200, { "content-type": mimeTypes[extname(filePath)] ?? "application/octet-stream" });
-  createReadStream(filePath).pipe(response);
-}
-
-const server = createServer(async (request, response) => {
-  const url = new URL(request.url, "http://localhost");
-  try {
-    if (request.method === "GET" && url.pathname === "/api/health") {
-      writeJson(response, 200, { status: "ok", ...state.snapshot() });
-    } else if (request.method === "GET" && url.pathname === "/api/scenarios") {
-      writeJson(response, 200, {
-        scenario_catalog_version: "1.0",
-        scenarios: scenarios().map(scenarioDetails),
-      });
-    } else if (
-      request.method === "GET"
-      && /^\/api\/scenarios\/[^/]+\/video$/.test(url.pathname)
-    ) {
-      const name = decodeURIComponent(url.pathname.split("/")[3]);
-      serveMedia(request, response, scenarioVideo(name));
-    } else if (
-      request.method === "GET"
-      && /^\/api\/captures\/[^/]+$/.test(url.pathname)
-    ) {
-      const name = decodeURIComponent(url.pathname.split("/")[3]);
-      const filePath = safeLeafPath(captureRoot, name);
-      if (!existsSync(filePath) || !statSync(filePath).isFile()) {
-        throw new Error("capture does not exist");
+function runJsonProcess(command, args, { cwd, env = process.env } = {}) {
+  return new Promise((resolvePromise, rejectPromise) => {
+    const child = spawn(command, args, { cwd, env, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk;
+      if (stdout.length > 1024 * 1024) child.kill("SIGTERM");
+    });
+    child.stderr.on("data", (chunk) => { stderr += chunk; });
+    child.once("error", rejectPromise);
+    child.once("exit", () => {
+      try {
+        const line = stdout.trim().split(/\r?\n/).at(-1);
+        if (!line) throw new Error(stderr.trim() || "Python command returned no JSON");
+        resolvePromise(JSON.parse(line));
+      } catch {
+        rejectPromise(new ControlError(
+          "PYTHON_COMMAND_FAILED",
+          "The Python readiness command failed.",
+          { status: 502, correctiveAction: "Review the Python runtime logs.", details: stderr.trim() },
+        ));
       }
-      serveMedia(request, response, filePath);
-    } else if (request.method === "GET" && url.pathname === "/api/preview/frame.jpg") {
-      if (!existsSync(previewFramePath) || !statSync(previewFramePath).isFile()) {
-        writeJson(response, 503, { error: "hardware preview is not ready" });
-      } else {
+    });
+  });
+}
+
+export function createEdgeControlServer(options = {}) {
+  const appRoot = options.appRoot ?? defaultAppRoot;
+  const repoRoot = options.repoRoot ?? defaultRepoRoot;
+  const distRoot = options.distRoot ?? join(appRoot, "dist");
+  const scenarioRoot = options.scenarioRoot ?? join(repoRoot, "specs", "scenarios");
+  const configPath = options.configPath ?? process.env.BEARVISION_CONFIG_PATH
+    ?? join(repoRoot, "config", "edge.yaml");
+  const captureRoot = options.captureRoot ?? process.env.BEARVISION_CAPTURE_ROOT
+    ?? join(repoRoot, "temp", "captures");
+  const scratchRoot = options.scratchRoot ?? process.env.BEARVISION_SCRATCH_ROOT
+    ?? join(repoRoot, "temp", "scratch");
+  const localQueueRoot = options.localQueueRoot ?? process.env.BEARVISION_LOCAL_QUEUE_ROOT
+    ?? join(repoRoot, "temp", "simulation-queue");
+  const previewFramePath = join(scratchRoot, "live-preview.jpg");
+  const stateFile = options.persistState === false
+    ? null
+    : options.stateFile ?? process.env.BEARVISION_CONTROL_STATE_PATH
+      ?? join(scratchRoot, "edge-control", "runs.json");
+  const state = options.state ?? new RunState({ stateFile });
+
+  function scenarioNames() {
+    return readdirSync(scenarioRoot)
+      .filter((name) => name.endsWith(".yaml") && statSync(join(scenarioRoot, name)).isFile())
+      .sort();
+  }
+
+  function safeScenario(name) {
+    if (!scenarioNames().includes(name)) {
+      throw new ControlError("INVALID_REQUEST", "Unknown scenario.", {
+        correctiveAction: "Select a scenario from the current catalog.",
+      });
+    }
+    return join(scenarioRoot, name);
+  }
+
+  function scenarioDetails(name) {
+    const document = parseYaml(readFileSync(safeScenario(name), "utf8"));
+    const videoPath = document.video?.path ?? null;
+    return {
+      name,
+      title: document.title ?? name.replace(/\.yaml$/i, "").replaceAll("-", " "),
+      description: document.description ?? null,
+      duration_s: document.duration_s ?? null,
+      scenario_schema_version: document.scenario_schema_version,
+      components: document.components ?? {
+        frames: "synthetic", detector: "declared", bear_tag: "synthetic",
+        camera: "simulated", storage: "memory",
+      },
+      video_url: videoPath ? `/api/scenarios/${encodeURIComponent(name)}/video` : null,
+      generated_from: document.generated_from ?? null,
+    };
+  }
+
+  function scenarioVideo(name) {
+    const document = parseYaml(readFileSync(safeScenario(name), "utf8"));
+    if (!document.video?.path) throw new ControlError("MEDIA_NOT_FOUND", "Scenario has no video.", { status: 404 });
+    const candidate = resolve(repoRoot, document.video.path);
+    if (!candidate.startsWith(`${repoRoot}\\`) && !candidate.startsWith(`${repoRoot}/`)) {
+      throw new ControlError("INVALID_MEDIA_PATH", "Scenario video must stay inside the repository.");
+    }
+    if (!existsSync(candidate) || !statSync(candidate).isFile()) {
+      throw new ControlError("MEDIA_NOT_FOUND", "Scenario video does not exist.", { status: 404 });
+    }
+    return candidate;
+  }
+
+  const runReadiness = options.runReadiness ?? (() => runJsonProcess(
+    pythonCommand(repoRoot),
+    [
+      "-m", "bearvision.control", "preflight", "--config", configPath,
+      "--capture-dir", captureRoot, "--scratch-dir", scratchRoot,
+    ],
+    { cwd: repoRoot },
+  ));
+  const readiness = options.readiness ?? new ReadinessService({ runCommand: runReadiness });
+  const eventStream = options.eventStream ?? new EventStream({ getSnapshot: () => ({
+    ...state.snapshot(), readiness: readiness.current(),
+  }) });
+  const publishControlEvent = (event) => eventStream.publish({
+    ...event,
+    control_snapshot: { ...state.snapshot(), readiness: readiness.current() },
+  });
+
+  const spawnRuntime = options.spawnRuntime ?? (({ mode, scenario }) => {
+    if (mode === "hardware") rmSync(previewFramePath, { force: true });
+    const args = mode === "simulation"
+      ? [
+        "-m", "bearvision.control", "simulate", safeScenario(scenario),
+        "--realtime", "--local-queue-root", localQueueRoot, "--config", configPath,
+      ]
+      : [
+        "-m", "bearvision.control", "hardware", "--config", configPath,
+        "--capture-dir", captureRoot, "--scratch-dir", scratchRoot,
+      ];
+    return spawn(pythonCommand(repoRoot), args, {
+      cwd: repoRoot,
+      env: process.env,
+      windowsHide: true,
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+  });
+
+  const supervisor = options.supervisor ?? new RuntimeSupervisor({
+    state,
+    spawnRuntime,
+    stopTimeoutMs: Number(process.env.BEARVISION_STOP_TIMEOUT_MS ?? 10_000),
+    validateStart: async ({ mode, scenario, acknowledgedWarnings }) => {
+      if (mode === "simulation") safeScenario(scenario);
+      else await readiness.assertReady({ acknowledgedWarnings });
+    },
+    publish: publishControlEvent,
+  });
+
+  function snapshot() {
+    return { status: "ok", ...state.snapshot(), readiness: readiness.current() };
+  }
+
+  function findRun(runId) {
+    const current = state.snapshot();
+    if (current.active_run?.run_id === runId) return current.active_run;
+    return current.recent_runs.find((run) => run.run_id === runId) ?? null;
+  }
+
+  function serveStatic(response, pathname) {
+    const requested = pathname === "/" ? "index.html" : pathname.slice(1);
+    const candidate = resolve(distRoot, normalize(requested));
+    const filePath = candidate.startsWith(distRoot) && existsSync(candidate) && statSync(candidate).isFile()
+      ? candidate
+      : join(distRoot, "index.html");
+    if (!existsSync(filePath)) {
+      writeJson(response, 503, { code: "GUI_NOT_BUILT", error: "GUI is not built; run pnpm build" });
+      return;
+    }
+    response.writeHead(200, { "content-type": mimeTypes[extname(filePath)] ?? "application/octet-stream" });
+    createReadStream(filePath).pipe(response);
+  }
+
+  const server = createServer(async (request, response) => {
+    const url = new URL(request.url, "http://localhost");
+    try {
+      if (request.method === "GET" && url.pathname === "/api/health") {
+        writeJson(response, 200, snapshot());
+      } else if (request.method === "GET" && url.pathname === "/api/scenarios") {
+        writeJson(response, 200, {
+          scenario_catalog_version: "1.1",
+          scenarios: scenarioNames().map(scenarioDetails),
+        });
+      } else if (request.method === "GET" && url.pathname === "/api/readiness") {
+        writeJson(response, 200, readiness.current() ?? {
+          readiness_schema_version: "1.0", status: "not_checked", blocking: true,
+          warning_ids: [], checks: [],
+        });
+      } else if (request.method === "POST" && url.pathname === "/api/readiness/run") {
+        const report = await readiness.run();
+        publishControlEvent({ kind: "readiness_updated", payload: report });
+        writeJson(response, 200, report);
+      } else if (request.method === "GET" && url.pathname === "/api/runs/current") {
+        writeJson(response, 200, state.snapshot().active_run);
+      } else if (request.method === "GET" && url.pathname === "/api/runs") {
+        const limit = Math.max(1, Math.min(10, Number(url.searchParams.get("limit") ?? 10)));
+        writeJson(response, 200, { runs: state.snapshot().recent_runs.slice(0, limit) });
+      } else if (request.method === "GET" && /^\/api\/runs\/[^/]+$/.test(url.pathname)) {
+        const run = findRun(decodeURIComponent(url.pathname.split("/")[3]));
+        if (!run) throw new ControlError("RUN_NOT_FOUND", "Run was not found.", { status: 404 });
+        writeJson(response, 200, run);
+      } else if (request.method === "POST" && (url.pathname === "/api/runs" || url.pathname === "/api/run")) {
+        const body = await readJson(request);
+        const mode = body.mode ?? state.snapshot().mode;
+        const run = await supervisor.start({
+          mode,
+          scenario: body.scenario ?? null,
+          acknowledgedWarnings: body.acknowledged_warning_ids ?? [],
+        });
+        writeJson(response, 202, { ...snapshot(), active_run: run });
+      } else if (request.method === "POST" && /^\/api\/runs\/[^/]+\/stop$/.test(url.pathname)) {
+        const runId = decodeURIComponent(url.pathname.split("/")[3]);
+        supervisor.stop(runId);
+        writeJson(response, 202, snapshot());
+      } else if (request.method === "POST" && url.pathname === "/api/stop") {
+        const runId = state.snapshot().active_run?.run_id;
+        if (!runId) throw new ControlError("RUN_NOT_ACTIVE", "No runtime is active.", { status: 409 });
+        supervisor.stop(runId);
+        writeJson(response, 202, snapshot());
+      } else if (request.method === "POST" && /^\/api\/runs\/[^/]+\/force-stop$/.test(url.pathname)) {
+        const runId = decodeURIComponent(url.pathname.split("/")[3]);
+        supervisor.forceStop(runId);
+        writeJson(response, 202, snapshot());
+      } else if (request.method === "POST" && /^\/api\/runs\/[^/]+\/restart$/.test(url.pathname)) {
+        const runId = decodeURIComponent(url.pathname.split("/")[3]);
+        await supervisor.restart(runId);
+        writeJson(response, 202, snapshot());
+      } else if (
+        request.method === "POST"
+        && /^\/api\/runs\/[^/]+\/failures\/[^/]+\/retry$/.test(url.pathname)
+      ) {
+        const [, , , runId, , failureId] = url.pathname.split("/");
+        supervisor.retry(decodeURIComponent(runId), decodeURIComponent(failureId));
+        writeJson(response, 202, snapshot());
+      } else if (request.method === "POST" && url.pathname === "/api/mode") {
+        const body = await readJson(request);
+        state.selectMode(body.mode);
+        let report = readiness.current();
+        if (body.mode === "hardware") {
+          report = await readiness.run();
+          publishControlEvent({ kind: "readiness_updated", payload: report });
+        }
+        publishControlEvent({ kind: "mode_selected", payload: { mode: body.mode } });
+        writeJson(response, 200, { ...snapshot(), readiness: report });
+      } else if (request.method === "GET" && url.pathname === "/api/events") {
+        eventStream.connect(request, response);
+      } else if (
+        request.method === "GET"
+        && /^\/api\/scenarios\/[^/]+\/video$/.test(url.pathname)
+      ) {
+        serveMedia(request, response, scenarioVideo(decodeURIComponent(url.pathname.split("/")[3])));
+      } else if (request.method === "GET" && /^\/api\/captures\/[^/]+$/.test(url.pathname)) {
+        const name = decodeURIComponent(url.pathname.split("/")[3]);
+        const filePath = safeLeafPath(captureRoot, name);
+        if (!existsSync(filePath) || !statSync(filePath).isFile()) {
+          throw new ControlError("MEDIA_NOT_FOUND", "Capture does not exist.", { status: 404 });
+        }
+        if (extname(filePath).toLowerCase() === ".json" && !request.headers.range) {
+          response.writeHead(200, { "content-type": "application/json; charset=utf-8" });
+          createReadStream(filePath).pipe(response);
+        } else {
+          serveMedia(request, response, filePath);
+        }
+      } else if (request.method === "GET" && url.pathname === "/api/preview/frame.jpg") {
+        if (!existsSync(previewFramePath) || !statSync(previewFramePath).isFile()) {
+          throw new ControlError("PREVIEW_NOT_READY", "Hardware preview is not ready.", { status: 503 });
+        }
         response.writeHead(200, {
           "cache-control": "no-store, max-age=0",
           "content-length": statSync(previewFramePath).size,
           "content-type": "image/jpeg",
         });
         createReadStream(previewFramePath).pipe(response);
+      } else if (url.pathname.startsWith("/api/")) {
+        throw new ControlError("NOT_FOUND", "Route was not found.", { status: 404 });
+      } else {
+        serveStatic(response, url.pathname);
       }
-    } else if (request.method === "GET" && url.pathname === "/api/events") {
-      response.writeHead(200, {
-        "content-type": "text/event-stream",
-        "cache-control": "no-cache",
-        connection: "keep-alive",
-      });
-      response.write(`data: ${JSON.stringify({ kind: "control_snapshot", payload: state.snapshot() })}\n\n`);
-      clients.add(response);
-      request.on("close", () => clients.delete(response));
-    } else if (request.method === "POST" && url.pathname === "/api/mode") {
-      const body = await readJson(request);
-      state.selectMode(body.mode);
-      publish("mode_selected", { mode: body.mode });
-      writeJson(response, 200, state.snapshot());
-    } else if (request.method === "POST" && url.pathname === "/api/run") {
-      const body = await readJson(request);
-      if (state.mode === "simulation") startRuntime("simulation", body.scenario);
-      else {
-        assertGoProUsbConnected();
-        startRuntime("hardware");
-      }
-      writeJson(response, 202, state.snapshot());
-    } else if (request.method === "POST" && url.pathname === "/api/stop") {
-      stopRuntime();
-      writeJson(response, 202, state.snapshot());
-    } else if (url.pathname.startsWith("/api/")) {
-      writeJson(response, 404, { error: "not found" });
-    } else {
-      serveStatic(request, response);
+    } catch (error) {
+      writeError(response, error);
     }
-  } catch (error) {
-    writeJson(response, 400, { error: error.message });
+  });
+
+  function close() {
+    supervisor.shutdown();
+    eventStream.close();
+    if (server.listening) server.close();
   }
-});
 
-server.listen(port, "0.0.0.0", () => {
-  console.log(`BearVision Edge Control listening on http://0.0.0.0:${port}`);
-});
-
-function shutdown() {
-  if (child) child.kill("SIGTERM");
-  server.close(() => process.exit(0));
+  return { server, state, supervisor, readiness, eventStream, close };
 }
 
-process.on("SIGINT", shutdown);
-process.on("SIGTERM", shutdown);
+const invokedPath = process.argv[1] ? resolve(process.argv[1]) : null;
+if (invokedPath === fileURLToPath(import.meta.url)) {
+  const control = createEdgeControlServer();
+  const port = Number(process.env.BEARVISION_CONTROL_PORT ?? 4310);
+  const host = process.env.BEARVISION_CONTROL_HOST ?? "0.0.0.0";
+  control.server.listen(port, host, () => {
+    console.log(`BearVision Edge Control listening on http://${host}:${port}`);
+  });
+  const shutdown = () => control.close();
+  process.on("SIGINT", shutdown);
+  process.on("SIGTERM", shutdown);
+}

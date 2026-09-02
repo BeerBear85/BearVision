@@ -155,6 +155,14 @@ class ClosedLoopScenarioRunner:
                     )
                 if evaluation.result is not None:
                     edge_results.setdefault(evaluation.result.request_id, evaluation.result)
+                    failures.extend(
+                        {
+                            "component": str(event.payload.get("component", "runtime")),
+                            "error": str(event.payload.get("error", "runtime failed")),
+                        }
+                        for event in evaluation.result.events
+                        if event.kind == "component_failed"
+                    )
         finally:
             await self.orchestrator.stop()
 

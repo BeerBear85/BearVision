@@ -74,7 +74,12 @@ class FlakyQueue(InMemoryJobQueue):
         return await super().publish(manifest, video, observations)
 
 
-def build_with_queue(queue: InMemoryJobQueue, *, max_restarts: int) -> BearVisionOrchestrator:
+def build_with_queue(
+    queue: InMemoryJobQueue,
+    *,
+    max_restarts: int,
+    event_sink=None,
+) -> BearVisionOrchestrator:
     clock = VirtualClock(NOW)
     detection = PersonDetection(
         frame_id="frame-1",
@@ -91,6 +96,7 @@ def build_with_queue(queue: InMemoryJobQueue, *, max_restarts: int) -> BearVisio
         edge_device_id="edge-test",
         recording_duration_s=5,
         max_restarts=max_restarts,
+        event_sink=event_sink,
     )
 
 
@@ -453,6 +459,76 @@ def test_retryable_queue_failure_recovers_but_permanent_failure_does_not() -> No
         else:
             raise AssertionError("permanent component failure was not propagated")
         assert permanent.publish_attempts == 1
+        await orchestrator.stop()
+
+    asyncio.run(exercise())
+
+
+def test_lifecycle_transitions_are_emitted_through_the_runtime_seam() -> None:
+    async def exercise() -> None:
+        events = []
+        orchestrator = build_with_queue(
+            InMemoryJobQueue(),
+            max_restarts=0,
+            event_sink=events.append,
+        )
+
+        await orchestrator.start()
+        result = await orchestrator.process_frame(
+            VideoFrame("frame-1", 1, 100, 100, b"pixels")
+        )
+
+        assert result is not None
+        stages = [
+            event.payload["stage"]
+            for event in events
+            if event.kind == "lifecycle_changed"
+        ]
+        assert stages == [
+            "initializing",
+            "monitoring",
+            "recording",
+            "packaging",
+            "uploading",
+            "monitoring",
+        ]
+        await orchestrator.stop()
+
+    asyncio.run(exercise())
+
+
+def test_failed_publication_is_retained_and_retried_without_recapture() -> None:
+    async def exercise() -> None:
+        queue = FlakyQueue([ComponentUnavailable("Box is temporarily offline")])
+        events = []
+        orchestrator = build_with_queue(
+            queue,
+            max_restarts=0,
+            event_sink=events.append,
+        )
+        await orchestrator.start()
+
+        result = await orchestrator.process_frame(
+            VideoFrame("frame-1", 1, 100, 100, b"pixels")
+        )
+
+        assert result is not None and not result.published
+        failure = next(event for event in events if event.kind == "component_failed")
+        assert failure.payload["retryable"] is True
+        assert queue.publish_attempts == 1
+        capture_count = len(orchestrator.camera.captures)
+
+        retry_events = await orchestrator.retry_failure(failure.payload["failure_id"])
+
+        assert queue.publish_attempts == 2
+        assert len(orchestrator.camera.captures) == capture_count
+        assert [event.kind for event in retry_events] == [
+            "lifecycle_changed",
+            "clip_uploaded",
+            "failure_resolved",
+            "lifecycle_changed",
+        ]
+        assert queue.snapshot()["counts"]["ready"] == 1
         await orchestrator.stop()
 
     asyncio.run(exercise())

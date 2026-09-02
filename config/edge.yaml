@@ -26,8 +26,13 @@ performance:
   buffer_drain: true
   callback_queue_size: 5
 error_recovery:
-  max_restarts: 5
+  # Operator-visible recovery is deliberate; do not hide failures behind retries.
+  max_restarts: 0
   restart_delay_s: 2.0
+readiness:
+  camera_preview_timeout_s: 12.0
+  ble_scan_duration_s: 2.0
+  cleanup_timeout_s: 3.0
 features:
   ble_logging: true
   cloud_upload: false

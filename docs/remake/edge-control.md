@@ -1,14 +1,17 @@
 # Edge computer and control GUI
 
-Status: control GUI, recorded-video regression and physical preview transport implemented.
+Status: operator monitoring, recovery, recorded-video regression and physical preview transport implemented.
 
 ## Operator UI
 
 Edge Control uses the shared BearVision operator shell from Server Control while
 retaining an Edge-specific workflow: configure, run, observe and verify. The
-preview is the primary work surface; connection/runtime health and the event
-trace are supporting evidence. All existing scenario, capture, processed-video
-and tracking views remain available when their artefacts exist.
+preview and live pipeline are the primary work surfaces. Hardware readiness,
+persistent failure cards and guarded recovery actions sit beside them; the raw
+event trace is collapsed under Diagnostics. Active state, the last ten runs and
+artefact references survive refresh and control-server restart. Existing
+scenario, capture, processed-video and tracking views remain available when
+their artefacts exist.
 
 The normative UX/UI baseline and acceptance checks are in
 [`ui-design-criteria.md`](ui-design-criteria.md).
@@ -130,6 +133,13 @@ Edge Control only serves scenario metadata/media and supervises Edge Python.
 The separate Server Control app supervises the Python worker; only that worker
 owns scoring, registry lookup and rider assignment.
 
+Hardware readiness uses the production integrations rather than OS device
+presence. It connects the GoPro, receives one real preview frame, then closes
+the frame source, stops preview and disconnects. It also starts and stops a
+short Bleak scan; the adapter must work, but a BearTag need not be present.
+Every handshake and cleanup step is bounded by the strict `readiness` settings
+in `config/edge.yaml`. Preflight never starts recording or changes camera media.
+
 Schema 3.1 additionally supports explicit synthetic BearTag samples. The
 Blender generator samples rider motion at the configured BearTag rate, converts
 world kinematic acceleration to accelerometer specific force (`a - gravity`),
@@ -155,6 +165,10 @@ scenario selector and can be replayed manually like any other video scenario.
   full-frame-rate transport.
 - Edge Control has no authentication; do not expose port 4310 outside a trusted
   local network.
+
+Automatic component retries are disabled in the active Edge configuration.
+Edge Control must surface the first failure and let the operator choose a safe
+backend-declared retry or restart action.
 
 ## Windows media runtime
 

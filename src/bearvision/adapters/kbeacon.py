@@ -41,7 +41,14 @@ class BleakKBeaconSource:
             )
         return voltage, acceleration
 
-    async def look_for_advertisements(self, timeout: float = 0.0) -> None:
+    async def look_for_advertisements(
+        self,
+        timeout: float = 0.0,
+        *,
+        stop_timeout: float | None = None,
+    ) -> None:
+        if stop_timeout is not None and stop_timeout <= 0:
+            raise ValueError("BLE scanner stop timeout must be positive")
         try:
             from bleak import BleakScanner
         except ImportError as exc:  # pragma: no cover - production dependency
@@ -66,14 +73,20 @@ class BleakKBeaconSource:
                     )
 
         scanner = BleakScanner(detection_callback=callback)
-        await scanner.start()
+        start_attempted = False
         try:
+            start_attempted = True
+            await scanner.start()
             if timeout == 0.0:
                 await asyncio.Future()
             else:
                 await asyncio.sleep(timeout)
         finally:
-            await scanner.stop()
+            if start_attempted:
+                if stop_timeout is None:
+                    await scanner.stop()
+                else:
+                    await asyncio.wait_for(scanner.stop(), timeout=stop_timeout)
 
 
 class KBeaconTagScannerAdapter:

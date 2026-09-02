@@ -334,6 +334,67 @@ def test_bleak_source_filters_and_decodes_kbeacon_advertisements(
     assert instances[-1].stopped is True
 
 
+def test_bleak_source_bounds_scanner_cleanup(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class HangingStopScanner:
+        def __init__(self, detection_callback) -> None:
+            self.callback = detection_callback
+
+        async def start(self) -> None:
+            pass
+
+        async def stop(self) -> None:
+            await asyncio.Future()
+
+    bleak = ModuleType("bleak")
+    bleak.BleakScanner = HangingStopScanner
+    monkeypatch.setitem(sys.modules, "bleak", bleak)
+
+    with pytest.raises(TimeoutError):
+        asyncio.run(
+            BleakKBeaconSource().look_for_advertisements(
+                timeout=0.001,
+                stop_timeout=0.01,
+            )
+        )
+
+
+def test_bleak_source_stops_after_cancelled_partial_start(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    instances = []
+
+    class HangingStartScanner:
+        def __init__(self, detection_callback) -> None:
+            self.callback = detection_callback
+            self.stopped = False
+            instances.append(self)
+
+        async def start(self) -> None:
+            await asyncio.Future()
+
+        async def stop(self) -> None:
+            self.stopped = True
+
+    bleak = ModuleType("bleak")
+    bleak.BleakScanner = HangingStartScanner
+    monkeypatch.setitem(sys.modules, "bleak", bleak)
+
+    async def exercise() -> None:
+        with pytest.raises(TimeoutError):
+            await asyncio.wait_for(
+                BleakKBeaconSource().look_for_advertisements(
+                    timeout=1,
+                    stop_timeout=0.1,
+                ),
+                timeout=0.01,
+            )
+
+    asyncio.run(exercise())
+    assert instances[0].stopped is True
+
+
 def test_kbeacon_managed_scan_is_cancelled_and_malformed_data_is_typed() -> None:
     async def exercise() -> None:
         class ManagedBeacon:

@@ -26,7 +26,7 @@ from bearvision.ports import (
     TagScanner,
 )
 from bearvision.processing import VirtualCameramanProcessor
-from .orchestrator import BearVisionOrchestrator
+from .orchestrator import BearVisionOrchestrator, OrchestrationEvent
 
 
 @dataclass(frozen=True, slots=True)
@@ -123,6 +123,7 @@ def build_real_orchestrator(
     beacon_factory: Callable[[], Any] | None = None,
     detector_factory: Callable[[str], Any] | None = None,
     box_factory: Callable[[dict[str, dict[str, str]]], Any] | None = None,
+    event_sink: Callable[[OrchestrationEvent], None] | None = None,
 ) -> BearVisionOrchestrator:
     """Build the production orchestrator without exposing legacy SDKs to it."""
 
@@ -166,4 +167,5 @@ def build_real_orchestrator(
         detection_cooldown_s=config.detection.cooldown_s,
         max_restarts=config.error_recovery.max_restarts,
         restart_delay_s=config.error_recovery.restart_delay_s,
+        event_sink=event_sink,
     )

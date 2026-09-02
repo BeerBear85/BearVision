@@ -6,7 +6,8 @@ from types import SimpleNamespace
 import pytest
 from pydantic import ValidationError
 
-from bearvision.control import hardware, simulate
+from bearvision.control import hardware, process_control_command, readiness, simulate
+from bearvision.edge import OrchestrationEvent
 from bearvision.contracts import serialize_runtime_event
 
 
@@ -47,6 +48,42 @@ def test_runtime_event_contract_rejects_unknown_or_malformed_events() -> None:
         )
 
 
+def test_runtime_event_contract_exposes_typed_lifecycle_and_failures() -> None:
+    lifecycle = json.loads(
+        serialize_runtime_event(
+            "lifecycle_changed",
+            {
+                "stage": "uploading",
+                "operation_id": "capture-frame-1:publish",
+            },
+        )
+    )
+    failure = json.loads(
+        serialize_runtime_event(
+            "component_failed",
+            {
+                "failure_id": "failure-capture-frame-1-publish",
+                "operation_id": "capture-frame-1:publish",
+                "stage": "uploading",
+                "component": "job_queue",
+                "error": "Box is temporarily offline",
+                "operator_message": "The clip could not be uploaded.",
+                "corrective_action": "Check the network and Box connection, then retry.",
+                "severity": "blocking",
+                "retryable": True,
+            },
+        )
+    )
+
+    assert lifecycle["payload"]["stage"] == "uploading"
+    assert failure["payload"]["retryable"] is True
+    with pytest.raises(ValidationError):
+        serialize_runtime_event(
+            "lifecycle_changed",
+            {"stage": "made_up", "operation_id": None},
+        )
+
+
 def test_hardware_uses_explicit_runtime_directories(monkeypatch) -> None:
     config_path = Path("config/production-edge.yaml")
     capture_dir = Path("state/captures")
@@ -57,9 +94,10 @@ def test_hardware_uses_explicit_runtime_directories(monkeypatch) -> None:
         async def run(self) -> None:
             return None
 
-    def build_orchestrator(config, *, capture_dir, scratch_dir):
+    def build_orchestrator(config, *, capture_dir, scratch_dir, event_sink):
         received["capture_dir"] = capture_dir
         received["scratch_dir"] = scratch_dir
+        received["event_sink"] = event_sink
         return Orchestrator()
 
     monkeypatch.setattr(
@@ -77,7 +115,91 @@ def test_hardware_uses_explicit_runtime_directories(monkeypatch) -> None:
     )
 
     assert exit_code == 0
-    assert received == {
-        "capture_dir": capture_dir,
-        "scratch_dir": scratch_dir,
+    assert received["capture_dir"] == capture_dir
+    assert received["scratch_dir"] == scratch_dir
+    assert callable(received["event_sink"])
+
+
+def test_control_process_exposes_python_owned_readiness(monkeypatch) -> None:
+    expected = {
+        "readiness_schema_version": "1.0",
+        "blocking": False,
+        "warning_ids": [],
+        "checks": [],
     }
+    monkeypatch.setattr(
+        "bearvision.control.check_edge_readiness",
+        lambda *args, **kwargs: SimpleNamespace(to_dict=lambda: expected),
+    )
+
+    assert readiness(
+        Path("config/edge.yaml"),
+        capture_dir=Path("state/captures"),
+        scratch_dir=Path("state/scratch"),
+    ) == expected
+
+
+def test_hardware_streams_orchestrator_lifecycle_events(monkeypatch, capsys) -> None:
+    class Orchestrator:
+        async def run(self) -> None:
+            self.event_sink(
+                OrchestrationEvent(
+                    at_monotonic_s=1,
+                    kind="lifecycle_changed",
+                    payload={"stage": "monitoring", "operation_id": None},
+                )
+            )
+
+    def build_orchestrator(config, *, capture_dir, scratch_dir, event_sink):
+        orchestrator = Orchestrator()
+        orchestrator.event_sink = event_sink
+        return orchestrator
+
+    monkeypatch.setattr(
+        "bearvision.control.load_edge_config",
+        lambda path: SimpleNamespace(system=SimpleNamespace(log_level="INFO")),
+    )
+    monkeypatch.setattr("bearvision.control.build_real_orchestrator", build_orchestrator)
+
+    assert asyncio.run(hardware(Path("config/edge.yaml"))) == 0
+    events = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+    assert any(
+        event["kind"] == "lifecycle_changed"
+        and event["payload"]["stage"] == "monitoring"
+        for event in events
+    )
+
+
+def test_versioned_retry_command_targets_one_retained_failure() -> None:
+    class Orchestrator:
+        def __init__(self) -> None:
+            self.failure_ids = []
+
+        async def retry_failure(self, failure_id: str):
+            self.failure_ids.append(failure_id)
+            return ()
+
+    orchestrator = Orchestrator()
+    asyncio.run(
+        process_control_command(
+            orchestrator,
+            {
+                "command_version": "1.0",
+                "kind": "retry_failure",
+                "failure_id": "failure-upload",
+            },
+        )
+    )
+
+    assert orchestrator.failure_ids == ["failure-upload"]
+    with pytest.raises(ValueError, match="unsupported control command version"):
+        asyncio.run(
+            process_control_command(
+                orchestrator,
+                {
+                    "command_version": "9.0",
+                    "kind": "retry_failure",
+                    "failure_id": "failure-upload",
+                },
+            )
+        )

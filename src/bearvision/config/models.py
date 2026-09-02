@@ -93,6 +93,14 @@ class ErrorRecoveryConfig(StrictConfigModel):
     restart_delay_s: float = Field(default=2.0, ge=0, le=600)
 
 
+class HardwareReadinessConfig(StrictConfigModel):
+    """Time bounds for non-destructive physical preflight handshakes."""
+
+    camera_preview_timeout_s: float = Field(default=12.0, gt=0, le=60)
+    ble_scan_duration_s: float = Field(default=2.0, gt=0, le=30)
+    cleanup_timeout_s: float = Field(default=3.0, gt=0, le=30)
+
+
 class FeatureConfig(StrictConfigModel):
     ble_logging: bool = True
     cloud_upload: bool = True
@@ -129,6 +137,7 @@ class EdgeConfig(StrictConfigModel):
     detection: DetectionConfig = Field(default_factory=DetectionConfig)
     performance: PerformanceConfig = Field(default_factory=PerformanceConfig)
     error_recovery: ErrorRecoveryConfig = Field(default_factory=ErrorRecoveryConfig)
+    readiness: HardwareReadinessConfig = Field(default_factory=HardwareReadinessConfig)
     features: FeatureConfig = Field(default_factory=FeatureConfig)
     storage: StorageConfig = Field(default_factory=StorageConfig)
     system: SystemConfig = Field(default_factory=SystemConfig)

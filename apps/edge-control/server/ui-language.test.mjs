@@ -73,3 +73,24 @@ test("Edge Control exposes a minimum log-level filter", () => {
     assert.equal(uiSource.includes(label), true, `${label} is missing from the log filter`);
   }
 });
+
+test("Edge Control presents operator pipeline, readiness and persistent recovery actions", () => {
+  for (const token of [
+    'aria-label="Runtime pipeline"',
+    'className="failure-card"',
+    'className="readiness-panel panel"',
+    'className="diagnostics panel"',
+    'className="recent-runs panel"',
+    "Run readiness",
+    "Retry operation",
+    "Restart runtime",
+    "Force stop",
+  ]) {
+    assert.equal(uiSource.includes(token), true, `${token} is missing from the operator UI`);
+  }
+});
+
+test("Edge Control consumes event snapshots instead of polling health after every event", () => {
+  assert.match(uiSource, /event\.control_snapshot/);
+  assert.doesNotMatch(uiSource, /request\("\/api\/health"\)\.then\(setState\)/);
+});

@@ -26,6 +26,22 @@ RuntimeEventKind: TypeAlias = Literal[
     "component_failed",
     "hardware_initializing",
     "hardware_stopping",
+    "lifecycle_changed",
+    "failure_resolved",
+]
+
+LifecycleStage: TypeAlias = Literal[
+    "readiness",
+    "initializing",
+    "monitoring",
+    "recording",
+    "post_processing",
+    "packaging",
+    "uploading",
+    "stopping",
+    "failed",
+    "completed",
+    "stopped",
 ]
 
 
@@ -65,6 +81,7 @@ class PersonDetectedPayload(EventModel):
 class CaptureStartedPayload(EventModel):
     asset_id: str = Field(min_length=1)
     clip_end_s: float = Field(ge=0)
+    operation_id: str | None = Field(default=None, min_length=1)
 
 
 class FinalizeClipPayload(EventModel):
@@ -77,6 +94,7 @@ class CaptureCompletedPayload(EventModel):
     size_bytes: int = Field(ge=0)
     clip_start_s: float = Field(ge=0)
     clip_duration_s: float = Field(gt=0)
+    operation_id: str | None = Field(default=None, min_length=1)
 
 
 class LengthAdjustmentPayload(EventModel):
@@ -124,6 +142,7 @@ class TrackingObservationPayload(EventModel):
 class ClipUploadedPayload(EventModel):
     asset_id: str = Field(min_length=1)
     object_key: str = Field(min_length=1)
+    operation_id: str | None = Field(default=None, min_length=1)
 
 
 class MessagePayload(EventModel):
@@ -133,6 +152,23 @@ class MessagePayload(EventModel):
 class ComponentFailedPayload(EventModel):
     component: str = Field(min_length=1)
     error: str = Field(min_length=1)
+    failure_id: str | None = Field(default=None, min_length=1)
+    operation_id: str | None = Field(default=None, min_length=1)
+    stage: LifecycleStage = "failed"
+    operator_message: str | None = Field(default=None, min_length=1)
+    corrective_action: str | None = Field(default=None, min_length=1)
+    severity: Literal["warning", "blocking", "terminal"] = "terminal"
+    retryable: bool = False
+
+
+class LifecycleChangedPayload(EventModel):
+    stage: LifecycleStage
+    operation_id: str | None = Field(default=None, min_length=1)
+
+
+class FailureResolvedPayload(EventModel):
+    failure_id: str = Field(min_length=1)
+    operation_id: str = Field(min_length=1)
 
 
 class HardwareInitializingPayload(EventModel):
@@ -218,6 +254,16 @@ class HardwareStoppingRuntimeEvent(RuntimeEventBase):
     payload: HardwareStoppingPayload
 
 
+class LifecycleChangedRuntimeEvent(RuntimeEventBase):
+    kind: Literal["lifecycle_changed"]
+    payload: LifecycleChangedPayload
+
+
+class FailureResolvedRuntimeEvent(RuntimeEventBase):
+    kind: Literal["failure_resolved"]
+    payload: FailureResolvedPayload
+
+
 RuntimeEvent = Annotated[
     TagRuntimeEvent
     | PreviewFrameRuntimeEvent
@@ -232,7 +278,9 @@ RuntimeEvent = Annotated[
     | ExpectationFailedRuntimeEvent
     | ComponentFailedRuntimeEvent
     | HardwareInitializingRuntimeEvent
-    | HardwareStoppingRuntimeEvent,
+    | HardwareStoppingRuntimeEvent
+    | LifecycleChangedRuntimeEvent
+    | FailureResolvedRuntimeEvent,
     Field(discriminator="kind"),
 ]
 
