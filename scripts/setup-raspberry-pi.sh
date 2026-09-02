@@ -7,11 +7,13 @@
 set -Eeuo pipefail
 
 readonly SERVICE_NAME="bearvision-edge"
+readonly CONTROL_SERVICE_NAME="bearvision-edge-control"
 readonly DEFAULT_INSTALL_DIR="/opt/bearvision"
 readonly DEFAULT_STATE_DIR="/var/lib/bearvision"
 readonly DEFAULT_CONFIG_DIR="/etc/bearvision"
 readonly DEFAULT_SERVICE_USER="bearvision"
 readonly DEFAULT_UV_VERSION="0.12.7"
+readonly DEFAULT_PNPM_VERSION="10.34.5"
 
 SOURCE_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
 INSTALL_DIR="$DEFAULT_INSTALL_DIR"
@@ -19,6 +21,7 @@ STATE_DIR="$DEFAULT_STATE_DIR"
 CONFIG_DIR="$DEFAULT_CONFIG_DIR"
 SERVICE_USER="$DEFAULT_SERVICE_USER"
 UV_VERSION="$DEFAULT_UV_VERSION"
+PNPM_VERSION="$DEFAULT_PNPM_VERSION"
 DEVICE_ID=""
 DEVICE_ID_WAS_SET=false
 START_SERVICE=false
@@ -36,7 +39,8 @@ Options:
   --state-dir PATH     Capture and scratch directory (default: /var/lib/bearvision).
   --service-user USER  Unprivileged runtime account (default: bearvision).
   --uv-version VERSION Pinned uv installer version (default: 0.12.7).
-  --start              Start or restart the service after installation.
+  --pnpm-version VER   Pinned pnpm version (default: 10.34.5).
+  --start              Start or restart Edge Control after installation.
   -h, --help           Show this help.
 
 The script preserves existing files in /etc/bearvision. Put Box credentials in
@@ -100,6 +104,11 @@ while (($# > 0)); do
             UV_VERSION=$2
             shift 2
             ;;
+        --pnpm-version)
+            require_value "$1" "${2-}"
+            PNPM_VERSION=$2
+            shift 2
+            ;;
         --start)
             START_SERVICE=true
             shift
@@ -144,6 +153,7 @@ fi
     die "installation paths must not contain whitespace"
 [[ $SERVICE_USER =~ ^[a-z_][a-z0-9_-]*$ ]] || die "invalid service user: $SERVICE_USER"
 [[ $UV_VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "invalid uv version: $UV_VERSION"
+[[ $PNPM_VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "invalid pnpm version: $PNPM_VERSION"
 
 if [[ -z $DEVICE_ID ]]; then
     DEVICE_ID="$(hostname -s)"
@@ -151,7 +161,14 @@ fi
 [[ $DEVICE_ID =~ ^[A-Za-z0-9._-]+$ ]] || \
     die "device ID may contain only letters, digits, dots, underscores and hyphens"
 
-for required_file in pyproject.toml uv.lock config/edge.yaml code/dnn_models/yolov8n.onnx; do
+for required_file in \
+    pyproject.toml \
+    uv.lock \
+    config/edge.yaml \
+    code/dnn_models/yolov8n.onnx \
+    apps/edge-control/package.json \
+    apps/edge-control/pnpm-lock.yaml \
+    specs/scenarios/single-rider-success.yaml; do
     [[ -f "$SOURCE_DIR/$required_file" ]] || \
         die "run this script from a complete BearVision checkout (missing $required_file)"
 done
@@ -175,6 +192,9 @@ apt-get install --yes --no-install-recommends \
     git \
     libglib2.0-0 \
     libgl1 \
+    nodejs \
+    npm \
+    rfkill \
     rsync
 
 if ! id "$SERVICE_USER" >/dev/null 2>&1; then
@@ -193,14 +213,23 @@ install -d -o "$SERVICE_USER" -g "$SERVICE_GROUP" -m 0750 \
     "$STATE_DIR" \
     "$STATE_DIR/captures" \
     "$STATE_DIR/scratch" \
-    "$STATE_DIR/cache"
+    "$STATE_DIR/cache" \
+    "$STATE_DIR/simulation-queue"
 install -d -o root -g "$SERVICE_GROUP" -m 0750 "$CONFIG_DIR"
 
 log "Copying the active BearVision runtime to $INSTALL_DIR"
 install -d -o "$SERVICE_USER" -g "$SERVICE_GROUP" -m 0750 \
+    "$INSTALL_DIR/apps/edge-control" \
     "$INSTALL_DIR/config" \
-    "$INSTALL_DIR/code/dnn_models"
+    "$INSTALL_DIR/code/dnn_models" \
+    "$INSTALL_DIR/specs/scenarios"
 rsync --archive --delete "$SOURCE_DIR/src/" "$INSTALL_DIR/src/"
+rsync --archive --delete \
+    --exclude node_modules \
+    --exclude dist \
+    "$SOURCE_DIR/apps/edge-control/" "$INSTALL_DIR/apps/edge-control/"
+rsync --archive --delete \
+    "$SOURCE_DIR/specs/scenarios/" "$INSTALL_DIR/specs/scenarios/"
 install -o "$SERVICE_USER" -g "$SERVICE_GROUP" -m 0644 \
     "$SOURCE_DIR/pyproject.toml" \
     "$SOURCE_DIR/uv.lock" \
@@ -250,6 +279,14 @@ if ! command -v uv >/dev/null 2>&1 || [[ $(uv --version) != "uv $UV_VERSION" ]];
     rm -f -- "$UV_INSTALLER"
 fi
 
+NODE_MAJOR="$(node --version | sed -E 's/^v([0-9]+).*/\1/')"
+[[ $NODE_MAJOR =~ ^[0-9]+$ && $NODE_MAJOR -ge 20 ]] || \
+    die "Node.js 20 or newer is required"
+if ! command -v pnpm >/dev/null 2>&1 || [[ $(pnpm --version) != "$PNPM_VERSION" ]]; then
+    log "Installing pinned pnpm $PNPM_VERSION"
+    npm install --global "pnpm@$PNPM_VERSION"
+fi
+
 log "Installing Python 3.12 and locked BearVision dependencies"
 runuser -u "$SERVICE_USER" -- env \
     HOME="$STATE_DIR" \
@@ -260,12 +297,24 @@ runuser -u "$SERVICE_USER" -- env \
         --python 3.12 \
         --no-dev
 
+log "Installing and building Edge Control"
+runuser -u "$SERVICE_USER" -- env \
+    CI=true \
+    HOME="$STATE_DIR" \
+    XDG_CACHE_HOME="$STATE_DIR/cache" \
+    pnpm --dir "$INSTALL_DIR/apps/edge-control" install --frozen-lockfile
+runuser -u "$SERVICE_USER" -- env \
+    HOME="$STATE_DIR" \
+    XDG_CACHE_HOME="$STATE_DIR/cache" \
+    pnpm --dir "$INSTALL_DIR/apps/edge-control" build
+
 UNIT_FILE="/etc/systemd/system/$SERVICE_NAME.service"
 cat > "$UNIT_FILE" <<EOF
 [Unit]
 Description=BearVision edge runtime
 Wants=network-online.target bluetooth.service
 After=network-online.target bluetooth.service
+Conflicts=$CONTROL_SERVICE_NAME.service
 
 [Service]
 Type=simple
@@ -291,6 +340,43 @@ WantedBy=multi-user.target
 EOF
 chmod 0644 "$UNIT_FILE"
 
+CONTROL_UNIT_FILE="/etc/systemd/system/$CONTROL_SERVICE_NAME.service"
+cat > "$CONTROL_UNIT_FILE" <<EOF
+[Unit]
+Description=BearVision Edge Control
+Wants=network-online.target bluetooth.service
+After=network-online.target bluetooth.service
+Conflicts=$SERVICE_NAME.service
+
+[Service]
+Type=simple
+User=$SERVICE_USER
+Group=$SERVICE_GROUP
+WorkingDirectory=$INSTALL_DIR/apps/edge-control
+Environment=HOME=$STATE_DIR
+Environment=NODE_ENV=production
+Environment=BEARVISION_PYTHON=$INSTALL_DIR/.venv/bin/python
+Environment=BEARVISION_CONFIG_PATH=$CONFIG_FILE
+Environment=BEARVISION_CAPTURE_ROOT=$STATE_DIR/captures
+Environment=BEARVISION_SCRATCH_ROOT=$STATE_DIR/scratch
+Environment=BEARVISION_LOCAL_QUEUE_ROOT=$STATE_DIR/simulation-queue
+Environment=BEARVISION_CONTROL_PORT=4310
+EnvironmentFile=-$ENV_FILE
+ExecStart=/usr/bin/node $INSTALL_DIR/apps/edge-control/server/server.mjs
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=30s
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=$STATE_DIR
+
+[Install]
+WantedBy=multi-user.target
+EOF
+chmod 0644 "$CONTROL_UNIT_FILE"
+
 log "Verifying the installed runtime and configuration"
 runuser -u "$SERVICE_USER" -- env \
     HOME="$STATE_DIR" \
@@ -298,24 +384,32 @@ runuser -u "$SERVICE_USER" -- env \
     "from pathlib import Path; from bearvision.config import load_edge_config; load_edge_config(Path('$CONFIG_FILE'))"
 /usr/bin/ffmpeg -version >/dev/null
 /usr/bin/ffprobe -version >/dev/null
+runuser -u "$SERVICE_USER" -- env \
+    BEARVISION_CONFIG_PATH="$CONFIG_FILE" \
+    BEARVISION_CAPTURE_ROOT="$STATE_DIR/captures" \
+    BEARVISION_SCRATCH_ROOT="$STATE_DIR/scratch" \
+    node --check "$INSTALL_DIR/apps/edge-control/server/server.mjs"
 
 systemctl daemon-reload
 systemctl enable bluetooth.service >/dev/null
-systemctl enable "$SERVICE_NAME.service" >/dev/null
+rfkill unblock bluetooth
+systemctl restart bluetooth.service
+bluetoothctl power on >/dev/null
+systemctl disable "$SERVICE_NAME.service" >/dev/null 2>&1 || true
+systemctl enable "$CONTROL_SERVICE_NAME.service" >/dev/null
 
 if [[ $START_SERVICE == true ]]; then
-    log "Starting $SERVICE_NAME"
-    systemctl restart "$SERVICE_NAME.service"
-    if ! systemctl is-active --quiet "$SERVICE_NAME.service"; then
-        warn "the service exited; connect the GoPro/BLE hardware and inspect: journalctl -u $SERVICE_NAME -n 100"
+    log "Starting $CONTROL_SERVICE_NAME"
+    systemctl restart "$CONTROL_SERVICE_NAME.service"
+    if ! systemctl is-active --quiet "$CONTROL_SERVICE_NAME.service"; then
+        warn "Edge Control exited; inspect: journalctl -u $CONTROL_SERVICE_NAME -n 100"
     fi
 fi
 
 log "Setup complete"
-printf '\nConfiguration: %s\nCredentials:   %s\nService:       %s\n' \
-    "$CONFIG_FILE" "$ENV_FILE" "$SERVICE_NAME"
+printf '\nConfiguration: %s\nCredentials:   %s\nControl UI:    http://%s:4310\nService:       %s\n' \
+    "$CONFIG_FILE" "$ENV_FILE" "$(hostname -s)" "$CONTROL_SERVICE_NAME"
 if [[ $START_SERVICE == false ]]; then
-    printf 'Next step: connect the GoPro and BLE adapter, then run:\n  sudo systemctl start %s\n' \
-        "$SERVICE_NAME"
+    printf 'Next step: run:\n  sudo systemctl start %s\n' "$CONTROL_SERVICE_NAME"
 fi
-printf 'Logs:\n  journalctl -u %s -f\n' "$SERVICE_NAME"
+printf 'Logs:\n  journalctl -u %s -f\n' "$CONTROL_SERVICE_NAME"

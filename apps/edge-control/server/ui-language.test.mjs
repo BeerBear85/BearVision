@@ -7,6 +7,7 @@ const appRoot = fileURLToPath(new URL("..", import.meta.url));
 const uiSource = readFileSync(new URL("../src/main.jsx", import.meta.url), "utf8");
 const documentSource = readFileSync(new URL("../index.html", import.meta.url), "utf8");
 const styleSource = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
+const serverSource = readFileSync(new URL("./server.mjs", import.meta.url), "utf8");
 
 test("Edge Control declares English as its document language", () => {
   assert.match(documentSource, /<html lang="en">/);
@@ -45,4 +46,30 @@ test("Edge Control does not present server-owned rider assignment", () => {
   assert.equal(uiSource.includes("server_assignment"), false);
   assert.equal(uiSource.includes('label="Rider"'), false);
   assert.equal(uiSource.includes("selectedUserEmail"), false);
+});
+
+test("Edge Control supports production runtime paths", () => {
+  for (const variable of [
+    "BEARVISION_CONFIG_PATH",
+    "BEARVISION_CAPTURE_ROOT",
+    "BEARVISION_SCRATCH_ROOT",
+  ]) {
+    assert.equal(serverSource.includes(variable), true, `${variable} is not configurable`);
+  }
+  assert.match(serverSource, /"--capture-dir", captureRoot/);
+  assert.match(serverSource, /"--scratch-dir", scratchRoot/);
+});
+
+test("Edge Control exposes and renders the live hardware preview", () => {
+  assert.match(serverSource, /\/api\/preview\/frame\.jpg/);
+  assert.match(serverSource, /live-preview\.jpg/);
+  assert.match(uiSource, /alt="Live GoPro preview"/);
+  assert.doesNotMatch(uiSource, /Preview transport is the next hardware integration slice/);
+});
+
+test("Edge Control exposes a minimum log-level filter", () => {
+  assert.match(uiSource, /aria-label="Minimum log level"/);
+  for (const label of ["Debug+", "Info+", "Warning+", "Error"]) {
+    assert.equal(uiSource.includes(label), true, `${label} is missing from the log filter`);
+  }
 });

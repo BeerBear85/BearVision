@@ -1,11 +1,12 @@
 import { spawn } from "node:child_process";
-import { createReadStream, existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { createReadStream, existsSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
 import { createServer } from "node:http";
 import { dirname, extname, join, normalize, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createInterface } from "node:readline";
 import { parse as parseYaml } from "yaml";
 import { ControlState } from "./control-state.mjs";
+import { assertGoProUsbConnected } from "./hardware-preflight.mjs";
 import { parseByteRange, safeLeafPath } from "./media-files.mjs";
 import { parseRuntimeEventLine } from "./runtime-events.mjs";
 
@@ -14,10 +15,15 @@ const appRoot = resolve(here, "..");
 const repoRoot = resolve(appRoot, "..", "..");
 const distRoot = join(appRoot, "dist");
 const scenarioRoot = join(repoRoot, "specs", "scenarios");
-const configPath = join(repoRoot, "config", "edge.yaml");
-const captureRoot = join(repoRoot, "temp", "captures");
+const configPath = process.env.BEARVISION_CONFIG_PATH
+  ?? join(repoRoot, "config", "edge.yaml");
+const captureRoot = process.env.BEARVISION_CAPTURE_ROOT
+  ?? join(repoRoot, "temp", "captures");
+const scratchRoot = process.env.BEARVISION_SCRATCH_ROOT
+  ?? join(repoRoot, "temp", "scratch");
 const localQueueRoot = process.env.BEARVISION_LOCAL_QUEUE_ROOT
   ?? join(repoRoot, "temp", "simulation-queue");
+const previewFramePath = join(scratchRoot, "live-preview.jpg");
 const port = Number(process.env.BEARVISION_CONTROL_PORT ?? 4310);
 const state = new ControlState();
 const clients = new Set();
@@ -28,6 +34,7 @@ const mimeTypes = {
   ".html": "text/html; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
   ".json": "application/json; charset=utf-8",
+  ".jpg": "image/jpeg",
   ".mp4": "video/mp4",
   ".png": "image/png",
   ".svg": "image/svg+xml",
@@ -155,13 +162,17 @@ function attachOutput(stream, source) {
 }
 
 function startRuntime(mode, scenarioName = null) {
+  if (mode === "hardware") rmSync(previewFramePath, { force: true });
   state.start({ mode, scenario: scenarioName });
   const args = mode === "simulation"
     ? [
       "-m", "bearvision.control", "simulate", safeScenario(scenarioName),
       "--realtime", "--local-queue-root", localQueueRoot, "--config", configPath,
     ]
-    : ["-m", "bearvision.control", "hardware", "--config", configPath];
+    : [
+      "-m", "bearvision.control", "hardware", "--config", configPath,
+      "--capture-dir", captureRoot, "--scratch-dir", scratchRoot,
+    ];
   child = spawn(pythonCommand(), args, { cwd: repoRoot, env: process.env, stdio: ["ignore", "pipe", "pipe"] });
   attachOutput(child.stdout, "stdout");
   attachOutput(child.stderr, "stderr");
@@ -223,6 +234,17 @@ const server = createServer(async (request, response) => {
         throw new Error("capture does not exist");
       }
       serveMedia(request, response, filePath);
+    } else if (request.method === "GET" && url.pathname === "/api/preview/frame.jpg") {
+      if (!existsSync(previewFramePath) || !statSync(previewFramePath).isFile()) {
+        writeJson(response, 503, { error: "hardware preview is not ready" });
+      } else {
+        response.writeHead(200, {
+          "cache-control": "no-store, max-age=0",
+          "content-length": statSync(previewFramePath).size,
+          "content-type": "image/jpeg",
+        });
+        createReadStream(previewFramePath).pipe(response);
+      }
     } else if (request.method === "GET" && url.pathname === "/api/events") {
       response.writeHead(200, {
         "content-type": "text/event-stream",
@@ -240,7 +262,10 @@ const server = createServer(async (request, response) => {
     } else if (request.method === "POST" && url.pathname === "/api/run") {
       const body = await readJson(request);
       if (state.mode === "simulation") startRuntime("simulation", body.scenario);
-      else startRuntime("hardware");
+      else {
+        assertGoProUsbConnected();
+        startRuntime("hardware");
+      }
       writeJson(response, 202, state.snapshot());
     } else if (request.method === "POST" && url.pathname === "/api/stop") {
       stopRuntime();

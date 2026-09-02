@@ -1,7 +1,6 @@
 # Edge computer and control GUI
 
-Status: control GUI and recorded-video regression implemented; physical preview
-transport remains future work.
+Status: control GUI, recorded-video regression and physical preview transport implemented.
 
 ## Operator UI
 
@@ -152,7 +151,8 @@ scenario selector and can be replayed manually like any other video scenario.
 - The old React source under `temp/EDGE Application GUI Design` was an ignored
   mockup with mock events and no backend.
 - The PyQt Edge GUI is wired to the legacy state machine, not BearVision 3.
-- Hardware-mode preview transport is not implemented in Edge Control yet.
+- Hardware preview is a throttled four-frame-per-second operator feed, not a
+  full-frame-rate transport.
 - Edge Control has no authentication; do not expose port 4310 outside a trusted
   local network.
 

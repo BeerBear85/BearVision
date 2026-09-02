@@ -138,13 +138,38 @@ For a systemd-managed 64-bit Raspberry Pi OS deployment on a Raspberry Pi 4 or
 sudo bash scripts/setup-raspberry-pi.sh --device-id edge-pi-1
 ```
 
-It deploys only the active runtime files and selected YOLO model, installs the
-locked Python runtime, configures Raspberry Pi OS FFmpeg and
-creates an unprivileged `bearvision-edge` systemd service. Existing files under
-`/etc/bearvision` are preserved. Add Box credentials to
-`/etc/bearvision/bearvision.env`, connect the GoPro and BLE adapter, and start
-the service with `sudo systemctl start bearvision-edge`. Use `--start` to start
-it immediately during provisioning.
+It deploys the active runtime, selected YOLO model and Edge Control application,
+installs the locked Python and Node.js dependencies, configures Raspberry Pi OS
+FFmpeg and creates unprivileged systemd services. Edge Control is enabled at
+boot on port `4310` and owns the Python hardware child process. The direct
+`bearvision-edge` service remains available as a disabled headless fallback;
+the two services conflict so they cannot claim the camera at the same time.
+Existing files under `/etc/bearvision` are preserved. Add Box credentials to
+`/etc/bearvision/bearvision.env`. Use `--start` to start Edge Control immediately.
+
+From Windows, deploy the current Edge payload and rerun provisioning with one
+command. The remote sudo password is entered directly in the SSH session:
+
+```powershell
+.\scripts\redeploy-edge.ps1
+```
+
+Override the defaults when deploying another device:
+
+```powershell
+.\scripts\redeploy-edge.ps1 -HostName edge-pi-2.local -UserName bear -DeviceId edge-pi-2
+```
+
+For routine application-code updates, skip OS packages and dependency installs:
+
+```powershell
+.\scripts\redeploy-edge.ps1 -CodeOnly
+```
+
+Code-only deployment synchronizes the Python runtime, Edge Control and scenario
+files, rebuilds the UI with the dependencies already installed on the device,
+and restarts `bearvision-edge-control`. It refuses to continue when Python or
+Node dependency manifests differ; use a full deployment in that case.
 
 The base runtime includes packaged FFmpeg and FFprobe binaries for local clip
 extraction; no system-wide installation or administrator access is required.

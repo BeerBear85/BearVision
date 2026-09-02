@@ -39,7 +39,8 @@ jobs:
       - name: Validate Linux Edge provisioning
         run: |
           bash -n scripts/setup-raspberry-pi.sh
-          shellcheck scripts/setup-raspberry-pi.sh
+          bash -n scripts/update-raspberry-pi-code.sh
+          shellcheck scripts/setup-raspberry-pi.sh scripts/update-raspberry-pi-code.sh
 
   vision-regression:
     strategy:

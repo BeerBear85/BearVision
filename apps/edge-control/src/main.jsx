@@ -1,5 +1,10 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
+import {
+  appendRetainedTraceEvent,
+  runtimeLogLevel,
+  showsAtMinimumLogLevel,
+} from "./log-level.js";
 import "./styles.css";
 
 const initialState = { mode: "simulation", phase: "loading", scenario: null, last_event: null };
@@ -15,6 +20,9 @@ function formatFileSize(bytes) {
 }
 
 function eventMessage(event) {
+  const logLevel = runtimeLogLevel(event);
+  if (logLevel) return `${formatLabel(logLevel)} log`;
+
   const labels = {
     mode_selected: "Runtime mode changed",
     runtime_started: "Runtime started",
@@ -49,6 +57,7 @@ function App() {
   const [scenarios, setScenarios] = useState([]);
   const [selectedScenario, setSelectedScenario] = useState("");
   const [events, setEvents] = useState([]);
+  const [minimumLogLevel, setMinimumLogLevel] = useState("info");
   const [error, setError] = useState("");
   const [playhead, setPlayhead] = useState(0);
   const [capturedClip, setCapturedClip] = useState(null);
@@ -56,6 +65,8 @@ function App() {
   const [trackingFrame, setTrackingFrame] = useState(null);
   const [trackingData, setTrackingData] = useState(null);
   const [streamConnected, setStreamConnected] = useState(false);
+  const [previewVersion, setPreviewVersion] = useState(0);
+  const [previewAvailable, setPreviewAvailable] = useState(false);
   const videoRef = useRef(null);
 
   async function request(path, options) {
@@ -128,7 +139,7 @@ function App() {
         videoRef.current?.pause();
       }
       if (event.kind !== "preview_frame" && event.kind !== "tracking_observation") {
-        setEvents((current) => [event, ...current].slice(0, 200));
+        setEvents((current) => appendRetainedTraceEvent(current, event));
       }
       request("/api/health").then(setState).catch(() => {});
     };
@@ -138,6 +149,19 @@ function App() {
     };
     return () => source.close();
   }, []);
+
+  useEffect(() => {
+    if (state.mode !== "hardware" || state.phase === "idle") {
+      setPreviewAvailable(false);
+      return undefined;
+    }
+    setPreviewVersion((current) => current + 1);
+    const timer = window.setInterval(
+      () => setPreviewVersion((current) => current + 1),
+      250,
+    );
+    return () => window.clearInterval(timer);
+  }, [state.mode, state.phase]);
 
   const running = state.phase !== "idle";
   const current = events[0];
@@ -223,6 +247,9 @@ function App() {
 
   const captureRunning = events.some((event) => event.kind === "capture_started")
     && !events.some((event) => event.kind === "capture_completed");
+  const filteredEvents = events.filter(
+    (event) => showsAtMinimumLogLevel(event, minimumLogLevel),
+  );
   const phaseTone = ["failed", "error"].includes(state.phase)
     ? "attention"
     : running ? "working" : "ok";
@@ -297,7 +324,17 @@ function App() {
                 <span className="mode-badge">{formatLabel(state.mode)}</span>
               </div>
               <div className="preview-content">
-            {state.mode === "simulation" && mediaUrl ? (
+            {state.mode === "hardware" && running ? (
+              <div className="video-stage hardware-preview">
+                <img
+                  src={`/api/preview/frame.jpg?t=${previewVersion}`}
+                  alt="Live GoPro preview"
+                  onLoad={() => setPreviewAvailable(true)}
+                  onError={() => setPreviewAvailable(false)}
+                />
+                {!previewAvailable && <p>Waiting for the first GoPro frame…</p>}
+              </div>
+            ) : state.mode === "simulation" && mediaUrl ? (
               <div className="video-stage">
                 <video
                   key={mediaUrl}
@@ -362,7 +399,7 @@ function App() {
               <>
                 <div className="reticle" />
                 <strong>{state.mode === "simulation" ? "Behavioural scenario" : "Hardware preview"}</strong>
-                <p>{state.mode === "simulation" ? "This scenario has no recorded video." : "Preview transport is the next hardware integration slice."}</p>
+                <p>{state.mode === "simulation" ? "This scenario has no recorded video." : "Start hardware to open the GoPro preview."}</p>
               </>
             )}
             {state.mode === "simulation" && selected && (
@@ -429,11 +466,31 @@ function App() {
               <section className="panel event-panel" aria-labelledby="activity-heading" aria-live="polite">
                 <div className="panel-title">
                   <div><span className="eyebrow">Live trace</span><h2 id="activity-heading">Activity</h2></div>
-                  <span className="count-badge">{events.length}</span>
+                  <div className="trace-controls">
+                    <label className="log-filter">
+                      <span>Minimum level</span>
+                      <select
+                        aria-label="Minimum log level"
+                        value={minimumLogLevel}
+                        onChange={(event) => setMinimumLogLevel(event.target.value)}
+                      >
+                        <option value="debug">Debug+</option>
+                        <option value="info">Info+</option>
+                        <option value="warning">Warning+</option>
+                        <option value="error">Error</option>
+                      </select>
+                    </label>
+                    <span className="count-badge" title={`${filteredEvents.length} shown out of ${events.length} retained`}>
+                      {filteredEvents.length}/{events.length}
+                    </span>
+                  </div>
                 </div>
                 <ol>
                   {events.length === 0 && <li className="empty"><strong>No activity yet</strong><small>Events will appear when the runtime starts.</small></li>}
-                  {events.map((event, index) => (
+                  {events.length > 0 && filteredEvents.length === 0 && (
+                    <li className="empty"><strong>No matching activity</strong><small>Lower the minimum level to show more logs.</small></li>
+                  )}
+                  {filteredEvents.map((event, index) => (
                     <li key={`${event.sequence}-${index}`}>
                       <time>{event.at_s == null ? "LIVE" : `T+${Number(event.at_s).toFixed(1)}`}</time>
                       <span><strong>{eventMessage(event)}</strong><small>{event.payload?.rider_id ?? event.payload?.message ?? ""}</small></span>

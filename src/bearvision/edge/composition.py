@@ -109,6 +109,7 @@ def build_real_system(
             max_fps=config.performance.max_fps,
             queue_size=config.performance.callback_queue_size,
             drain_old_frames=config.performance.buffer_drain,
+            preview_frame_path=Path(scratch_dir) / "live-preview.jpg",
         ),
     )
 

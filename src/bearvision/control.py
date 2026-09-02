@@ -45,7 +45,12 @@ def simulate(
     return execution.exit_code
 
 
-async def hardware(config_path: Path) -> int:
+async def hardware(
+    config_path: Path,
+    *,
+    capture_dir: Path = Path("temp/captures"),
+    scratch_dir: Path = Path("temp/scratch"),
+) -> int:
     config = load_edge_config(config_path)
     logging.basicConfig(
         level=getattr(logging, config.system.log_level),
@@ -53,8 +58,8 @@ async def hardware(config_path: Path) -> int:
     )
     orchestrator = build_real_orchestrator(
         config,
-        capture_dir=Path("temp/captures"),
-        scratch_dir=Path("temp/scratch"),
+        capture_dir=capture_dir,
+        scratch_dir=scratch_dir,
     )
     emit("hardware_initializing", {"config": str(config_path)})
     try:
@@ -75,6 +80,8 @@ def main() -> int:
     simulation.add_argument("--config", type=Path, default=Path("config/edge.yaml"))
     real = commands.add_parser("hardware")
     real.add_argument("--config", type=Path, default=Path("config/edge.yaml"))
+    real.add_argument("--capture-dir", type=Path, default=Path("temp/captures"))
+    real.add_argument("--scratch-dir", type=Path, default=Path("temp/scratch"))
     args = parser.parse_args()
     if args.command == "simulate":
         return simulate(
@@ -84,7 +91,13 @@ def main() -> int:
             local_queue_root=args.local_queue_root,
             config_path=args.config,
         )
-    return asyncio.run(hardware(args.config))
+    return asyncio.run(
+        hardware(
+            args.config,
+            capture_dir=args.capture_dir,
+            scratch_dir=args.scratch_dir,
+        )
+    )
 
 
 if __name__ == "__main__":

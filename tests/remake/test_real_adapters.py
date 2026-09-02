@@ -3,6 +3,8 @@ from pathlib import Path
 import threading
 from types import SimpleNamespace
 
+from open_gopro.models import proto
+from open_gopro.models.constants import SettingId, StatusId, settings
 
 from bearvision.adapters import (
     BoxJobQueue,
@@ -188,6 +190,10 @@ def test_async_gopro_controller_maps_the_sdk_without_a_thread_bridge(
 
         await controller.connect()
         assert await controller.enable_hindsight(15)
+        assert await controller.start_preview() == (
+            "udp://@0.0.0.0:8554?fifo_size=65536&overrun_nonfatal=1"
+        )
+        await controller.stop_preview()
         await controller.start_recording()
         await controller.stop_recording()
         assert await controller.list_videos() == ["DCIM/100GOPRO/GOPR0001.MP4"]
@@ -195,6 +201,114 @@ def test_async_gopro_controller_maps_the_sdk_without_a_thread_bridge(
         await controller.disconnect()
 
         assert destination.read_text(encoding="utf-8") == "data"
+
+    asyncio.run(exercise())
+
+
+def test_async_gopro_switches_to_video_before_camera_configuration() -> None:
+    async def exercise() -> None:
+        sdk = FakeGoPro()
+        calls: list[object] = []
+
+        async def open_camera():
+            calls.append("open")
+
+        async def load_preset_group(*, group):
+            calls.append(group)
+            return SimpleNamespace(ok=True)
+
+        async def camera_state():
+            return SimpleNamespace(
+                ok=True,
+                data={StatusId.PRESET_GROUP: proto.EnumPresetGroup.PRESET_GROUP_ID_PHOTO},
+            )
+
+        sdk.open = open_camera
+        sdk.http_command.get_camera_state = camera_state
+        sdk.http_command.load_preset_group = load_preset_group
+
+        await AsyncGoProController(gopro=sdk).connect()
+
+        assert calls == ["open", proto.EnumPresetGroup.PRESET_GROUP_ID_VIDEO]
+
+    asyncio.run(exercise())
+
+
+def test_async_gopro_does_not_reapply_matching_video_preset_group() -> None:
+    async def exercise() -> None:
+        sdk = FakeGoPro()
+        writes = 0
+
+        async def camera_state():
+            return SimpleNamespace(
+                ok=True,
+                data={StatusId.PRESET_GROUP: proto.EnumPresetGroup.PRESET_GROUP_ID_VIDEO},
+            )
+
+        async def reject_redundant_write(*, group):
+            nonlocal writes
+            writes += 1
+            return SimpleNamespace(ok=False)
+
+        sdk.http_command.get_camera_state = camera_state
+        sdk.http_command.load_preset_group = reject_redundant_write
+
+        await AsyncGoProController(gopro=sdk).connect()
+
+        assert writes == 0
+
+    asyncio.run(exercise())
+
+
+def test_async_gopro_does_not_reapply_matching_hindsight_setting() -> None:
+    async def exercise() -> None:
+        sdk = FakeGoPro()
+        writes = 0
+
+        async def camera_state():
+            return SimpleNamespace(
+                ok=True,
+                data={SettingId.HINDSIGHT: settings.Hindsight.NUM_15_SECONDS},
+            )
+
+        async def reject_redundant_write(value):
+            nonlocal writes
+            writes += 1
+            return SimpleNamespace(ok=False)
+
+        sdk.http_command.get_camera_state = camera_state
+        sdk.http_setting.hindsight.set = reject_redundant_write
+        controller = AsyncGoProController(gopro=sdk)
+
+        assert await controller.enable_hindsight(15)
+        assert writes == 0
+
+    asyncio.run(exercise())
+
+
+def test_async_gopro_verifies_hindsight_after_rejected_write() -> None:
+    async def exercise() -> None:
+        sdk = FakeGoPro()
+        states = [
+            settings.Hindsight.OFF,
+            settings.Hindsight.NUM_15_SECONDS,
+        ]
+
+        async def camera_state():
+            return SimpleNamespace(
+                ok=True,
+                data={SettingId.HINDSIGHT: states.pop(0)},
+            )
+
+        async def rejected_write(value):
+            return SimpleNamespace(ok=False)
+
+        sdk.http_command.get_camera_state = camera_state
+        sdk.http_setting.hindsight.set = rejected_write
+        controller = AsyncGoProController(gopro=sdk)
+
+        assert await controller.enable_hindsight(15)
+        assert states == []
 
     asyncio.run(exercise())
 

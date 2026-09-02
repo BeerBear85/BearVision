@@ -20,9 +20,10 @@ The current version supports:
 - wall-clock replay of behavioural scenario traces;
 - live state and event log over Server-Sent Events;
 - starting and stopping the Python runtime as a child process.
+- live GoPro hardware preview as throttled JPEG snapshots;
 - recorded scenario video, extracted clips, processed upload clips and tracking
   evidence when the selected scenario produces them;
 - a responsive operator interface aligned with Server Control's visual system.
 
-Real GoPro preview transport is deliberately not implemented yet. See
-`docs/remake/edge-control.md` and `docs/remake/ui-design-criteria.md`.
+The hardware preview is intentionally operator-grade rather than full frame rate:
+the Python runtime publishes four JPEG snapshots per second through the Node server.

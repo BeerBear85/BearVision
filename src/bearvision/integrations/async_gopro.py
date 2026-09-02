@@ -3,11 +3,16 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from pathlib import Path
 from typing import Any
 
 from open_gopro import WiredGoPro
-from open_gopro.models.constants import constants, settings
+from open_gopro.models import proto
+from open_gopro.models.constants import SettingId, StatusId, constants, settings
+
+
+logger = logging.getLogger(__name__)
 
 
 class AsyncGoProController:
@@ -18,6 +23,18 @@ class AsyncGoProController:
 
     async def connect(self) -> None:
         await self._gopro.open()
+        video_group = proto.EnumPresetGroup.PRESET_GROUP_ID_VIDEO
+        if await self._current_preset_group() == video_group:
+            return
+        response = await self._gopro.http_command.load_preset_group(
+            group=video_group
+        )
+        if (
+            hasattr(response, "ok")
+            and not response.ok
+            and await self._current_preset_group() != video_group
+        ):
+            raise RuntimeError("GoPro rejected the Video preset group")
 
     async def disconnect(self) -> None:
         await self._gopro.close()
@@ -48,12 +65,39 @@ class AsyncGoProController:
         )
         if hasattr(response, "ok") and not response.ok:
             raise RuntimeError("GoPro rejected preview stream start")
-        return f"udp://@0.0.0.0:{port}"
+        return (
+            f"udp://@0.0.0.0:{port}"
+            "?fifo_size=65536&overrun_nonfatal=1"
+        )
 
     async def stop_preview(self) -> None:
         await self._gopro.http_command.set_preview_stream(
             mode=constants.Toggle.DISABLE
         )
+
+    async def _current_preset_group(self) -> Any | None:
+        try:
+            response = await self._gopro.http_command.get_camera_state()
+        except Exception as exc:
+            logger.warning("Could not read GoPro preset group: %s", exc)
+            return None
+        if hasattr(response, "ok") and not response.ok:
+            return None
+        if not isinstance(response.data, dict):
+            return None
+        return response.data.get(StatusId.PRESET_GROUP)
+
+    async def _current_hindsight(self) -> Any | None:
+        try:
+            response = await self._gopro.http_command.get_camera_state()
+        except Exception as exc:
+            logger.warning("Could not read GoPro state before setting HindSight: %s", exc)
+            return None
+        if hasattr(response, "ok") and not response.ok:
+            return None
+        if not isinstance(response.data, dict):
+            return None
+        return response.data.get(SettingId.HINDSIGHT)
 
     async def enable_hindsight(self, duration_s: int = 15) -> bool:
         values = {
@@ -64,8 +108,15 @@ class AsyncGoProController:
             value = values[duration_s]
         except KeyError as exc:
             raise ValueError("HindSight duration must be 15 or 30 seconds") from exc
+
+        if await self._current_hindsight() == value:
+            return True
+
         response = await self._gopro.http_setting.hindsight.set(value)
-        return not hasattr(response, "ok") or bool(response.ok)
+        if not hasattr(response, "ok") or response.ok:
+            return True
+
+        return await self._current_hindsight() == value
 
     async def disable_hindsight(self) -> None:
         await self._gopro.http_setting.hindsight.set(settings.Hindsight.OFF)

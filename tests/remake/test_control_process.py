@@ -1,10 +1,12 @@
+import asyncio
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from pydantic import ValidationError
 
-from bearvision.control import simulate
+from bearvision.control import hardware, simulate
 from bearvision.contracts import serialize_runtime_event
 
 
@@ -43,3 +45,39 @@ def test_runtime_event_contract_rejects_unknown_or_malformed_events() -> None:
             {},
             at_s=1,
         )
+
+
+def test_hardware_uses_explicit_runtime_directories(monkeypatch) -> None:
+    config_path = Path("config/production-edge.yaml")
+    capture_dir = Path("state/captures")
+    scratch_dir = Path("state/scratch")
+    received: dict[str, Path] = {}
+
+    class Orchestrator:
+        async def run(self) -> None:
+            return None
+
+    def build_orchestrator(config, *, capture_dir, scratch_dir):
+        received["capture_dir"] = capture_dir
+        received["scratch_dir"] = scratch_dir
+        return Orchestrator()
+
+    monkeypatch.setattr(
+        "bearvision.control.load_edge_config",
+        lambda path: SimpleNamespace(system=SimpleNamespace(log_level="INFO")),
+    )
+    monkeypatch.setattr("bearvision.control.build_real_orchestrator", build_orchestrator)
+
+    exit_code = asyncio.run(
+        hardware(
+            config_path,
+            capture_dir=capture_dir,
+            scratch_dir=scratch_dir,
+        )
+    )
+
+    assert exit_code == 0
+    assert received == {
+        "capture_dir": capture_dir,
+        "scratch_dir": scratch_dir,
+    }
