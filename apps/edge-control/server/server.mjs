@@ -5,6 +5,7 @@ import { dirname, extname, join, normalize, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createInterface } from "node:readline";
 import { parse as parseYaml } from "yaml";
+import { createRuntimeLogLevelClassifier } from "../src/log-level.js";
 import { ControlState } from "./control-state.mjs";
 import { assertGoProUsbConnected } from "./hardware-preflight.mjs";
 import { parseByteRange, safeLeafPath } from "./media-files.mjs";
@@ -150,13 +151,14 @@ function serveMedia(request, response, filePath) {
 
 function attachOutput(stream, source) {
   const lines = createInterface({ input: stream });
+  const classifyLogLevel = createRuntimeLogLevelClassifier();
   lines.on("line", (line) => {
     if (!line.trim()) return;
     try {
       const parsed = parseRuntimeEventLine(line);
       publish(parsed.kind, parsed.payload, parsed.at_s);
     } catch {
-      publish("runtime_log", { source, message: line });
+      publish("runtime_log", { source, level: classifyLogLevel(line), message: line });
     }
   });
 }

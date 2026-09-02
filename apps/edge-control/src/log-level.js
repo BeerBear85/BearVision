@@ -5,13 +5,45 @@ const LOG_LEVEL_RANK = {
   error: 40,
 };
 
+function normalizedLevel(value) {
+  const level = String(value ?? "").toLowerCase();
+  if (level === "critical") return "error";
+  return level in LOG_LEVEL_RANK ? level : null;
+}
+
+function levelDeclaredByLine(message) {
+  const text = String(message ?? "");
+  const header = text.match(/\b(DEBUG|INFO|WARNING|ERROR|CRITICAL)\s+([\w.]+):\s*(.*)$/i);
+  if (header) {
+    const level = normalizedLevel(header[1]);
+    const loggerName = header[2].toLowerCase();
+    const body = header[3];
+    if (level === "info" && loggerName.startsWith("open_gopro.") && body === "") {
+      return "debug";
+    }
+    return level;
+  }
+
+  const explicitLevel = text.match(/\b(DEBUG|INFO|WARNING|ERROR|CRITICAL)\b/i)?.[1];
+  return normalizedLevel(explicitLevel);
+}
+
+export function createRuntimeLogLevelClassifier(defaultLevel = "info") {
+  let inheritedLevel = normalizedLevel(defaultLevel) ?? "info";
+
+  return (message) => {
+    const declaredLevel = levelDeclaredByLine(message);
+    if (declaredLevel) inheritedLevel = declaredLevel;
+    return inheritedLevel;
+  };
+}
+
 export function runtimeLogLevel(event) {
   if (event?.kind !== "runtime_log") return null;
 
-  const match = String(event.payload?.message ?? "").match(/\b(DEBUG|INFO|WARNING|ERROR|CRITICAL)\b/i);
-  const level = match?.[1]?.toLowerCase();
-  if (level === "critical") return "error";
-  return level && level in LOG_LEVEL_RANK ? level : "info";
+  return normalizedLevel(event.payload?.level)
+    ?? levelDeclaredByLine(event.payload?.message)
+    ?? "info";
 }
 
 export function showsAtMinimumLogLevel(event, minimumLevel) {

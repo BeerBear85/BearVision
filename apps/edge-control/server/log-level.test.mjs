@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   appendRetainedTraceEvent,
+  createRuntimeLogLevelClassifier,
   runtimeLogLevel,
   showsAtMinimumLogLevel,
 } from "../src/log-level.js";
@@ -19,6 +20,39 @@ test("runtime log levels are inferred from their message", () => {
   assert.equal(runtimeLogLevel(runtimeLog("CRITICAL Runtime aborted")), "error");
   assert.equal(runtimeLogLevel(runtimeLog("Unstructured runtime output")), "info");
   assert.equal(runtimeLogLevel({ kind: "capture_completed" }), null);
+});
+
+test("open_gopro protocol dumps and all continuation lines are debug", () => {
+  const classify = createRuntimeLogLevelClassifier();
+  const protocolDump = [
+    "2026-09-02 15:29:44,383 INFO open_gopro.gopro_base:",
+    "-------------->>>>>>>>",
+    '"id" : "Preview Stream",',
+    '"protocol" : "Protocol.HTTP",',
+    '"endpoint" : "gopro/camera/stream",',
+    '"mode" : "start",',
+    '"port" : "8554",',
+    "<<<<<<<<--------------",
+  ];
+
+  assert.deepEqual(protocolDump.map(classify), protocolDump.map(() => "debug"));
+});
+
+test("application state changes remain info and warnings remain warnings", () => {
+  const classify = createRuntimeLogLevelClassifier();
+
+  assert.equal(classify("2026-09-02 15:30:00 INFO bearvision.edge.orchestrator: Hardware ready"), "info");
+  assert.equal(classify("state = running"), "info");
+  assert.equal(classify("2026-09-02 15:30:00 INFO open_gopro.features.streaming: Starting preview stream"), "info");
+  assert.equal(classify("2026-09-02 15:30:01 WARNING open_gopro.gopro_base: Frame dropped"), "warning");
+  assert.equal(classify("retrying stream"), "warning");
+});
+
+test("server-assigned levels override fallback message parsing", () => {
+  assert.equal(runtimeLogLevel({
+    kind: "runtime_log",
+    payload: { level: "debug", message: "INFO open_gopro.gopro_base:" },
+  }), "debug");
 });
 
 test("minimum level filters runtime logs without hiding semantic events", () => {
