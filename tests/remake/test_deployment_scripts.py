@@ -37,6 +37,8 @@ def test_code_updater_only_escalates_the_service_restart() -> None:
 
     assert '[[ $EUID -ne 0 ]]' in source
     assert 'sudo -n /usr/bin/systemctl restart "$SERVICE_NAME.service"' in source
+    assert "same_manifest_content()" in source
+    assert "cmp --silent <(tr -d '\\r'" in source
     assert "runuser" not in source
     assert "chown -R" not in source
 

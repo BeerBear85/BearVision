@@ -32,6 +32,10 @@ on_error() {
 
 trap on_error ERR
 
+same_manifest_content() {
+    cmp --silent <(tr -d '\r' < "$1") <(tr -d '\r' < "$2")
+}
+
 [[ $EUID -ne 0 ]] || die "run this script as the deployment user, not as root"
 id "$SERVICE_USER" >/dev/null 2>&1 || die "run the full setup first (missing user $SERVICE_USER)"
 [[ -d $INSTALL_DIR && -d $INSTALL_DIR/.venv ]] || \
@@ -47,7 +51,7 @@ for relative_path in \
     [[ -f "$SOURCE_DIR/$relative_path" ]] || die "deployment is missing $relative_path"
     [[ -f "$INSTALL_DIR/$relative_path" ]] || \
         die "installed runtime is missing $relative_path; run the full setup"
-    cmp --silent "$SOURCE_DIR/$relative_path" "$INSTALL_DIR/$relative_path" || \
+    same_manifest_content "$SOURCE_DIR/$relative_path" "$INSTALL_DIR/$relative_path" || \
         die "$relative_path changed; run a full deployment to update dependencies"
 done
 
