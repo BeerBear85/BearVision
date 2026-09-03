@@ -264,3 +264,23 @@ test("queue snapshot restores retryable clip-job failure cards", () => {
   assert.equal(run.failures[0].scope, "clip_job");
   assert.equal(state.retryFailure(run.failures[0].failure_id).job_id, "job-failed");
 });
+
+test("debug and frame noise stay transient while informative logs remain recoverable", () => {
+  const state = deterministicState();
+  state.start({ mode: "hardware" });
+
+  state.record({
+    kind: "runtime_log",
+    payload: { level: "debug", message: "BLE advertisement" },
+  });
+  state.record({ kind: "preview_frame", payload: { frame_id: "frame-1" } });
+  state.record({
+    kind: "runtime_log",
+    payload: { level: "info", message: "Camera ready" },
+  });
+
+  assert.deepEqual(
+    state.snapshot().active_run.events.map((event) => event.payload.message),
+    ["Camera ready"],
+  );
+});

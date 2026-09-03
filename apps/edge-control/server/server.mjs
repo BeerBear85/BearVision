@@ -199,9 +199,11 @@ export function createEdgeControlServer(options = {}) {
   const eventStream = options.eventStream ?? new EventStream({ getSnapshot: () => ({
     ...state.snapshot(), readiness: readiness.current(),
   }) });
-  const publishControlEvent = (event) => eventStream.publish({
+  const publishControlEvent = (event, stateSnapshot = state.snapshot()) => eventStream.publish({
     ...event,
-    control_snapshot: { ...state.snapshot(), readiness: readiness.current() },
+    ...(stateSnapshot == null ? {} : {
+      control_snapshot: { ...stateSnapshot, readiness: readiness.current() },
+    }),
   });
 
   const spawnRuntime = options.spawnRuntime ?? (({ mode, scenario, runId }) => {

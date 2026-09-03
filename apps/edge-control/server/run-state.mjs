@@ -2,6 +2,8 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "
 import { dirname } from "node:path";
 import { randomUUID } from "node:crypto";
 
+import { runtimeLogLevel } from "../src/log-level.js";
+
 const TRANSIENT_EVENT_KINDS = new Set(["preview_frame", "tracking_observation"]);
 const ACTIVE_STAGES = new Set([
   "initializing", "monitoring", "recording", "post_processing", "packaging",
@@ -29,6 +31,11 @@ function emptyClipQueue() {
     oldest_queued_at_utc: null,
     jobs: [],
   };
+}
+
+function isTransientEvent(event) {
+  return TRANSIENT_EVENT_KINDS.has(event.kind)
+    || (event.kind === "runtime_log" && runtimeLogLevel(event) === "debug");
 }
 
 export class RunState {
@@ -233,10 +240,10 @@ export class RunState {
       if (failure && failure.resolved_at == null) failure.resolved_at = recorded.emitted_at;
     }
 
-    if (!TRANSIENT_EVENT_KINDS.has(recorded.kind)) {
+    if (!isTransientEvent(recorded)) {
       run.events = [recorded, ...run.events].slice(0, 500);
+      this.#persist();
     }
-    this.#persist();
     return recorded;
   }
 

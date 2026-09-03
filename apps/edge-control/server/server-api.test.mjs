@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { once } from "node:events";
+import { EventEmitter, once } from "node:events";
+import { PassThrough } from "node:stream";
 import test from "node:test";
 
 import { createEdgeControlServer } from "./server.mjs";
@@ -16,6 +17,16 @@ async function runningServer(options = {}) {
       return { response, body: await response.json() };
     },
   };
+}
+
+function fakeRuntimeChild() {
+  const child = new EventEmitter();
+  child.pid = 4321;
+  child.stdout = new PassThrough();
+  child.stderr = new PassThrough();
+  child.stdin = new PassThrough();
+  child.kill = () => true;
+  return child;
 }
 
 test("invalid scenario is rejected before runtime state changes", async (context) => {
@@ -71,4 +82,35 @@ test("critical readiness produces a structured conflict and blocks hardware star
   assert.equal(started.response.status, 409);
   assert.equal(started.body.code, "READINESS_BLOCKED");
   assert.equal(started.body.corrective_action.includes("critical"), true);
+});
+
+test("high-volume debug output does not retain a full state snapshot per log line", async (context) => {
+  const child = fakeRuntimeChild();
+  const readiness = {
+    assertReady: async () => {},
+    current: () => null,
+  };
+  const control = createEdgeControlServer({
+    persistState: false,
+    readiness,
+    spawnRuntime: () => child,
+  });
+  context.after(() => control.close());
+  await control.supervisor.start({ mode: "hardware" });
+
+  for (let index = 0; index < 200; index += 1) {
+    child.stderr.write(`2026-09-03 DEBUG bleak.backends.bluezdbus.manager: poll ${index}\n`);
+  }
+  await new Promise((resolve) => setImmediate(resolve));
+
+  const debugEvents = control.eventStream.history
+    .map(({ event }) => event)
+    .filter((event) => event.kind === "runtime_log");
+  assert.equal(debugEvents.length, 200);
+  assert.equal(
+    debugEvents.every((event) => event.control_snapshot == null),
+    true,
+    "debug events must not amplify memory by retaining repeated control snapshots",
+  );
+  assert.ok(JSON.stringify(control.eventStream.history).length < 100_000);
 });

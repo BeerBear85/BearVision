@@ -3,6 +3,12 @@ import { createInterface } from "node:readline";
 import { createRuntimeLogLevelClassifier } from "../src/log-level.js";
 import { parseRuntimeEventLine } from "./runtime-events.mjs";
 
+const SNAPSHOTLESS_EVENT_KINDS = new Set([
+  "preview_frame",
+  "runtime_log",
+  "tracking_observation",
+]);
+
 export class RuntimeSupervisor {
   constructor({
     state,
@@ -77,7 +83,10 @@ export class RuntimeSupervisor {
 
   #record(event) {
     const recorded = this.state.record(event);
-    this.publish(recorded, this.state.snapshot());
+    const snapshot = SNAPSHOTLESS_EVENT_KINDS.has(recorded.kind)
+      ? null
+      : this.state.snapshot();
+    this.publish(recorded, snapshot);
     return recorded;
   }
 
