@@ -15,6 +15,7 @@ def test_code_only_redeploy_runs_updater_without_root() -> None:
     assert "'sudo bash scripts/update-raspberry-pi-code.sh'" not in source
     assert "$ConfigureCodeDeploy" in source
     assert "sudo bash scripts/configure-code-deployment.sh" in source
+    assert "[string[]]$payload = if ($ConfigureCodeDeploy)" in source
 
 
 def test_code_updater_only_escalates_the_service_restart() -> None:

@@ -30,7 +30,7 @@ $remoteArchive = "/tmp/bearvision-$deploymentId.tar.gz"
 $remoteDirectory = "/tmp/bearvision-$deploymentId"
 $destination = "$UserName@$HostName"
 
-$payload = if ($ConfigureCodeDeploy) {
+[string[]]$payload = if ($ConfigureCodeDeploy) {
     @('scripts/configure-code-deployment.sh')
 }
 elseif ($CodeOnly) {
