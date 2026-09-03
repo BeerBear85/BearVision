@@ -13,10 +13,16 @@ param(
     [string]$DeviceId = 'bearvisionedge1',
 
     [Parameter()]
-    [switch]$CodeOnly
+    [switch]$CodeOnly,
+
+    [Parameter()]
+    [switch]$ConfigureCodeDeploy
 )
 
 $ErrorActionPreference = 'Stop'
+if ($CodeOnly -and $ConfigureCodeDeploy) {
+    throw '-CodeOnly and -ConfigureCodeDeploy are mutually exclusive'
+}
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $deploymentId = [Guid]::NewGuid().ToString('N')
 $archivePath = Join-Path ([IO.Path]::GetTempPath()) "bearvision-$deploymentId.tar.gz"
@@ -24,7 +30,10 @@ $remoteArchive = "/tmp/bearvision-$deploymentId.tar.gz"
 $remoteDirectory = "/tmp/bearvision-$deploymentId"
 $destination = "$UserName@$HostName"
 
-$payload = if ($CodeOnly) {
+$payload = if ($ConfigureCodeDeploy) {
+    @('scripts/configure-code-deployment.sh')
+}
+elseif ($CodeOnly) {
     @(
         'apps/edge-control',
         'scripts/update-raspberry-pi-code.sh',
@@ -40,6 +49,7 @@ else {
         'code/dnn_models/yolov8n.onnx',
         'config/edge.yaml',
         'README.md',
+        'scripts/configure-code-deployment.sh',
         'scripts/setup-raspberry-pi.sh',
         'scripts/update-raspberry-pi-code.sh',
         'specs/scenarios',
@@ -77,11 +87,14 @@ try {
     Write-Host "Uploading deployment to $destination"
     Invoke-NativeCommand scp $archivePath "${destination}:$remoteArchive"
 
-    $deploymentCommand = if ($CodeOnly) {
-        'sudo bash scripts/update-raspberry-pi-code.sh'
+    $deploymentCommand = if ($ConfigureCodeDeploy) {
+        "sudo bash scripts/configure-code-deployment.sh --deploy-user '$UserName'"
+    }
+    elseif ($CodeOnly) {
+        'bash scripts/update-raspberry-pi-code.sh'
     }
     else {
-        "sudo bash scripts/setup-raspberry-pi.sh --device-id '$DeviceId' --start"
+        "sudo bash scripts/setup-raspberry-pi.sh --device-id '$DeviceId' --deploy-user '$UserName' --start"
     }
 
     $remoteCommand = @"
@@ -99,8 +112,9 @@ cd "`$deploy_dir"
 $deploymentCommand
 "@
 
-    $mode = if ($CodeOnly) { 'application code' } else { 'full Edge stack' }
-    Write-Host "Deploying $mode (sudo may prompt for the remote password)"
+    $mode = if ($ConfigureCodeDeploy) { 'passwordless code deployment' } elseif ($CodeOnly) { 'application code' } else { 'full Edge stack' }
+    $privilegeNote = if ($CodeOnly) { 'without sudo' } else { 'sudo may prompt for the remote password' }
+    Write-Host "Deploying $mode ($privilegeNote)"
     Invoke-NativeCommand ssh '-tt' $destination $remoteCommand
     Write-Host "Deployment complete: http://$HostName`:4310"
 }

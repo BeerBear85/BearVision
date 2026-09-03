@@ -169,8 +169,21 @@ For routine application-code updates, skip OS packages and dependency installs:
 
 Code-only deployment synchronizes the Python runtime, Edge Control and scenario
 files, rebuilds the UI with the dependencies already installed on the device,
-and restarts `bearvision-edge-control`. It refuses to continue when Python or
-Node dependency manifests differ; use a full deployment in that case.
+and restarts `bearvision-edge-control` without prompting for sudo. Full setup
+grants the selected SSH user ownership of deployable application directories
+and passwordless permission to restart only that service; the service itself
+continues to run as the unprivileged `bearvision` account. It refuses to
+continue when Python or Node dependency manifests differ; use a full deployment
+in that case. Existing devices need one final full deployment to configure this
+least-privilege model before passwordless `-CodeOnly` updates can be used. To
+configure an existing installation without reinstalling packages, run once:
+
+```powershell
+.\scripts\redeploy-edge.ps1 -ConfigureCodeDeploy
+```
+
+That bootstrap prompts for sudo once. All later `-CodeOnly` deployments run
+without a password.
 
 The base runtime includes packaged FFmpeg and FFprobe binaries for local clip
 extraction; no system-wide installation or administrator access is required.

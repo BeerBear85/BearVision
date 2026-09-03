@@ -20,6 +20,7 @@ INSTALL_DIR="$DEFAULT_INSTALL_DIR"
 STATE_DIR="$DEFAULT_STATE_DIR"
 CONFIG_DIR="$DEFAULT_CONFIG_DIR"
 SERVICE_USER="$DEFAULT_SERVICE_USER"
+DEPLOY_USER="${SUDO_USER:-}"
 UV_VERSION="$DEFAULT_UV_VERSION"
 PNPM_VERSION="$DEFAULT_PNPM_VERSION"
 DEVICE_ID=""
@@ -38,6 +39,8 @@ Options:
   --install-dir PATH   Application directory (default: /opt/bearvision).
   --state-dir PATH     Capture and scratch directory (default: /var/lib/bearvision).
   --service-user USER  Unprivileged runtime account (default: bearvision).
+  --deploy-user USER   Login allowed to update code and restart Edge Control.
+                       Defaults to the user that invoked sudo.
   --uv-version VERSION Pinned uv installer version (default: 0.12.7).
   --pnpm-version VER   Pinned pnpm version (default: 10.34.5).
   --start              Start or restart Edge Control after installation.
@@ -99,6 +102,11 @@ while (($# > 0)); do
             SERVICE_USER=$2
             shift 2
             ;;
+        --deploy-user)
+            require_value "$1" "${2-}"
+            DEPLOY_USER=$2
+            shift 2
+            ;;
         --uv-version)
             require_value "$1" "${2-}"
             UV_VERSION=$2
@@ -152,6 +160,10 @@ fi
 [[ $INSTALL_DIR != *[[:space:]]* && $STATE_DIR != *[[:space:]]* ]] || \
     die "installation paths must not contain whitespace"
 [[ $SERVICE_USER =~ ^[a-z_][a-z0-9_-]*$ ]] || die "invalid service user: $SERVICE_USER"
+if [[ -n $DEPLOY_USER ]]; then
+    [[ $DEPLOY_USER =~ ^[a-z_][a-z0-9_-]*$ ]] || die "invalid deploy user: $DEPLOY_USER"
+    [[ $DEPLOY_USER != root ]] || die "root must not be configured as the deploy user"
+fi
 [[ $UV_VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "invalid uv version: $UV_VERSION"
 [[ $PNPM_VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "invalid pnpm version: $PNPM_VERSION"
 
@@ -168,6 +180,7 @@ for required_file in \
     code/dnn_models/yolov8n.onnx \
     apps/edge-control/package.json \
     apps/edge-control/pnpm-lock.yaml \
+    scripts/configure-code-deployment.sh \
     specs/scenarios/single-rider-success.yaml; do
     [[ -f "$SOURCE_DIR/$required_file" ]] || \
         die "run this script from a complete BearVision checkout (missing $required_file)"
@@ -207,6 +220,9 @@ if ! id "$SERVICE_USER" >/dev/null 2>&1; then
         "$SERVICE_USER"
 fi
 SERVICE_GROUP="$(id -gn "$SERVICE_USER")"
+if [[ -n $DEPLOY_USER ]]; then
+    id "$DEPLOY_USER" >/dev/null 2>&1 || die "deploy user does not exist: $DEPLOY_USER"
+fi
 
 install -d -o "$SERVICE_USER" -g "$SERVICE_GROUP" -m 0750 \
     "$INSTALL_DIR" \
@@ -389,6 +405,14 @@ runuser -u "$SERVICE_USER" -- env \
     BEARVISION_CAPTURE_ROOT="$STATE_DIR/captures" \
     BEARVISION_SCRATCH_ROOT="$STATE_DIR/scratch" \
     node --check "$INSTALL_DIR/apps/edge-control/server/server.mjs"
+
+if [[ -n $DEPLOY_USER ]]; then
+    bash "$SOURCE_DIR/scripts/configure-code-deployment.sh" \
+        --deploy-user "$DEPLOY_USER" \
+        --install-dir "$INSTALL_DIR" \
+        --service-user "$SERVICE_USER" \
+        --service-name "$CONTROL_SERVICE_NAME"
+fi
 
 systemctl daemon-reload
 systemctl enable bluetooth.service >/dev/null
