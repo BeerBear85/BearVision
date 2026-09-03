@@ -13,16 +13,28 @@ preview frames, BLE scanning, detection, storage and time. Behavioural scenarios
 and the edge service execute the same `BearVisionOrchestrator`.
 
 ```text
-GoPro preview -> FrameSource -> Detector -> BearVisionOrchestrator
-BearTag BLE -------------------------------> |
-GoPro capture <----------------------------- |
-Box input queue <--------------------------- |
+GoPro preview -> FrameSource -> live Detector -> BearVisionOrchestrator
+BearTag BLE ---------------------------------> |
+                                                v
+                         serial camera worker -> raw clip in capture_dir
+                                                v
+                                     .raw-clip-queue metadata
+                                                v
+                         one background worker -> Virtual Cameraman -> Box
 
 Box input queue -> Python server worker -> processed/user_<uuid>
                                       \----> unresolved / failed
 
 Scenario events -> simulated adapters -> shared local queue -> same server worker
 ```
+
+Raw video is never copied when it enters the local queue. Only a versioned JSON
+record is atomically committed under `capture_dir/.raw-clip-queue`. Queued and
+interrupted jobs survive Python restarts; processing and upload failures remain
+job-local and require an explicit operator retry. The hardware runtime keeps
+analysing preview frames while the single background worker processes or uploads.
+GoPro capture/download remains serial because the camera cannot perform those
+operations concurrently.
 
 In production, Edge and server communicate only through Box. Edge Control
 simulations use `temp/simulation-queue`, which the server can consume with

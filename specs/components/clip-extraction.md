@@ -17,6 +17,8 @@ not interchangeable.
   to the earliest media available since HindSight was enabled.
 - Requested end is `detection time + post-detection duration`.
 - A later detection during an active capture does not extend its end.
+- Later person episodes are retained as FIFO requests with their original
+  detection timestamps, even while an earlier clip is downloading or processing.
 - The downloaded GoPro file remains byte-for-byte unchanged as the raw clip.
 - Every capture reports both the requested window and the actual delivered
   window on the monotonic timeline.
@@ -25,6 +27,17 @@ not interchangeable.
   command timing and probed media duration.
 - A request whose pre-roll disagrees with the configured GoPro HindSight mode
   fails during capture rather than silently producing a different window.
+- After download, enqueue writes only atomic JSON metadata. The raw video remains
+  directly under `capture_dir` and is not copied into the queue directory.
+- BearTag observations are snapshotted from the actual raw capture window before
+  the camera worker accepts another request.
+
+## Physical limitation
+
+Processing and upload are concurrent with preview analysis, but GoPro shutter,
+encoding and download remain serial. If their turnaround exceeds the configured
+HindSight backlog, the software cannot preserve a later episode; continuous
+recording or another capture transport would be a separate design change.
 
 ## Recorded-video extraction
 

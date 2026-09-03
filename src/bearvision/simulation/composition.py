@@ -43,4 +43,5 @@ def build_behavioral_system(
         assignment_policy=server_assignment_policy,
         job_queue=job_queue,
         process_server=process_server,
+        capture_dir=capture_dir,
     )

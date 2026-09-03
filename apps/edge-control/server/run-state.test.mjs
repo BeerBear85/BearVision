@@ -83,9 +83,10 @@ test("Python event identity and occurrence time remain authoritative", () => {
   assert.equal(state.snapshot().active_run.stage, "failed");
 });
 
-test("capture state follows stable operation ids across repeated captures", () => {
+test("camera activity follows stable operation ids without leaving monitoring", () => {
   const state = deterministicState();
   state.start({ mode: "hardware" });
+  state.record({ kind: "runtime_started", payload: { pid: 1234 } });
   state.record({ kind: "capture_started", payload: { operation_id: "capture-1" } });
   state.record({ kind: "capture_completed", payload: {
     operation_id: "capture-1", filename: "one.mp4", size_bytes: 10,
@@ -93,8 +94,9 @@ test("capture state follows stable operation ids across repeated captures", () =
   state.record({ kind: "capture_started", payload: { operation_id: "capture-2" } });
 
   const run = state.snapshot().active_run;
-  assert.equal(run.current_operation.operation_id, "capture-2");
-  assert.equal(run.stage, "recording");
+  assert.equal(run.capture_activity.request_id, "capture-2");
+  assert.equal(run.capture_activity.activity, "capturing");
+  assert.equal(run.stage, "monitoring");
   assert.deepEqual(run.artefacts.map((item) => item.filename), ["one.mp4"]);
 });
 
@@ -174,4 +176,91 @@ test("an operator stop is retained as stopped rather than failed", () => {
 
   assert.equal(completed.stage, "stopped");
   assert.equal(state.snapshot().recent_runs[0].stage, "stopped");
+});
+
+test("clip queue events persist a bounded read model without changing monitoring", () => {
+  const state = deterministicState();
+  state.start({ mode: "hardware" });
+  state.record({ kind: "runtime_started", payload: { pid: 123 } });
+  const jobs = Array.from({ length: 25 }, (_, index) => ({
+    job_id: `job-${index}`,
+    request_id: `capture-${index}`,
+    status: index === 0 ? "processing" : "completed",
+    processing_attempts: 1,
+    queued_at_utc: `2026-09-03T09:${String(index).padStart(2, "0")}:00Z`,
+    state_changed_at_utc: `2026-09-03T10:${String(index).padStart(2, "0")}:00Z`,
+    raw_filename: `raw-${index}.mp4`,
+    processed_filename: null,
+    failure_id: null,
+  }));
+  state.record({ kind: "clip_queue_snapshot", payload: {
+    counts: { queued: 3, processing: 1, failed: 2, completed: 40 },
+    current_job: "job-0",
+    oldest_queued_at_utc: "2026-09-03T09:00:00Z",
+    jobs,
+  } });
+
+  const run = state.snapshot().active_run;
+  assert.equal(run.stage, "monitoring");
+  assert.deepEqual(run.clip_queue.counts, {
+    queued: 3, processing: 1, failed: 2, completed: 40,
+  });
+  assert.equal(run.clip_queue.jobs.length, 20);
+  assert.equal(run.clip_queue.current_job, "job-0");
+});
+
+test("clip-job failure remains actionable without failing the runtime", () => {
+  const state = deterministicState();
+  state.start({ mode: "hardware" });
+  state.record({ kind: "runtime_started", payload: { pid: 123 } });
+  state.record({ kind: "capture_activity_changed", payload: {
+    activity: "capturing", request_id: "capture-2", pending_captures: 1,
+  } });
+  state.record({ kind: "component_failed", payload: {
+    failure_id: "failure-job-2-uploading-1",
+    job_id: "job-2",
+    scope: "clip_job",
+    stage: "uploading",
+    component: "job_queue",
+    error: "Box offline",
+    retryable: true,
+  } });
+
+  const run = state.snapshot().active_run;
+  assert.equal(run.stage, "monitoring");
+  assert.deepEqual(run.capture_activity, {
+    activity: "capturing", request_id: "capture-2", pending_captures: 1,
+  });
+  assert.equal(run.failures[0].scope, "clip_job");
+  assert.equal(run.failures[0].job_id, "job-2");
+});
+
+test("queue snapshot restores retryable clip-job failure cards", () => {
+  const state = deterministicState();
+  state.start({ mode: "hardware" });
+  state.record({ kind: "runtime_started", payload: { pid: 123 } });
+  state.record({ kind: "clip_queue_snapshot", payload: {
+    counts: { queued: 0, processing: 0, failed: 1, completed: 4 },
+    current_job: null,
+    oldest_queued_at_utc: null,
+    jobs: [{
+      job_id: "job-failed",
+      request_id: "capture-failed",
+      status: "failed",
+      processing_attempts: 1,
+      queued_at_utc: "2026-09-03T09:00:00Z",
+      state_changed_at_utc: "2026-09-03T09:01:00Z",
+      raw_filename: "raw.mp4",
+      processed_filename: null,
+      failure_id: "failure-job-failed-uploading-1",
+      failed_step: "uploading",
+      technical_error: "Box offline",
+    }],
+  } });
+
+  const run = state.snapshot().active_run;
+  assert.equal(run.stage, "monitoring");
+  assert.equal(run.failures[0].failure_id, "failure-job-failed-uploading-1");
+  assert.equal(run.failures[0].scope, "clip_job");
+  assert.equal(state.retryFailure(run.failures[0].failure_id).job_id, "job-failed");
 });

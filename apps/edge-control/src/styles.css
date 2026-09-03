@@ -169,6 +169,12 @@ select {
 .pipeline-steps li.failed { color: var(--danger); }
 .pipeline-steps li.failed > span { border-color: #c95151; color: #fff; background: #c95151; box-shadow: 0 0 0 4px rgba(201, 81, 81, .12); }
 .pipeline-detail { margin: 0; padding: 9px 18px; border-top: 1px solid var(--line); color: var(--muted); background: #fafcfb; font: 11px ui-monospace, monospace; }
+.operation-tracks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; padding: 0 18px 14px; }
+.operation-track { min-width: 0; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: #fafcfb; }
+.operation-track h3 { margin: 0 0 10px; }
+.operation-track .pipeline-steps { padding-inline: 0; grid-template-columns: repeat(5, minmax(78px, 1fr)); }
+.operation-track:first-child .pipeline-steps { grid-template-columns: repeat(3, minmax(92px, 1fr)); }
+.operation-track .pipeline-detail { margin-top: 8px; padding-inline: 0; background: transparent; }
 
 .readiness-panel { margin-bottom: 18px; }
 .panel-empty { margin: 0; padding: 20px 14px; color: var(--muted); font-size: 13px; }
@@ -342,6 +348,7 @@ select {
 }
 
 @media (max-width: 860px) {
+  .operation-tracks { grid-template-columns: 1fr; }
   .app-shell { display: block; }
   .sidebar { position: static; width: 100%; height: auto; padding: 10px 14px; flex-direction: row; align-items: center; gap: 14px; }
   .brand { padding: 0; }

@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 from collections.abc import Iterable
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from uuid import UUID
 
 from bearvision.contracts import (
@@ -63,13 +64,20 @@ class VirtualClock:
 
 
 class SimulatedCamera:
-    def __init__(self, clock: VirtualClock, *, fail_capture: bool = False) -> None:
+    def __init__(
+        self,
+        clock: VirtualClock,
+        *,
+        fail_capture: bool = False,
+        capture_dir: str | Path | None = None,
+    ) -> None:
         self.clock = clock
         self.fail_capture = fail_capture
         self.connected = False
         self.previewing = False
         self.available_since_monotonic_s: float | None = None
         self.captures: dict[str, CapturedClip] = {}
+        self.capture_dir = Path(capture_dir).resolve() if capture_dir is not None else None
 
     async def connect(self) -> None:
         self.connected = True
@@ -101,6 +109,11 @@ class SimulatedCamera:
             )
             await self.clock.sleep(request.post_roll_s)
             content = f"bearvision-simulated-clip:{request.request_id}".encode()
+            path = None
+            if self.capture_dir is not None:
+                self.capture_dir.mkdir(parents=True, exist_ok=True)
+                path = self.capture_dir / f"{request.request_id}.mp4"
+                path.write_bytes(content)
             self.captures[request.request_id] = CapturedClip(
                 request_id=request.request_id,
                 media=CapturedMedia(
@@ -111,7 +124,8 @@ class SimulatedCamera:
                         size_bytes=len(content),
                         created_at_utc=self.clock.utc_now(),
                     ),
-                    content=content,
+                    content=content if path is None else None,
+                    local_path=path,
                 ),
                 requested_window=requested_window,
                 actual_window=CaptureWindow(

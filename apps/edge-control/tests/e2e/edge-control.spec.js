@@ -80,7 +80,7 @@ function readinessReport({ checks, warningIds = [] }) {
   };
 }
 
-test("operator completes a simulation workflow and restores the run after refresh", async ({ page }) => {
+test("live monitoring stays active while background clip work progresses", async ({ page }) => {
   const fixture = await startFixture();
   try {
     await page.goto(fixture.url);
@@ -90,14 +90,29 @@ test("operator completes a simulation workflow and restores the run after refres
     await expect(pipeline.getByText("Monitoring", { exact: true }).first()).toBeVisible();
 
     const runtime = fixture.runtimes[0];
-    runtime.send("lifecycle_changed", { stage: "recording", operation_id: "capture-7" }, 1);
-    await expect(pipeline.locator('[aria-current="step"]')).toContainText("Recording");
+    runtime.send("capture_activity_changed", {
+      activity: "capturing", request_id: "capture-7", pending_captures: 1,
+    }, 1);
+    await expect(page.getByRole("article", { name: "Live track" })).toContainText("Camera: Capturing");
 
-    runtime.send("lifecycle_changed", { stage: "post_processing", operation_id: "capture-7" }, 2);
-    await expect(pipeline.locator('[aria-current="step"]')).toContainText("Processing");
+    const clipJob = {
+      job_id: "capture-7", request_id: "capture-7", processing_attempts: 1,
+      queued_at_utc: "2026-09-03T10:00:00Z",
+      state_changed_at_utc: "2026-09-03T10:00:01Z",
+      raw_filename: "raw.mp4", processed_filename: null, failure_id: null,
+    };
+    runtime.send("clip_job_updated", {
+      ...clipJob, status: "processing",
+      counts: { queued: 0, processing: 1, failed: 0, completed: 0 },
+    }, 2);
+    await expect(page.getByRole("article", { name: "Background queue track" }).locator('[aria-current="step"]')).toContainText("Processing");
+    await expect(pipeline).toContainText("Monitoring");
 
-    runtime.send("lifecycle_changed", { stage: "uploading", operation_id: "capture-7" }, 3);
-    await expect(pipeline.locator('[aria-current="step"]')).toContainText("Uploading");
+    runtime.send("clip_job_updated", {
+      ...clipJob, status: "uploading",
+      counts: { queued: 0, processing: 1, failed: 0, completed: 0 },
+    }, 3);
+    await expect(page.getByRole("article", { name: "Background queue track" }).locator('[aria-current="step"]')).toContainText("Uploading");
 
     runtime.emit("exit", 0, null);
     const recentRuns = page.getByRole("region", { name: "Recent runs" });
@@ -198,11 +213,15 @@ test("retryable failure survives refresh until the runtime resolves it", async (
       corrective_action: "Check the local queue and retry the operation.",
       severity: "blocking",
       retryable: true,
+      scope: "clip_job",
+      job_id: "publish-7",
     });
 
     const failures = page.getByRole("region", { name: "Persistent failures" });
     await expect(failures).toContainText("The processing job could not be published.");
     await expect(failures.getByRole("button", { name: "Retry operation" })).toBeVisible();
+    await expect(page.getByRole("region", { name: "Pipeline" })).toContainText("Monitoring");
+    await expect(page.getByRole("button", { name: "Stop runtime" })).toBeVisible();
 
     await page.reload();
     const restoredFailures = page.getByRole("region", { name: "Persistent failures" });

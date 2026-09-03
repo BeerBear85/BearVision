@@ -18,15 +18,16 @@ The current version supports:
 - simulation/hardware mode selection while idle;
 - discovery of versioned YAML scenarios under `specs/scenarios`;
 - wall-clock replay of behavioural scenario traces;
-- a live pipeline, stage elapsed time and persistent failure cards;
+- separate Live and Background queue tracks, including camera activity, pending
+  captures, queue depth, current/oldest job and failed/completed counts;
 - Python-owned hardware readiness with critical blocking checks and explicit
   warning acknowledgements;
 - real, bounded GoPro preview-frame and BLE scanner handshakes before hardware
   start, with guaranteed camera cleanup and no recording or media mutation;
 - durable active/recent run state restored after refresh or server restart;
 - replayable live state over Server-Sent Events without per-event polling;
-- guarded graceful stop, force-stop, whole-runtime restart and safe publication
-  retry;
+- guarded graceful stop, force-stop, whole-runtime restart and checkpoint-aware
+  clip-job retry through the existing retry endpoint;
 - live GoPro hardware preview as throttled JPEG snapshots;
 - recorded scenario video, extracted clips, processed upload clips and tracking
   evidence when the selected scenario produces them;

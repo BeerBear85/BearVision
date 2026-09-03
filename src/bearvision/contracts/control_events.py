@@ -29,6 +29,9 @@ RuntimeEventKind: TypeAlias = Literal[
     "hardware_stopping",
     "lifecycle_changed",
     "failure_resolved",
+    "clip_queue_snapshot",
+    "clip_job_updated",
+    "capture_activity_changed",
 ]
 
 LifecycleStage: TypeAlias = Literal[
@@ -160,6 +163,50 @@ class ComponentFailedPayload(EventModel):
     corrective_action: str | None = Field(default=None, min_length=1)
     severity: Literal["warning", "blocking", "terminal"] = "terminal"
     retryable: bool = False
+    scope: Literal["runtime", "clip_job"] = "runtime"
+    job_id: str | None = Field(default=None, min_length=1)
+
+
+class ClipQueueCounts(EventModel):
+    queued: int = Field(ge=0)
+    processing: int = Field(ge=0)
+    failed: int = Field(ge=0)
+    completed: int = Field(ge=0)
+
+
+class ClipJobReadModel(EventModel):
+    job_id: str = Field(min_length=1)
+    request_id: str = Field(min_length=1)
+    status: Literal[
+        "queued", "processing", "packaging", "uploading", "failed", "completed"
+    ]
+    processing_attempts: int = Field(ge=0)
+    queued_at_utc: AwareDatetime
+    state_changed_at_utc: AwareDatetime
+    raw_filename: str = Field(min_length=1)
+    processed_filename: str | None = Field(default=None, min_length=1)
+    failure_id: str | None = Field(default=None, min_length=1)
+    failed_step: str | None = Field(default=None, min_length=1)
+    technical_error: str | None = Field(default=None, min_length=1)
+
+
+class ClipQueueSnapshotPayload(EventModel):
+    counts: ClipQueueCounts
+    current_job: str | None = Field(default=None, min_length=1)
+    oldest_queued_at_utc: AwareDatetime | None = None
+    jobs: tuple[ClipJobReadModel, ...] = ()
+
+
+class ClipJobUpdatedPayload(ClipJobReadModel):
+    counts: ClipQueueCounts
+    current_job: str | None = Field(default=None, min_length=1)
+    oldest_queued_at_utc: AwareDatetime | None = None
+
+
+class CaptureActivityChangedPayload(EventModel):
+    activity: Literal["idle", "capturing"]
+    request_id: str | None = Field(default=None, min_length=1)
+    pending_captures: int = Field(ge=0)
 
 
 class LifecycleChangedPayload(EventModel):
@@ -267,6 +314,21 @@ class FailureResolvedRuntimeEvent(RuntimeEventBase):
     payload: FailureResolvedPayload
 
 
+class ClipQueueSnapshotRuntimeEvent(RuntimeEventBase):
+    kind: Literal["clip_queue_snapshot"]
+    payload: ClipQueueSnapshotPayload
+
+
+class ClipJobUpdatedRuntimeEvent(RuntimeEventBase):
+    kind: Literal["clip_job_updated"]
+    payload: ClipJobUpdatedPayload
+
+
+class CaptureActivityChangedRuntimeEvent(RuntimeEventBase):
+    kind: Literal["capture_activity_changed"]
+    payload: CaptureActivityChangedPayload
+
+
 RuntimeEvent = Annotated[
     TagRuntimeEvent
     | PreviewFrameRuntimeEvent
@@ -283,7 +345,10 @@ RuntimeEvent = Annotated[
     | HardwareInitializingRuntimeEvent
     | HardwareStoppingRuntimeEvent
     | LifecycleChangedRuntimeEvent
-    | FailureResolvedRuntimeEvent,
+    | FailureResolvedRuntimeEvent
+    | ClipQueueSnapshotRuntimeEvent
+    | ClipJobUpdatedRuntimeEvent
+    | CaptureActivityChangedRuntimeEvent,
     Field(discriminator="kind"),
 ]
 

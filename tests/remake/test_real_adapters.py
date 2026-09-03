@@ -355,6 +355,12 @@ def test_real_composition_wraps_existing_implementations(tmp_path: Path) -> None
     assert isinstance(components.job_queue, BoxJobQueue)
     assert isinstance(components.clip_processor, VirtualCameramanProcessor)
     assert components.clip_processor.config == config.virtual_cameraman
+    assert components.detector.handler is not components.clip_processor.detector.handler
+    assert (
+        components.detector.handler.confidence_threshold
+        == components.clip_processor.detector.handler.confidence_threshold
+        == config.detection.confidence_threshold
+    )
 
     orchestrator = build_real_orchestrator(
         config,
@@ -368,3 +374,4 @@ def test_real_composition_wraps_existing_implementations(tmp_path: Path) -> None
     assert isinstance(orchestrator, BearVisionOrchestrator)
     assert orchestrator.recording_duration_s == config.recording.post_detection_duration_s
     assert orchestrator.capture_pre_roll_s == config.recording.hindsight_duration_s
+    assert orchestrator.raw_clip_pipeline is not None

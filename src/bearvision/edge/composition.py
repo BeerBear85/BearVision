@@ -27,6 +27,7 @@ from bearvision.ports import (
 )
 from bearvision.processing import VirtualCameramanProcessor
 from .orchestrator import BearVisionOrchestrator, OrchestrationEvent
+from .raw_clip_pipeline import RawClipPipeline
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,9 +68,12 @@ def build_real_system(
 
         box_factory = BoxHandler
 
-    legacy_detector = detector_factory(config.detection.model)
-    legacy_detector.confidence_threshold = config.detection.confidence_threshold
-    legacy_detector.init()
+    live_handler = detector_factory(config.detection.model)
+    live_handler.confidence_threshold = config.detection.confidence_threshold
+    live_handler.init()
+    processing_handler = detector_factory(config.detection.model)
+    processing_handler.confidence_threshold = config.detection.confidence_threshold
+    processing_handler.init()
     box_config = {
         "STORAGE_COMMON": {
             "secret_key_name": config.storage.credential_env,
@@ -79,12 +83,13 @@ def build_real_system(
     }
     clock = SystemClock()
     box_handler = box_factory(box_config)
-    detector = YoloDetectorAdapter(legacy_detector)
+    detector = YoloDetectorAdapter(live_handler)
+    processing_detector = YoloDetectorAdapter(processing_handler)
     from bearvision.adapters import FfmpegVideoClipper
 
     media_tools = FfmpegVideoClipper(config.clip_extraction)
     clip_processor = VirtualCameramanProcessor(
-        detector,
+        processing_detector,
         clock,
         capture_dir,
         config=config.virtual_cameraman,
@@ -136,12 +141,19 @@ def build_real_orchestrator(
         detector_factory=detector_factory,
         box_factory=box_factory,
     )
+    raw_clip_pipeline = RawClipPipeline(
+        capture_dir=capture_dir,
+        clock=components.clock,
+        clip_processor=components.clip_processor,
+        job_queue=components.job_queue,
+        edge_device_id=config.system.device_id,
+        upload_enabled=config.features.cloud_upload,
+    )
     return BearVisionOrchestrator(
         clock=components.clock,
         camera=components.camera,
         scanner=components.scanner,
         detector=components.detector,
-        job_queue=components.job_queue,
         edge_device_id=config.system.device_id,
         recording_duration_s=config.recording.post_detection_duration_s,
         capture_pre_roll_s=(
@@ -149,7 +161,6 @@ def build_real_orchestrator(
             if config.recording.hindsight_enabled
             else 0
         ),
-        clip_processor=components.clip_processor,
         observation_retention_s=max(
             30.0,
             config.recording.post_detection_duration_s
@@ -161,11 +172,11 @@ def build_real_orchestrator(
         ),
         frame_source=components.frame_source,
         detection_enabled=config.detection.enabled,
-        upload_enabled=config.features.cloud_upload,
         preview_enabled=True,
         ble_logging_enabled=config.features.ble_logging,
         detection_cooldown_s=config.detection.cooldown_s,
         max_restarts=config.error_recovery.max_restarts,
         restart_delay_s=config.error_recovery.restart_delay_s,
         event_sink=event_sink,
+        raw_clip_pipeline=raw_clip_pipeline,
     )

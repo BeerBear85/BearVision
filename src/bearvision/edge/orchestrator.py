@@ -6,15 +6,13 @@ import asyncio
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import suppress
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import datetime, timedelta
 from enum import StrEnum
 import logging
-from typing import Any, TypeVar
+from typing import Any, Literal, TypeVar
 
 from bearvision.contracts import (
-    BearTagJobObservation,
     CaptureRequest,
-    EdgeJobManifest,
     PersonDetection,
     RuntimeEventKind,
     TagObservation,
@@ -23,22 +21,18 @@ from bearvision.domain import BearTagObservationBuffer
 from bearvision.ports import (
     Camera,
     CapturedClip,
-    CapturedMedia,
-    ClipProcessor,
     Clock,
     ComponentError,
     ComponentUnavailable,
     Detector,
     FrameSource,
     InvalidComponentData,
-    JobQueue,
     PermanentComponentError,
-    PreparedClip,
     TagScanner,
     VideoFrame,
 )
 
-from .job_package import build_edge_job
+from .raw_clip_pipeline import RawClipJobContext, RawClipPipeline
 
 
 logger = logging.getLogger(__name__)
@@ -74,34 +68,18 @@ class OrchestrationEvent:
 
 
 @dataclass(frozen=True, slots=True)
-class OrchestrationResult:
-    request_id: str
-    clip_start_monotonic_s: float
-    clip_end_monotonic_s: float
-    job_start_monotonic_s: float
-    job_end_monotonic_s: float
-    manifest: EdgeJobManifest
-    observations: tuple[BearTagJobObservation, ...]
-    raw_capture: CapturedClip
-    media: CapturedMedia
-    processing: PreparedClip | None
-    published: bool
-    states: tuple[EdgeLifecycleState, ...]
-    events: tuple[OrchestrationEvent, ...]
-
-
-@dataclass(frozen=True, slots=True)
-class PendingPublication:
-    failure_id: str
-    result: OrchestrationResult
-
-
-@dataclass(frozen=True, slots=True)
 class FrameEvaluation:
-    """Detection trace and optional completed capture for one preview frame."""
+    """Detection trace and immediate capture scheduling outcome for one frame."""
 
     events: tuple[OrchestrationEvent, ...]
-    result: OrchestrationResult | None
+    capture_disposition: Literal["scheduled", "same_episode", "duplicate"] | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class _ScheduledCapture:
+    request: CaptureRequest
+    timing_reference_monotonic_s: float
+    timing_reference_utc: datetime
 
 
 class BearVisionOrchestrator:
@@ -114,21 +92,19 @@ class BearVisionOrchestrator:
         camera: Camera,
         scanner: TagScanner,
         detector: Detector,
-        job_queue: JobQueue,
         edge_device_id: str,
         recording_duration_s: float,
         capture_pre_roll_s: float = 0.0,
-        clip_processor: ClipProcessor | None = None,
         observation_retention_s: float = 30.0,
         frame_source: FrameSource | None = None,
         detection_enabled: bool = True,
-        upload_enabled: bool = True,
         preview_enabled: bool = True,
         ble_logging_enabled: bool = True,
         detection_cooldown_s: float = 0.0,
         max_restarts: int = 0,
         restart_delay_s: float = 0.0,
         event_sink: Callable[[OrchestrationEvent], None] | None = None,
+        raw_clip_pipeline: RawClipPipeline,
     ) -> None:
         if recording_duration_s <= 0:
             raise ValueError("recording_duration_s must be positive")
@@ -142,31 +118,31 @@ class BearVisionOrchestrator:
         self.camera = camera
         self.scanner = scanner
         self.detector = detector
-        self.job_queue = job_queue
         self.edge_device_id = edge_device_id
         self.recording_duration_s = recording_duration_s
         self.capture_pre_roll_s = capture_pre_roll_s
-        self.clip_processor = clip_processor
         self.frame_source = frame_source
         self.detection_enabled = detection_enabled
-        self.upload_enabled = upload_enabled
         self.preview_enabled = preview_enabled
         self.ble_logging_enabled = ble_logging_enabled
         self.detection_cooldown_s = detection_cooldown_s
         self.max_restarts = max_restarts
         self.restart_delay_s = restart_delay_s
         self.event_sink = event_sink
+        self.raw_clip_pipeline = raw_clip_pipeline
         self.observations = BearTagObservationBuffer(observation_retention_s)
         self.state = EdgeLifecycleState.INITIALIZING
         self._tag_task: asyncio.Task[None] | None = None
-        self._active_clip: asyncio.Task[OrchestrationResult] | None = None
-        self._clip_lock = asyncio.Lock()
-        self._results: dict[str, OrchestrationResult] = {}
-        self._completed_clips: list[OrchestrationResult] = []
-        self._pending_publications: dict[str, PendingPublication] = {}
         self._camera_connected = False
         self._preview_started = False
         self._frame_source_open = False
+        self._capture_requests: asyncio.Queue[_ScheduledCapture] = asyncio.Queue()
+        self._camera_worker: asyncio.Task[None] | None = None
+        self._accepting_detections = False
+        self._scheduled_request_ids: set[str] = set()
+        self._last_person_at_s: float | None = None
+        if self.raw_clip_pipeline.event_sink is None:
+            self.raw_clip_pipeline.event_sink = self._emit_pipeline_event
 
     async def start(self) -> None:
         self._transition(EdgeLifecycleState.INITIALIZING)
@@ -183,6 +159,9 @@ class BearVisionOrchestrator:
                     "open preview frame source", lambda: frame_source.open(preview_source), []
                 )
                 self._frame_source_open = True
+        await self.raw_clip_pipeline.start()
+        self._accepting_detections = True
+        self._camera_worker = asyncio.create_task(self._run_camera_worker())
         self._tag_task = asyncio.create_task(self.consume_tag_observations())
         self._transition(EdgeLifecycleState.MONITORING)
 
@@ -213,9 +192,20 @@ class BearVisionOrchestrator:
                 logger.warning("%s failed during Edge shutdown", name, exc_info=True)
                 errors.append(exc)
 
-        if self._active_clip is not None:
-            active_clip = self._active_clip
-            await attempt("active clip completion", lambda: active_clip)
+        self._accepting_detections = False
+        camera_worker, self._camera_worker = self._camera_worker, None
+        if camera_worker is not None:
+            if not camera_worker.done():
+                await attempt("pending camera captures", self._capture_requests.join)
+                camera_worker.cancel()
+            try:
+                await camera_worker
+            except asyncio.CancelledError:
+                pass
+            except BaseException as exc:
+                logger.warning("camera worker failed during Edge shutdown", exc_info=True)
+                errors.append(exc)
+        await attempt("raw clip pipeline", self.raw_clip_pipeline.stop)
         if self._tag_task is not None:
             tag_task = self._tag_task
             self._tag_task = None
@@ -249,22 +239,39 @@ class BearVisionOrchestrator:
     ) -> VideoFrame:
         frame_task: asyncio.Future[VideoFrame] = asyncio.ensure_future(anext(frames))
         tag_task = self._tag_task
-        if tag_task is None:
-            return await frame_task
-        done, _ = await asyncio.wait(
-            (frame_task, tag_task), return_when=asyncio.FIRST_COMPLETED
+        camera_worker = self._camera_worker
+        pipeline_worker = self.raw_clip_pipeline.worker_task
+        supervised: tuple[asyncio.Task[None], ...] = tuple(
+            task
+            for task in (tag_task, camera_worker, pipeline_worker)
+            if task is not None
         )
-        if tag_task in done:
-            self._tag_task = None
+        if not supervised:
+            return await frame_task
+        waiters: set[asyncio.Future[Any]] = {frame_task, *supervised}
+        done, _ = await asyncio.wait(waiters, return_when=asyncio.FIRST_COMPLETED)
+        failed_background = next(
+            (task for task in supervised if task in done), None
+        )
+        if failed_background is not None:
+            if failed_background is tag_task:
+                self._tag_task = None
             frame_task.cancel()
             with suppress(asyncio.CancelledError):
                 await frame_task
-            if tag_task.cancelled():
-                raise ComponentUnavailable("BearTag observation stream was cancelled")
-            failure = tag_task.exception()
+            component = (
+                "BearTag observation stream"
+                if failed_background is tag_task
+                else "camera worker"
+                if failed_background is camera_worker
+                else "raw clip pipeline worker"
+            )
+            if failed_background.cancelled():
+                raise ComponentUnavailable(f"{component} was cancelled")
+            failure = failed_background.exception()
             if failure is not None:
                 raise failure
-            raise ComponentUnavailable("BearTag observation stream ended unexpectedly")
+            raise ComponentUnavailable(f"{component} ended unexpectedly")
         return await frame_task
 
     def add_tag_observation(self, observation: TagObservation) -> None:
@@ -281,23 +288,41 @@ class BearVisionOrchestrator:
         async for observation in self.scanner.observations():
             self.add_tag_observation(observation)
 
-    async def process_frame(self, frame: VideoFrame) -> OrchestrationResult | None:
-        return (await self.evaluate_frame(frame)).result
+    async def process_frame(self, frame: VideoFrame) -> FrameEvaluation:
+        return await self.evaluate_frame(frame)
 
     async def evaluate_frame(self, frame: VideoFrame) -> FrameEvaluation:
         """Evaluate one frame and return trace data through a stable public seam."""
 
         if not self.detection_enabled:
-            return FrameEvaluation(events=(), result=None)
+            return FrameEvaluation(events=())
         detections = await self.detector.detect(frame)
         if not detections:
-            return FrameEvaluation(events=(), result=None)
-        detection = detections[0]
-        event = OrchestrationEvent(
+            return FrameEvaluation(events=())
+        self.raw_clip_pipeline.raise_if_failed()
+        self._raise_camera_worker_failure()
+        events = tuple(
+            self._person_detection_event(frame, detection) for detection in detections
+        )
+        for event in events:
+            self._emit_event(event)
+        disposition = await self.handle_detection(detections[0])
+        return FrameEvaluation(events=events, capture_disposition=disposition)
+
+    async def handle_detection(
+        self, detection: PersonDetection
+    ) -> Literal["scheduled", "same_episode", "duplicate"]:
+        return await self._schedule_detection(detection)
+
+    @staticmethod
+    def _person_detection_event(
+        frame: VideoFrame, detection: PersonDetection
+    ) -> OrchestrationEvent:
+        return OrchestrationEvent(
             at_monotonic_s=frame.observed_at_monotonic_s,
             kind="person_detected",
             payload={
-                "frame_id": frame.frame_id,
+                "frame_id": detection.frame_id,
                 "confidence": detection.confidence,
                 "bounding_box": detection.bounding_box.model_dump(mode="json"),
                 "coordinate_space": {
@@ -306,310 +331,161 @@ class BearVisionOrchestrator:
                 },
             },
         )
-        self._emit_event(event)
-        result = await self.handle_detection(detection)
-        return FrameEvaluation(events=(event,), result=result)
 
-    async def handle_detection(self, detection: PersonDetection) -> OrchestrationResult:
+    async def _schedule_detection(
+        self, detection: PersonDetection
+    ) -> Literal["scheduled", "same_episode", "duplicate"]:
+        self._raise_camera_worker_failure()
+        if not self._accepting_detections:
+            raise RuntimeError("orchestrator is not accepting capture requests")
         request_id = f"capture-{detection.frame_id}"
-        if request_id in self._results:
-            return self._results[request_id]
-        for completed in self._completed_clips:
-            if (
-                completed.clip_start_monotonic_s
-                <= detection.observed_at_monotonic_s
-                <= completed.clip_end_monotonic_s + self.detection_cooldown_s
-            ):
-                return completed
-        async with self._clip_lock:
-            if self._active_clip is None or self._active_clip.done():
-                self._active_clip = asyncio.create_task(self._record_and_enqueue(detection))
-            task = self._active_clip
-        try:
-            result = await task
-        finally:
-            async with self._clip_lock:
-                if self._active_clip is task:
-                    self._active_clip = None
-        first_completion = result.request_id not in self._results
-        self._results[result.request_id] = result
-        if result not in self._completed_clips:
-            self._completed_clips.append(result)
-        if first_completion:
-            for event in result.events:
-                self._emit_event(event)
-        return result
-
-    async def _record_and_enqueue(self, detection: PersonDetection) -> OrchestrationResult:
-        request_id = f"capture-{detection.frame_id}"
-        timing_reference_monotonic_s = max(
-            self.clock.monotonic(), detection.observed_at_monotonic_s
-        )
-        timing_reference_utc = self.clock.utc_now()
-        states = [EdgeLifecycleState.RECORDING]
-        self._transition(states[-1], request_id)
+        if request_id in self._scheduled_request_ids:
+            return "duplicate"
+        previous_person_at = self._last_person_at_s
+        self._last_person_at_s = detection.observed_at_monotonic_s
+        if (
+            previous_person_at is not None
+            and detection.observed_at_monotonic_s - previous_person_at
+            < self.detection_cooldown_s
+        ):
+            self._scheduled_request_ids.add(request_id)
+            return "same_episode"
         request = CaptureRequest(
             request_id=request_id,
             requested_at_monotonic_s=detection.observed_at_monotonic_s,
             pre_roll_s=self.capture_pre_roll_s,
             post_roll_s=self.recording_duration_s,
         )
-        try:
-            raw_capture = await self._retry_component(
-                "capture clip", lambda: self.camera.capture(request), states
+        self._scheduled_request_ids.add(request_id)
+        await self._capture_requests.put(
+            _ScheduledCapture(
+                request=request,
+                timing_reference_monotonic_s=max(
+                    self.clock.monotonic(), detection.observed_at_monotonic_s
+                ),
+                timing_reference_utc=self.clock.utc_now(),
             )
-            self._validate_camera_capture(request, raw_capture)
-            media = raw_capture.media
-            clip_start_s = raw_capture.actual_window.start_monotonic_s
-            clip_end_s = raw_capture.actual_window.end_monotonic_s
-            job_start_s = clip_start_s
-            job_end_s = clip_end_s
-            capture_started_at = timing_reference_utc + timedelta(
-                seconds=job_start_s - timing_reference_monotonic_s
-            )
-            capture_ended_at = timing_reference_utc + timedelta(
-                seconds=job_end_s - timing_reference_monotonic_s
-            )
-            prepared: PreparedClip | None = None
-            if self.clip_processor is not None:
-                clip_processor = self.clip_processor
-                states.append(EdgeLifecycleState.POST_PROCESSING)
-                self._transition(states[-1], f"{request_id}:process")
-                prepared = await self._retry_component(
-                    "process clip",
-                    lambda: clip_processor.process(media),
-                    states,
+        )
+        self._emit_capture_activity("idle", None)
+        return "scheduled"
+
+    async def _run_camera_worker(self) -> None:
+        while True:
+            scheduled = await self._capture_requests.get()
+            request = scheduled.request
+            try:
+                self._emit_capture_activity("capturing", request.request_id)
+                raw_capture = await self._retry_component(
+                    "capture clip", lambda: self.camera.capture(request), []
                 )
-                media = prepared.media
-                job_start_s += prepared.source_start_offset_s
-                job_end_s = job_start_s + prepared.duration_s
-                capture_started_at += timedelta(seconds=prepared.source_start_offset_s)
-                capture_ended_at = capture_started_at + timedelta(seconds=prepared.duration_s)
-            states.append(EdgeLifecycleState.PACKAGING)
-            self._transition(states[-1], f"{request_id}:package")
-            clip_observations = self.observations.between(job_start_s, job_end_s)
-            manifest, observations = build_edge_job(
-                job_id=request_id,
-                edge_device_id=self.edge_device_id,
-                created_at=self.clock.utc_now(),
-                capture_started_at=capture_started_at,
-                capture_ended_at=capture_ended_at,
-                clip_start_monotonic_s=job_start_s,
-                video=media,
-                observations=clip_observations,
-            )
-            published = False
-            publication_failure: OrchestrationEvent | None = None
-            if self.upload_enabled:
-                states.append(EdgeLifecycleState.UPLOADING)
-                operation_id = f"{request_id}:publish"
-                self._transition(states[-1], operation_id)
-                try:
-                    published = await self._retry_component(
-                        "publish cloud job",
-                        lambda: self.job_queue.publish(manifest, media, observations),
-                        states,
-                    )
-                except ComponentUnavailable as exc:
-                    failure_id = f"failure-{request_id}-publish"
-                    publication_failure = OrchestrationEvent(
-                        at_monotonic_s=self.clock.monotonic(),
-                        kind="component_failed",
+                self._validate_camera_capture(request, raw_capture)
+                clip_start_s = raw_capture.actual_window.start_monotonic_s
+                clip_end_s = raw_capture.actual_window.end_monotonic_s
+                capture_started_at = scheduled.timing_reference_utc + timedelta(
+                    seconds=clip_start_s - scheduled.timing_reference_monotonic_s
+                )
+                capture_ended_at = scheduled.timing_reference_utc + timedelta(
+                    seconds=clip_end_s - scheduled.timing_reference_monotonic_s
+                )
+                observations = self.observations.between(clip_start_s, clip_end_s)
+                raw_media = raw_capture.media
+                self._emit_event(
+                    OrchestrationEvent(
+                        at_monotonic_s=clip_start_s,
+                        kind="capture_started",
                         payload={
-                            "failure_id": failure_id,
-                            "operation_id": operation_id,
-                            "stage": EdgeLifecycleState.UPLOADING.value,
-                            "component": "job_queue",
-                            "error": str(exc),
-                            "operator_message": "The clip could not be uploaded.",
-                            "corrective_action": (
-                                "Check the network and Box connection, then retry."
-                            ),
-                            "severity": "blocking",
-                            "retryable": True,
+                            "asset_id": raw_media.asset.asset_id,
+                            "clip_end_s": clip_end_s,
+                            "operation_id": request.request_id,
                         },
                     )
-                    states.append(EdgeLifecycleState.FAILED)
-                    self._transition(states[-1], operation_id)
-            events = list(self._build_result_events(
-                request_id=request_id,
-                raw_capture=raw_capture,
-                processed_media=media,
-                prepared=prepared,
-                clip_start_s=clip_start_s,
-                clip_end_s=clip_end_s,
-                published=published,
-            ))
-            if publication_failure is not None:
-                events.append(publication_failure)
-            else:
-                states.append(EdgeLifecycleState.MONITORING)
-                self._transition(states[-1])
-            result = OrchestrationResult(
-                request_id=request_id,
-                clip_start_monotonic_s=clip_start_s,
-                clip_end_monotonic_s=clip_end_s,
-                job_start_monotonic_s=job_start_s,
-                job_end_monotonic_s=job_end_s,
-                manifest=manifest,
-                observations=observations,
-                raw_capture=raw_capture,
-                media=media,
-                processing=prepared,
-                published=published,
-                states=tuple(states),
-                events=tuple(events),
-            )
-            if publication_failure is not None:
-                self._pending_publications[publication_failure.payload["failure_id"]] = (
-                    PendingPublication(failure_id=publication_failure.payload["failure_id"], result=result)
                 )
-            return result
-        except Exception:
-            self._transition(EdgeLifecycleState.FAILED)
-            raise
-
-    @staticmethod
-    def _build_result_events(
-        *,
-        request_id: str,
-        raw_capture: CapturedClip,
-        processed_media: CapturedMedia,
-        prepared: PreparedClip | None,
-        clip_start_s: float,
-        clip_end_s: float,
-        published: bool,
-    ) -> tuple[OrchestrationEvent, ...]:
-        raw_media = raw_capture.media
-        events = [
-            OrchestrationEvent(
-                at_monotonic_s=clip_start_s,
-                kind="capture_started",
-                payload={
-                    "asset_id": raw_media.asset.asset_id,
-                    "clip_end_s": clip_end_s,
-                    "operation_id": request_id,
-                },
-            ),
-            OrchestrationEvent(
-                at_monotonic_s=clip_end_s,
-                kind="finalize_clip",
-                payload={"request_id": request_id},
-            ),
-            OrchestrationEvent(
-                at_monotonic_s=clip_end_s,
-                kind="capture_completed",
-                payload={
-                    "asset_id": raw_media.asset.asset_id,
-                    "filename": raw_media.asset.filename,
-                    "size_bytes": raw_media.asset.size_bytes,
-                    "clip_start_s": clip_start_s,
-                    "clip_duration_s": clip_end_s - clip_start_s,
-                    "operation_id": request_id,
-                },
-            ),
-        ]
-        if prepared is not None:
-            events.extend(
-                OrchestrationEvent(
-                    at_monotonic_s=(
-                        clip_end_s
-                        if item.source_offset_s is None
-                        else clip_start_s + item.source_offset_s
+                self._emit_event(
+                    OrchestrationEvent(
+                        at_monotonic_s=clip_end_s,
+                        kind="capture_completed",
+                        payload={
+                            "asset_id": raw_media.asset.asset_id,
+                            "filename": raw_media.asset.filename,
+                            "size_bytes": raw_media.asset.size_bytes,
+                            "clip_start_s": clip_start_s,
+                            "clip_duration_s": clip_end_s - clip_start_s,
+                            "operation_id": request.request_id,
+                        },
+                    )
+                )
+                pipeline = self.raw_clip_pipeline
+                assert pipeline is not None
+                await pipeline.submit(
+                    raw_capture,
+                    RawClipJobContext(
+                        capture_started_at_utc=capture_started_at,
+                        capture_ended_at_utc=capture_ended_at,
+                        observations=observations,
                     ),
-                    kind=item.kind,
-                    payload=dict(item.payload),
                 )
-                for item in prepared.trace_events
-            )
-        if published:
-            events.append(
-                OrchestrationEvent(
-                    at_monotonic_s=clip_end_s,
-                    kind="clip_uploaded",
-                    payload={
-                        "asset_id": processed_media.asset.asset_id,
-                        "object_key": f"input-queue/ready/{request_id}",
-                        "operation_id": f"{request_id}:publish",
-                    },
+                self._emit_event(
+                    OrchestrationEvent(
+                        at_monotonic_s=clip_end_s,
+                        kind="finalize_clip",
+                        payload={"request_id": request.request_id},
+                    )
                 )
+            finally:
+                self._capture_requests.task_done()
+                self._emit_capture_activity("idle", None)
+
+    def _emit_capture_activity(
+        self,
+        activity: Literal["idle", "capturing"],
+        request_id: str | None,
+    ) -> None:
+        self._emit_event(
+            OrchestrationEvent(
+                at_monotonic_s=self.clock.monotonic(),
+                kind="capture_activity_changed",
+                payload={
+                    "activity": activity,
+                    "request_id": request_id,
+                    "pending_captures": self._capture_requests.qsize(),
+                },
             )
-        return tuple(events)
+        )
+
+    def _raise_camera_worker_failure(self) -> None:
+        worker = self._camera_worker
+        if worker is None or not worker.done() or worker.cancelled():
+            return
+        failure = worker.exception()
+        if failure is not None:
+            raise failure
+
+    async def wait_until_captures_idle(self) -> None:
+        """Wait for scheduled camera work; intended for tests and simulations."""
+
+        self._raise_camera_worker_failure()
+        await self._capture_requests.join()
+        self._raise_camera_worker_failure()
+
+    async def wait_until_idle(self) -> None:
+        """Wait for camera and disk queues; never used between hardware frames."""
+
+        await self.wait_until_captures_idle()
+        await self.raw_clip_pipeline.wait_until_idle()
+
+    def _emit_pipeline_event(
+        self,
+        kind: RuntimeEventKind,
+        payload: dict[str, Any],
+        at_monotonic_s: float,
+    ) -> None:
+        self._emit_event(OrchestrationEvent(at_monotonic_s, kind, payload))
 
     async def retry_failure(self, failure_id: str) -> tuple[OrchestrationEvent, ...]:
         """Retry one retained idempotent operation without repeating capture work."""
 
-        pending = self._pending_publications.get(failure_id)
-        if pending is None:
-            raise ValueError("failure is unknown or no longer retryable")
-        result = pending.result
-        operation_id = f"{result.request_id}:publish"
-        transition_to_upload = self._transition(EdgeLifecycleState.UPLOADING, operation_id)
-        try:
-            await self.job_queue.publish(result.manifest, result.media, result.observations)
-        except ComponentUnavailable as exc:
-            failure = OrchestrationEvent(
-                at_monotonic_s=self.clock.monotonic(),
-                kind="component_failed",
-                payload={
-                    "failure_id": failure_id,
-                    "operation_id": operation_id,
-                    "stage": EdgeLifecycleState.UPLOADING.value,
-                    "component": "job_queue",
-                    "error": str(exc),
-                    "operator_message": "The clip could not be uploaded.",
-                    "corrective_action": "Check the network and Box connection, then retry.",
-                    "severity": "blocking",
-                    "retryable": True,
-                },
-            )
-            self._emit_event(failure)
-            self._transition(EdgeLifecycleState.FAILED, operation_id)
-            return (transition_to_upload, failure)
-
-        uploaded = OrchestrationEvent(
-            at_monotonic_s=result.clip_end_monotonic_s,
-            kind="clip_uploaded",
-            payload={
-                "asset_id": result.media.asset.asset_id,
-                "object_key": f"input-queue/ready/{result.request_id}",
-                "operation_id": operation_id,
-            },
-        )
-        resolved = OrchestrationEvent(
-            at_monotonic_s=self.clock.monotonic(),
-            kind="failure_resolved",
-            payload={"failure_id": failure_id, "operation_id": operation_id},
-        )
-        self._emit_event(uploaded)
-        self._emit_event(resolved)
-        transition_to_monitoring = self._transition(EdgeLifecycleState.MONITORING)
-        retry_events = (transition_to_upload, uploaded, resolved, transition_to_monitoring)
-        updated = OrchestrationResult(
-            request_id=result.request_id,
-            clip_start_monotonic_s=result.clip_start_monotonic_s,
-            clip_end_monotonic_s=result.clip_end_monotonic_s,
-            job_start_monotonic_s=result.job_start_monotonic_s,
-            job_end_monotonic_s=result.job_end_monotonic_s,
-            manifest=result.manifest,
-            observations=result.observations,
-            raw_capture=result.raw_capture,
-            media=result.media,
-            processing=result.processing,
-            published=True,
-            states=result.states + (
-                EdgeLifecycleState.UPLOADING,
-                EdgeLifecycleState.MONITORING,
-            ),
-            events=result.events + (uploaded, resolved),
-        )
-        self._results[result.request_id] = updated
-        self._completed_clips = [
-            updated if item.request_id == result.request_id else item
-            for item in self._completed_clips
-        ]
-        del self._pending_publications[failure_id]
-        return retry_events
+        await self.raw_clip_pipeline.retry(failure_id)
+        return ()
 
     def _transition(
         self,
@@ -644,6 +520,12 @@ class BearVisionOrchestrator:
         expected_end_s = request.requested_at_monotonic_s + request.post_roll_s
         if abs(capture.requested_window.end_monotonic_s - expected_end_s) > 1e-9:
             raise InvalidComponentData("camera requested window has the wrong end time")
+        if not (
+            capture.actual_window.start_monotonic_s
+            <= request.requested_at_monotonic_s
+            <= capture.actual_window.end_monotonic_s
+        ):
+            raise InvalidComponentData("camera actual window does not contain detection")
 
     async def _retry_component(
         self,

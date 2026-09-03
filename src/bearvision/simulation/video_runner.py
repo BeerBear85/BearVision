@@ -9,7 +9,8 @@ from bearvision.adapters import FfmpegVideoClipper, GoProCameraAdapter, YoloDete
 from bearvision.config import AssignmentConfig, EdgeConfig, VirtualCameramanConfig
 from bearvision.config.models import ClipExtractionConfig
 from bearvision.contracts import ScenarioDefinition, ScenarioSourceProfile
-from bearvision.edge.orchestrator import BearVisionOrchestrator, OrchestrationResult
+from bearvision.edge.orchestrator import BearVisionOrchestrator, OrchestrationEvent
+from bearvision.edge.raw_clip_pipeline import RawClipPipeline
 from bearvision.processing import VirtualCameramanProcessor
 from bearvision.ports import JobQueue
 
@@ -38,6 +39,7 @@ class VideoScenarioRunner:
         camera: GoProCameraAdapter,
         frame_source: RecordedVideoFrameSource,
         worker: ServerWorker | None,
+        runtime_events: list[OrchestrationEvent],
     ) -> None:
         self.scenario = scenario
         self.orchestrator = orchestrator
@@ -45,6 +47,7 @@ class VideoScenarioRunner:
         self.camera = camera
         self.frame_source = frame_source
         self.worker = worker
+        self.runtime_events = runtime_events
 
     @classmethod
     def from_scenario(
@@ -125,16 +128,23 @@ class VideoScenarioRunner:
             ),
             ffmpeg_path=clipper.ffmpeg_path,
         )
+        runtime_events: list[OrchestrationEvent] = []
+        pipeline = RawClipPipeline(
+            capture_dir=capture_root,
+            clock=clock,
+            clip_processor=post_processor,
+            job_queue=queue,
+            edge_device_id="scenario-video-edge",
+            upload_enabled=True,
+        )
         orchestrator = BearVisionOrchestrator(
             clock=clock,
             camera=camera,
             scanner=SimulatedTagScanner(()),
             detector=YoloDetectorAdapter(handler),
-            job_queue=queue,
             edge_device_id="scenario-video-edge",
             recording_duration_s=recording_duration_s,
             capture_pre_roll_s=(hindsight_duration_s if hindsight_enabled else 0),
-            clip_processor=post_processor,
             observation_retention_s=max(
                 30.0,
                 scenario.duration_s
@@ -143,7 +153,11 @@ class VideoScenarioRunner:
             ),
             frame_source=frame_source,
             ble_logging_enabled=False,
-            upload_enabled=True,
+            detection_cooldown_s=(
+                edge_config.detection.cooldown_s if edge_config else 5.0
+            ),
+            raw_clip_pipeline=pipeline,
+            event_sink=runtime_events.append,
         )
         for observation in observations:
             orchestrator.add_tag_observation(observation)
@@ -160,6 +174,7 @@ class VideoScenarioRunner:
                 assignment_policy=assignment_policy,
                 enabled=process_server,
             ),
+            runtime_events=runtime_events,
         )
 
     def run(self) -> ScenarioRunResult:
@@ -167,7 +182,6 @@ class VideoScenarioRunner:
 
     async def _run(self) -> ScenarioRunResult:
         trace_events: list[TraceEvent] = []
-        results: dict[str, OrchestrationResult] = {}
         detection_times_s: list[float] = []
         failures: list[dict[str, str]] = []
         assignments = []
@@ -186,29 +200,25 @@ class VideoScenarioRunner:
                 evaluation = await self.orchestrator.evaluate_frame(frame)
                 if evaluation.events:
                     detection_times_s.append(frame.observed_at_monotonic_s)
-                    trace_events.extend(
-                        (event.at_monotonic_s, event.kind, event.payload)
-                        for event in evaluation.events
-                    )
-                if evaluation.result is not None:
-                    results.setdefault(evaluation.result.request_id, evaluation.result)
+            await self.orchestrator.wait_until_idle()
         except Exception as exc:
             failures.append({"component": "video_scenario", "error": str(exc)})
         finally:
             await self.orchestrator.stop()
 
-        for result in results.values():
-            server_result = await self.worker.run_once() if self.worker is not None else None
-            if server_result is not None:
+        trace_events.extend(
+            (event.at_monotonic_s, event.kind, event.payload)
+            for event in self.runtime_events
+        )
+        if self.worker is not None:
+            while True:
+                server_result = await self.worker.run_once()
+                if server_result is None:
+                    break
                 assignments.append(server_result)
-            trace_events.extend(
-                (event.at_monotonic_s, event.kind, event.payload)
-                for event in result.events
-            )
-            if server_result is not None:
                 trace_events.append(
                     (
-                        result.clip_end_monotonic_s,
+                        self.clock.monotonic(),
                         "server_assignment",
                         server_result.model_dump(mode="json", by_alias=True),
                     )
@@ -217,12 +227,14 @@ class VideoScenarioRunner:
         captures = tuple(
             capture.media.asset.asset_id for capture in self.camera.captures.values()
         )
+        pipeline = self.orchestrator.raw_clip_pipeline
+        assert pipeline is not None
         return finalize_scenario_run(
             scenario=self.scenario,
             trace_events=trace_events,
             assignments=assignments,
             captures=captures,
-            edge_results=results.values(),
+            edge_results=pipeline.snapshot().jobs,
             failures=failures,
             detection_times_s=tuple(detection_times_s),
             evaluate_server=self.worker is not None,

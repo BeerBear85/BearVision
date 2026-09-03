@@ -96,5 +96,8 @@ def test_video_runner_uses_edge_processing_and_does_not_start_server_when_disabl
     )
 
     assert runner.worker is None
-    assert runner.orchestrator.upload_enabled
-    assert isinstance(runner.orchestrator.clip_processor, VirtualCameramanProcessor)
+    assert runner.orchestrator.raw_clip_pipeline.upload_enabled
+    assert isinstance(
+        runner.orchestrator.raw_clip_pipeline.clip_processor,
+        VirtualCameramanProcessor,
+    )

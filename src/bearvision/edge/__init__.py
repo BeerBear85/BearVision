@@ -10,7 +10,12 @@ from .orchestrator import (
     EdgeLifecycleState,
     FrameEvaluation,
     OrchestrationEvent,
-    OrchestrationResult,
+)
+from .raw_clip_pipeline import (
+    RawClipJobContext,
+    RawClipJobSummary,
+    RawClipPipeline,
+    RawClipQueueSnapshot,
 )
 
 __all__ = [
@@ -18,8 +23,11 @@ __all__ = [
     "EdgeLifecycleState",
     "FrameEvaluation",
     "OrchestrationEvent",
-    "OrchestrationResult",
     "RealEdgeComponents",
+    "RawClipJobContext",
+    "RawClipJobSummary",
+    "RawClipPipeline",
+    "RawClipQueueSnapshot",
     "build_real_orchestrator",
     "build_real_system",
 ]

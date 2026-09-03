@@ -22,6 +22,15 @@ function defaultData() {
   };
 }
 
+function emptyClipQueue() {
+  return {
+    counts: { queued: 0, processing: 0, failed: 0, completed: 0 },
+    current_job: null,
+    oldest_queued_at_utc: null,
+    jobs: [],
+  };
+}
+
 export class RunState {
   constructor({ stateFile = null, now = () => new Date().toISOString(), createId = null } = {}) {
     this.stateFile = stateFile;
@@ -111,6 +120,8 @@ export class RunState {
       started_at: startedAt,
       ended_at: null,
       current_operation: null,
+      capture_activity: { activity: "idle", request_id: null, pending_captures: 0 },
+      clip_queue: emptyClipQueue(),
       failures: [],
       artefacts: [],
       stop_state: "none",
@@ -143,17 +154,13 @@ export class RunState {
       run.process_state = "running";
       this.#setStage("monitoring", null, recorded.emitted_at);
     } else if (recorded.kind === "capture_started") {
-      this.#setStage(
-        "recording",
-        payload.operation_id ?? payload.request_id ?? payload.asset_id ?? null,
-        recorded.emitted_at,
-      );
+      run.capture_activity = {
+        ...run.capture_activity,
+        activity: "capturing",
+        request_id: payload.operation_id ?? payload.request_id ?? null,
+      };
     } else if (recorded.kind === "finalize_clip") {
-      this.#setStage(
-        "post_processing",
-        payload.operation_id ?? payload.request_id ?? null,
-        recorded.emitted_at,
-      );
+      run.capture_activity = { ...run.capture_activity, activity: "idle", request_id: null };
     } else if (recorded.kind === "capture_completed") {
       this.#addArtefact("capture", payload, recorded.emitted_at);
     } else if (recorded.kind === "virtual_cameraman_completed") {
@@ -172,7 +179,53 @@ export class RunState {
         recorded.emitted_at,
       );
     } else if (recorded.kind === "clip_uploaded") {
-      this.#setStage("monitoring", null, recorded.emitted_at);
+      // Upload is background work and never changes the live runtime stage.
+    } else if (recorded.kind === "capture_activity_changed") {
+      run.capture_activity = {
+        activity: payload.activity,
+        request_id: payload.request_id ?? null,
+        pending_captures: payload.pending_captures ?? 0,
+      };
+    } else if (recorded.kind === "clip_queue_snapshot") {
+      const jobs = Array.isArray(payload.jobs) ? copy(payload.jobs).slice(0, 20) : [];
+      run.clip_queue = {
+        counts: copy(payload.counts),
+        current_job: payload.current_job ?? null,
+        oldest_queued_at_utc: payload.oldest_queued_at_utc ?? null,
+        jobs,
+      };
+      for (const job of jobs.filter((item) => item.status === "failed" && item.failure_id)) {
+        if (run.failures.some((failure) => failure.failure_id === job.failure_id)) continue;
+        this.#addFailure({
+          failure_id: job.failure_id,
+          operation_id: `${job.job_id}:${job.failed_step ?? "failed"}`,
+          stage: job.failed_step ?? "failed",
+          component: job.failed_step === "uploading" ? "job_queue" : "clip_processor",
+          error: job.technical_error ?? "The clip job failed.",
+          operator_message: "The clip job could not be completed.",
+          corrective_action: "Review local media and dependencies, then retry the job.",
+          severity: "blocking",
+          retryable: true,
+          scope: "clip_job",
+          job_id: job.job_id,
+        }, recorded.emitted_at);
+      }
+    } else if (recorded.kind === "clip_job_updated") {
+      const { counts, current_job: currentJob, oldest_queued_at_utc: oldestQueued, ...job } = payload;
+      const current = run.clip_queue ?? emptyClipQueue();
+      const jobs = [copy(job), ...current.jobs.filter((item) => item.job_id !== job.job_id)]
+        .sort((left, right) => String(right.state_changed_at_utc).localeCompare(String(left.state_changed_at_utc)))
+        .slice(0, 20);
+      const activeStatuses = new Set(["processing", "packaging", "uploading"]);
+      run.clip_queue = {
+        ...current,
+        counts: copy(counts ?? current.counts),
+        current_job: currentJob ?? (activeStatuses.has(job.status)
+          ? job.job_id
+          : current.current_job === job.job_id ? null : current.current_job),
+        oldest_queued_at_utc: oldestQueued ?? null,
+        jobs,
+      };
     } else if (recorded.kind === "component_failed" || recorded.kind === "runtime_failed") {
       this.#addFailure(payload, recorded.emitted_at);
     } else if (recorded.kind === "failure_resolved") {
@@ -224,12 +277,14 @@ export class RunState {
       corrective_action: payload.corrective_action ?? "Review the technical details, then restart the runtime.",
       severity: payload.severity ?? "terminal",
       retryable: payload.retryable === true,
+      scope: payload.scope ?? "runtime",
+      job_id: payload.job_id ?? null,
       occurred_at: existing?.occurred_at ?? occurredAt,
       resolved_at: null,
       attempts: existing ? existing.attempts + 1 : 1,
     };
     run.failures = [failure, ...run.failures.filter((item) => item.failure_id !== failureId)];
-    if (failure.severity !== "warning") {
+    if (failure.scope !== "clip_job" && failure.severity !== "warning") {
       this.#setStage("failed", failure.operation_id, failure.occurred_at);
     }
   }
@@ -252,7 +307,7 @@ export class RunState {
     if (!failure) throw new Error("unknown failure");
     if (failure.resolved_at) throw new Error("failure is already resolved");
     if (!failure.retryable) throw new Error("failure is not retryable");
-    this.#setStage(failure.stage, failure.operation_id);
+    if (failure.scope !== "clip_job") this.#setStage(failure.stage, failure.operation_id);
     this.#persist();
     return copy(failure);
   }

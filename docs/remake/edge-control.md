@@ -6,12 +6,22 @@ Status: operator monitoring, recovery, recorded-video regression and physical pr
 
 Edge Control uses the shared BearVision operator shell from Server Control while
 retaining an Edge-specific workflow: configure, run, observe and verify. The
-preview and live pipeline are the primary work surfaces. Hardware readiness,
+preview and two concurrent tracks are the primary work surfaces. The Live track
+shows readiness, monitoring and camera activity/pending captures. The Background
+queue track shows queued, processing, packaging, uploading, failed and completed
+clip work. Hardware readiness,
 persistent failure cards and guarded recovery actions sit beside them; the raw
 event trace is collapsed under Diagnostics. Active state, the last ten runs and
 artefact references survive refresh and control-server restart. Existing
 scenario, capture, processed-video and tracking views remain available when
 their artefacts exist.
+
+Python emits additive `clip_queue_snapshot`, `clip_job_updated` and
+`capture_activity_changed` events using control-event version 1.1. Node persists
+the full queue counts and at most the 20 newest job details. A
+`component_failed` event with `scope="clip_job"` creates a persistent retry card
+without changing the runtime stage from Monitoring; runtime-scoped failures keep
+their existing stop/restart behaviour.
 
 The normative UX/UI baseline and acceptance checks are in
 [`ui-design-criteria.md`](ui-design-criteria.md).
@@ -40,7 +50,8 @@ flowchart LR
     ports -->|"Recorded source"| video["MP4 frames through real YOLO"]
 ```
 
-Node is deliberately a thin shell. Edge Python owns capture and packaging;
+Node is deliberately a thin shell. Edge Python owns serial capture, the durable
+raw-clip queue, recovery, Virtual Cameraman, packaging and publication;
 server Python separately owns BearTag scoring, historical lookup and terminal
 placement. Neither React GUI duplicates those policies.
 

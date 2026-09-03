@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
+from uuid import uuid4
 
 from bearvision.config import AssignmentConfig
 from bearvision.contracts import (
@@ -13,7 +15,8 @@ from bearvision.contracts import (
     TagObservation,
     TagRegistryEntry,
 )
-from bearvision.edge.orchestrator import BearVisionOrchestrator, OrchestrationResult
+from bearvision.edge.orchestrator import BearVisionOrchestrator, OrchestrationEvent
+from bearvision.edge.raw_clip_pipeline import RawClipPipeline
 from bearvision.ports import ComponentError, JobQueue, VideoFrame
 from bearvision.server import ServerWorker
 
@@ -44,6 +47,7 @@ class ClosedLoopScenarioRunner:
         observations: tuple[TagObservation, ...],
         camera: SimulatedCamera,
         queue: JobQueue,
+        runtime_events: list[OrchestrationEvent],
     ) -> None:
         self.scenario = scenario
         self.orchestrator = orchestrator
@@ -52,6 +56,7 @@ class ClosedLoopScenarioRunner:
         self.observations = observations
         self.camera = camera
         self.queue = queue
+        self.runtime_events = runtime_events
 
     @classmethod
     def from_scenario(
@@ -62,6 +67,7 @@ class ClosedLoopScenarioRunner:
         recording_duration_s: float = 5.0,
         job_queue: JobQueue | None = None,
         process_server: bool = True,
+        capture_dir: Path | None = None,
     ) -> "ClosedLoopScenarioRunner":
         if recording_duration_s <= 0:
             raise ValueError("recording_duration_s must be positive")
@@ -89,20 +95,38 @@ class ClosedLoopScenarioRunner:
         registry_entries: tuple[TagRegistryEntry, ...] = tuple(
             registry_by_tag[tag_id] for tag_id in sorted(registry_by_tag)
         )
-        camera = SimulatedCamera(clock, fail_capture=scenario.faults.camera_capture)
+        capture_root = (
+            capture_dir
+            or Path("temp/captures") / f".simulation-{uuid4().hex}"
+        ).resolve()
+        camera = SimulatedCamera(
+            clock,
+            fail_capture=scenario.faults.camera_capture,
+            capture_dir=capture_root,
+        )
         queue: JobQueue = job_queue or InMemoryJobQueue(
             fail_publish=scenario.faults.storage_upload
+        )
+        runtime_events: list[OrchestrationEvent] = []
+        pipeline = RawClipPipeline(
+            capture_dir=capture_root,
+            clock=clock,
+            clip_processor=None,
+            job_queue=queue,
+            edge_device_id="scenario-edge",
+            upload_enabled=True,
         )
         orchestrator = BearVisionOrchestrator(
             clock=clock,
             camera=camera,
             scanner=SimulatedTagScanner(()),
             detector=SimulatedDetector(detections),
-            job_queue=queue,
             edge_device_id="scenario-edge",
             recording_duration_s=recording_duration_s,
             observation_retention_s=max(30.0, scenario.duration_s + recording_duration_s),
             ble_logging_enabled=False,
+            raw_clip_pipeline=pipeline,
+            event_sink=runtime_events.append,
         )
         return cls(
             scenario,
@@ -118,6 +142,7 @@ class ClosedLoopScenarioRunner:
             observations=tuple(sorted(observations, key=lambda item: item.observed_at_monotonic_s)),
             camera=camera,
             queue=queue,
+            runtime_events=runtime_events,
         )
 
     def run(self) -> ScenarioRunResult:
@@ -125,7 +150,6 @@ class ClosedLoopScenarioRunner:
 
     async def _run(self) -> ScenarioRunResult:
         trace_events: list[TraceEvent] = []
-        edge_results: dict[str, OrchestrationResult] = {}
         failures: list[dict[str, str]] = []
         detection_times: list[float] = []
         for observation in self.observations:
@@ -149,40 +173,31 @@ class ClosedLoopScenarioRunner:
                     continue
                 if evaluation.events:
                     detection_times.append(item.at_s)
-                    trace_events.extend(
-                        (event.at_monotonic_s, event.kind, event.payload)
-                        for event in evaluation.events
-                    )
-                if evaluation.result is not None:
-                    edge_results.setdefault(evaluation.result.request_id, evaluation.result)
-                    failures.extend(
-                        {
-                            "component": str(event.payload.get("component", "runtime")),
-                            "error": str(event.payload.get("error", "runtime failed")),
-                        }
-                        for event in evaluation.result.events
-                        if event.kind == "component_failed"
-                    )
+            try:
+                await self.orchestrator.wait_until_idle()
+            except ComponentError as exc:
+                failures.append({"component": "camera", "error": str(exc)})
         finally:
-            await self.orchestrator.stop()
+            try:
+                await self.orchestrator.stop()
+            except ComponentError as exc:
+                if not any(item["component"] == "camera" for item in failures):
+                    failures.append({"component": "camera", "error": str(exc)})
+
+        trace_events.extend(
+            (event.at_monotonic_s, event.kind, event.payload)
+            for event in self.runtime_events
+        )
+        failures.extend(
+            {
+                "component": str(event.payload.get("component", "runtime")),
+                "error": str(event.payload.get("error", "runtime failed")),
+            }
+            for event in self.runtime_events
+            if event.kind == "component_failed"
+        )
 
         server_results: list[JobResultManifest] = []
-        for edge_result in edge_results.values():
-            trace_events.extend(
-                (event.at_monotonic_s, event.kind, event.payload)
-                for event in edge_result.events
-            )
-            if self.worker is not None:
-                server_result = await self.worker.run_once()
-                if server_result is not None:
-                    server_results.append(server_result)
-                    trace_events.append(
-                        (
-                            edge_result.clip_end_monotonic_s,
-                            "server_assignment",
-                            server_result.model_dump(mode="json", by_alias=True),
-                        )
-                    )
         if self.worker is not None:
             while True:
                 server_result = await self.worker.run_once()
@@ -199,12 +214,14 @@ class ClosedLoopScenarioRunner:
         captures = tuple(
             capture.media.asset.asset_id for capture in self.camera.captures.values()
         )
+        pipeline = self.orchestrator.raw_clip_pipeline
+        assert pipeline is not None
         return finalize_scenario_run(
             scenario=self.scenario,
             trace_events=trace_events,
             assignments=server_results,
             captures=captures,
-            edge_results=edge_results.values(),
+            edge_results=pipeline.snapshot().jobs,
             failures=failures,
             detection_times_s=tuple(detection_times),
             evaluate_server=self.worker is not None,

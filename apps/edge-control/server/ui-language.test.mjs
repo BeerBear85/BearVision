@@ -76,7 +76,8 @@ test("Edge Control exposes a minimum log-level filter", () => {
 
 test("Edge Control presents operator pipeline, readiness and persistent recovery actions", () => {
   for (const token of [
-    'aria-label="Runtime pipeline"',
+    'aria-label="Live track"',
+    'aria-label="Background queue track"',
     'className="failure-card"',
     'className="readiness-panel panel"',
     'className="diagnostics panel"',

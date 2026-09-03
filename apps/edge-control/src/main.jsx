@@ -7,7 +7,6 @@ import {
 } from "./log-level.js";
 import {
   deriveOperatorView,
-  pipelineForStage,
   restoreCapturedClip,
 } from "./operator-model.js";
 import "./styles.css";
@@ -71,6 +70,9 @@ function eventMessage(event) {
     preview_frame: "Preview frame analysed",
     virtual_cameraman_completed: "Virtual cameraman completed",
     tracking_observation: "Rider position estimated",
+    clip_queue_snapshot: "Clip queue restored",
+    clip_job_updated: "Clip job updated",
+    capture_activity_changed: "Camera activity changed",
   };
   return labels[event.kind] ?? event.kind?.replaceAll("_", " ") ?? "Event";
 }
@@ -85,15 +87,25 @@ function Indicator({ label, status = "idle", detail }) {
 }
 
 function Pipeline({ run, readiness, now }) {
-  const failedStage = run?.failures?.find((failure) => !failure.resolved_at)?.stage ?? null;
-  const stage = run?.stage ?? (readiness?.blocking ? "readiness" : "readiness");
-  const stages = pipelineForStage(stage, failedStage);
+  const queue = run?.clip_queue ?? {
+    counts: { queued: 0, processing: 0, failed: 0, completed: 0 },
+    current_job: null,
+    oldest_queued_at_utc: null,
+    jobs: [],
+  };
+  const camera = run?.capture_activity ?? {
+    activity: "idle", request_id: null, pending_captures: 0,
+  };
+  const activeJob = queue.jobs?.find((job) => job.job_id === queue.current_job) ?? null;
+  const backgroundStages = [
+    "queued", "processing", "packaging", "uploading", "failed", "completed",
+  ];
   return (
     <section className="pipeline panel" aria-labelledby="pipeline-heading" aria-live="polite">
       <div className="pipeline-heading">
         <div>
           <span className="eyebrow">Live operation</span>
-          <h2 id="pipeline-heading">Pipeline</h2>
+          <h2 id="pipeline-heading">Concurrent pipeline</h2>
         </div>
         <span className={`status-badge ${run?.stage === "failed" ? "attention" : run ? "working" : "ok"}`}>
           <span className="status-dot" />
@@ -101,19 +113,28 @@ function Pipeline({ run, readiness, now }) {
           {run?.stage_started_at && <small>{elapsedSince(run.stage_started_at, now)}</small>}
         </span>
       </div>
-      <ol className="pipeline-steps" aria-label="Runtime pipeline">
-        {stages.map((item, index) => (
-          <li key={item.key} className={item.status} aria-current={item.status === "current" ? "step" : undefined}>
-            <span aria-hidden="true">{item.status === "complete" ? "✓" : index + 1}</span>
-            <strong>{item.label}</strong>
-          </li>
-        ))}
-      </ol>
-      <p className="pipeline-detail">
-        {run?.current_operation?.operation_id
-          ? `Current operation: ${run.current_operation.operation_id}`
-          : run ? `${formatLabel(run.process_state)} process` : "Start a run when readiness is clear."}
-      </p>
+      <div className="operation-tracks">
+        <article className="operation-track" aria-label="Live track">
+          <h3>Live</h3>
+          <ol className="pipeline-steps">
+            <li className={readiness?.blocking ? "failed" : "complete"}><span>1</span><strong>Readiness</strong></li>
+            <li className={run?.stage === "monitoring" ? "current" : run ? "complete" : "upcoming"} aria-current={run?.stage === "monitoring" ? "step" : undefined}><span>2</span><strong>Monitoring</strong></li>
+            <li className={camera.activity === "capturing" ? "current" : "upcoming"}><span>3</span><strong>Camera: {formatLabel(camera.activity)}</strong></li>
+          </ol>
+          <p className="pipeline-detail">{camera.pending_captures} pending capture{camera.pending_captures === 1 ? "" : "s"}{camera.request_id ? ` · ${camera.request_id}` : ""}</p>
+        </article>
+        <article className="operation-track" aria-label="Background queue track">
+          <h3>Background queue</h3>
+          <ol className="pipeline-steps">
+            {backgroundStages.map((stage, index) => (
+              <li key={stage} className={activeJob?.status === stage ? "current" : stage === "completed" && queue.counts.completed > 0 ? "complete" : "upcoming"} aria-current={activeJob?.status === stage ? "step" : undefined}>
+                <span aria-hidden="true">{index + 1}</span><strong>{formatLabel(stage)}</strong>
+              </li>
+            ))}
+          </ol>
+          <p className="pipeline-detail">{queue.counts.queued} queued · {queue.counts.processing} active · {queue.counts.failed} failed · {queue.counts.completed} completed</p>
+        </article>
+      </div>
     </section>
   );
 }
@@ -193,6 +214,7 @@ function FailureCard({ failure, onRetry, retrying }) {
           <dl>
             <div><dt>Failure</dt><dd>{failure.failure_id}</dd></div>
             <div><dt>Operation</dt><dd>{failure.operation_id ?? "Not available"}</dd></div>
+            {failure.job_id && <div><dt>Clip job</dt><dd>{failure.job_id}</dd></div>}
             <div><dt>Error</dt><dd>{failure.error}</dd></div>
             <div><dt>Attempts</dt><dd>{failure.attempts ?? 1}</dd></div>
           </dl>
@@ -682,6 +704,11 @@ function App() {
                   <Indicator label="Control connection" status={streamConnected ? "ok" : "attention"} detail={streamConnected ? "Live" : "Reconnecting"} />
                   <Indicator label="Runtime process" status={run?.process_state === "running" ? "working" : run?.process_state === "exited" && run?.stage === "failed" ? "attention" : "idle"} detail={formatLabel(run?.process_state ?? "idle")} />
                   <Indicator label="Current stage" status={run?.stage === "failed" ? "attention" : run ? "working" : "idle"} detail={formatLabel(run?.stage ?? "idle")} />
+                  <Indicator label="Camera" status={run?.capture_activity?.activity === "capturing" ? "working" : "idle"} detail={`${formatLabel(run?.capture_activity?.activity ?? "idle")} · ${run?.capture_activity?.pending_captures ?? 0} pending`} />
+                  <Indicator label="Queue depth" status={(run?.clip_queue?.counts?.queued ?? 0) > 0 ? "working" : "idle"} detail={String(run?.clip_queue?.counts?.queued ?? 0)} />
+                  <Indicator label="Current clip job" status={run?.clip_queue?.current_job ? "working" : "idle"} detail={run?.clip_queue?.current_job ?? "None"} />
+                  <Indicator label="Oldest queued" status={run?.clip_queue?.oldest_queued_at_utc ? "working" : "idle"} detail={run?.clip_queue?.oldest_queued_at_utc ? formatDate(run.clip_queue.oldest_queued_at_utc) : "None"} />
+                  <Indicator label="Failed clips" status={(run?.clip_queue?.counts?.failed ?? 0) > 0 ? "attention" : "ok"} detail={String(run?.clip_queue?.counts?.failed ?? 0)} />
                   <Indicator label="Readiness" status={state.readiness?.blocking ? "attention" : state.readiness ? "ok" : "idle"} detail={state.readiness?.blocking ? "Blocked" : state.readiness ? "Checked" : "Not checked"} />
                 </div>
               </section>

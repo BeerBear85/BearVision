@@ -16,7 +16,7 @@ from bearvision.contracts import (
     StorageReceipt,
     TagRegistryEntry,
 )
-from bearvision.edge.orchestrator import OrchestrationResult
+from bearvision.edge.raw_clip_pipeline import RawClipJobSummary
 from bearvision.ports import Clock, JobQueue
 from bearvision.server import (
     BearTagAssignment,
@@ -119,18 +119,24 @@ def order_trace_events(events: Sequence[TraceEvent]) -> tuple[TraceEntry, ...]:
 
 
 def published_receipts(
-    results: Iterable[OrchestrationResult],
+    results: Iterable[RawClipJobSummary],
 ) -> tuple[StorageReceipt, ...]:
-    return tuple(
-        StorageReceipt(
-            asset_id=result.media.asset.asset_id,
-            object_key=f"input-queue/ready/{result.request_id}",
-            stored_at_utc=result.manifest.created_at,
-            checksum_sha256=result.manifest.video.sha256,
+    receipts = []
+    for result in results:
+        if not result.uploaded:
+            continue
+        assert result.media_asset_id is not None
+        assert result.object_key is not None
+        assert result.checksum_sha256 is not None
+        receipts.append(
+            StorageReceipt(
+                asset_id=result.media_asset_id,
+                object_key=result.object_key,
+                stored_at_utc=result.state_changed_at_utc,
+                checksum_sha256=result.checksum_sha256,
+            )
         )
-        for result in results
-        if result.published
-    )
+    return tuple(receipts)
 
 
 def evaluate_expectations(
@@ -213,7 +219,7 @@ def finalize_scenario_run(
     trace_events: Sequence[TraceEvent],
     assignments: Iterable[JobResultManifest],
     captures: Iterable[str],
-    edge_results: Iterable[OrchestrationResult],
+    edge_results: Iterable[RawClipJobSummary],
     failures: Iterable[dict[str, str]],
     detection_times_s: Iterable[float],
     evaluate_server: bool,
