@@ -16,6 +16,7 @@ def test_code_only_redeploy_runs_updater_without_root() -> None:
     assert "$ConfigureCodeDeploy" in source
     assert "sudo bash scripts/configure-code-deployment.sh" in source
     assert "[string[]]$payload = if ($ConfigureCodeDeploy)" in source
+    assert '$remoteCommand = $remoteCommand.Replace("`r`n", "`n")' in source
 
 
 def test_code_updater_only_escalates_the_service_restart() -> None:

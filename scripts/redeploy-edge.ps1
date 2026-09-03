@@ -111,6 +111,7 @@ tar -xzf "`$archive" -C "`$deploy_dir"
 cd "`$deploy_dir"
 $deploymentCommand
 "@
+    $remoteCommand = $remoteCommand.Replace("`r`n", "`n")
 
     $mode = if ($ConfigureCodeDeploy) { 'passwordless code deployment' } elseif ($CodeOnly) { 'application code' } else { 'full Edge stack' }
     $privilegeNote = if ($CodeOnly) { 'without sudo' } else { 'sudo may prompt for the remote password' }
