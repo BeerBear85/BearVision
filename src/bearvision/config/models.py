@@ -85,7 +85,7 @@ class AssignmentConfig(StrictConfigModel):
 class PerformanceConfig(StrictConfigModel):
     max_fps: int = Field(default=30, ge=1, le=120)
     buffer_drain: bool = True
-    callback_queue_size: int = Field(default=5, ge=1, le=100)
+    callback_queue_size: int = Field(default=1, ge=1, le=100)
 
 
 class ErrorRecoveryConfig(StrictConfigModel):

@@ -80,7 +80,7 @@ class OpenCvPreviewFrameSource:
         clock: Any,
         *,
         max_fps: int = 30,
-        queue_size: int = 5,
+        queue_size: int = 1,
         drain_old_frames: bool = True,
         preview_frame_path: str | Path | None = None,
         preview_fps: float = 4,
@@ -109,6 +109,10 @@ class OpenCvPreviewFrameSource:
             await asyncio.to_thread(capture.release)
             self._capture = None
             raise ComponentUnavailable(f"cannot open preview stream: {preview_source}")
+        buffer_property = getattr(cv2, "CAP_PROP_BUFFERSIZE", None)
+        if buffer_property is not None:
+            with suppress(Exception):
+                await asyncio.to_thread(capture.set, buffer_property, 1)
         self._closed = False
         self._reader = asyncio.create_task(self._read_frames())
 
@@ -124,9 +128,7 @@ class OpenCvPreviewFrameSource:
             self._capture = None
 
     async def _read_frames(self) -> None:
-        minimum_period_s = 1.0 / self.max_fps
         while not self._closed and self._capture is not None:
-            started = self.clock.monotonic()
             ok, pixels = await asyncio.to_thread(self._capture.read)
             if not ok:
                 raise ComponentUnavailable("preview stream stopped producing frames")
@@ -139,18 +141,27 @@ class OpenCvPreviewFrameSource:
             )
             if self._preview_publisher is not None:
                 await self._preview_publisher.publish(frame)
-            if self._queue.full() and self.drain_old_frames:
+            while self.drain_old_frames and not self._queue.empty():
                 with suppress(asyncio.QueueEmpty):
                     self._queue.get_nowait()
                     self._queue.task_done()
             await self._queue.put(frame)
-            remaining = minimum_period_s - (self.clock.monotonic() - started)
-            if remaining > 0:
-                await self.clock.sleep(remaining)
 
     async def frames(self):
+        minimum_period_s = 1.0 / self.max_fps
+        last_yielded_at: float | None = None
         while not self._closed:
+            if last_yielded_at is not None:
+                remaining = minimum_period_s - (
+                    self.clock.monotonic() - last_yielded_at
+                )
+                if remaining > 0:
+                    await self.clock.sleep(remaining)
             frame = await self._queue.get()
+            while self.drain_old_frames and not self._queue.empty():
+                self._queue.task_done()
+                frame = self._queue.get_nowait()
+            last_yielded_at = self.clock.monotonic()
             try:
                 yield frame
             finally:

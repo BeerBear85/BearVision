@@ -34,6 +34,8 @@ The current version supports:
 
 The hardware preview is intentionally operator-grade rather than full frame rate:
 the Python runtime publishes four JPEG snapshots per second through the Node server.
+The camera reader continuously drains the source and drops intermediate frames,
+so the feed prioritises the newest available view over frame-by-frame delivery.
 
 Automatic component retries are disabled. Failures remain visible until Python
 reports resolution or the operator restarts the exited runtime. Edge Control has

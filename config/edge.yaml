@@ -24,7 +24,8 @@ detection:
 performance:
   max_fps: 30
   buffer_drain: true
-  callback_queue_size: 5
+  # Live preview prioritises freshness over retaining intermediate frames.
+  callback_queue_size: 1
 error_recovery:
   # Operator-visible recovery is deliberate; do not hide failures behind retries.
   max_restarts: 0

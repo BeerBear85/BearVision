@@ -101,8 +101,9 @@ corepack pnpm serve
 Open `http://localhost:4310`. The GUI can select behavioural simulation or real
 hardware, play an attached scenario video on the trace timeline and show its
 component sources and events. After capture it can also play the frame-accurate
-five-second clip produced locally by the Windows Edge media runtime. Physical
-hardware preview proxying is not yet implemented.
+five-second clip produced locally by the Windows Edge media runtime. Hardware
+mode provides a four-frame-per-second GoPro operator preview using
+latest-frame-wins buffering to avoid accumulated latency.
 
 Run the local server worker/admin GUI:
 

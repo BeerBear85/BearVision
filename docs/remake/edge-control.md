@@ -162,7 +162,8 @@ scenario selector and can be replayed manually like any other video scenario.
   mockup with mock events and no backend.
 - The PyQt Edge GUI is wired to the legacy state machine, not BearVision 3.
 - Hardware preview is a throttled four-frame-per-second operator feed, not a
-  full-frame-rate transport.
+  full-frame-rate transport. The capture reader continuously drains the source
+  and uses latest-frame-wins buffering to prevent latency accumulation.
 - Edge Control has no authentication; do not expose port 4310 outside a trusted
   local network.
 
