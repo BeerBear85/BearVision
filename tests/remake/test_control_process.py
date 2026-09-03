@@ -1,4 +1,5 @@
 import asyncio
+from datetime import datetime, timezone
 import json
 from pathlib import Path
 from types import SimpleNamespace
@@ -20,13 +21,16 @@ def test_control_process_replays_versioned_scenario_events(monkeypatch, capsys) 
 
     exit_code = simulate(
         ROOT / "specs" / "scenarios" / "single-rider-success.yaml",
+        run_id="run-simulation-9",
         realtime=True,
         speed=2.0,
     )
 
     events = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
     assert exit_code == 0
-    assert events[0]["control_event_version"] == "1.0"
+    assert events[0]["control_event_version"] == "1.1"
+    assert all(event["run_id"] == "run-simulation-9" for event in events)
+    assert all(event["emitted_at"].endswith("Z") for event in events)
     assert any(event["kind"] == "clip_uploaded" for event in events)
     assert all(event["kind"] != "job_published" for event in events)
     assert all(event["kind"] != "server_assignment" for event in events)
@@ -38,17 +42,22 @@ def test_runtime_event_contract_rejects_unknown_or_malformed_events() -> None:
         serialize_runtime_event(  # type: ignore[arg-type]
             "person_detected",
             {"frame_id": "frame-1"},
+            run_id="run-invalid-event",
+            emitted_at=datetime(2026, 9, 3, 8, 15, tzinfo=timezone.utc),
             at_s=1,
         )
     with pytest.raises(ValidationError):
         serialize_runtime_event(  # type: ignore[arg-type]
             "invented_event",
             {},
+            run_id="run-invalid-event",
+            emitted_at=datetime(2026, 9, 3, 8, 15, tzinfo=timezone.utc),
             at_s=1,
         )
 
 
 def test_runtime_event_contract_exposes_typed_lifecycle_and_failures() -> None:
+    emitted_at = datetime(2026, 9, 3, 8, 15, tzinfo=timezone.utc)
     lifecycle = json.loads(
         serialize_runtime_event(
             "lifecycle_changed",
@@ -56,6 +65,8 @@ def test_runtime_event_contract_exposes_typed_lifecycle_and_failures() -> None:
                 "stage": "uploading",
                 "operation_id": "capture-frame-1:publish",
             },
+            run_id="run-edge-17",
+            emitted_at=emitted_at,
         )
     )
     failure = json.loads(
@@ -72,15 +83,21 @@ def test_runtime_event_contract_exposes_typed_lifecycle_and_failures() -> None:
                 "severity": "blocking",
                 "retryable": True,
             },
+            run_id="run-edge-17",
+            emitted_at=emitted_at,
         )
     )
 
     assert lifecycle["payload"]["stage"] == "uploading"
+    assert lifecycle["run_id"] == "run-edge-17"
+    assert lifecycle["emitted_at"] == "2026-09-03T08:15:00Z"
     assert failure["payload"]["retryable"] is True
     with pytest.raises(ValidationError):
         serialize_runtime_event(
             "lifecycle_changed",
             {"stage": "made_up", "operation_id": None},
+            run_id="run-edge-17",
+            emitted_at=emitted_at,
         )
 
 
@@ -109,6 +126,7 @@ def test_hardware_uses_explicit_runtime_directories(monkeypatch) -> None:
     exit_code = asyncio.run(
         hardware(
             config_path,
+            run_id="run-hardware-directories",
             capture_dir=capture_dir,
             scratch_dir=scratch_dir,
         )
@@ -161,8 +179,12 @@ def test_hardware_streams_orchestrator_lifecycle_events(monkeypatch, capsys) -> 
     )
     monkeypatch.setattr("bearvision.control.build_real_orchestrator", build_orchestrator)
 
-    assert asyncio.run(hardware(Path("config/edge.yaml"))) == 0
+    assert asyncio.run(
+        hardware(Path("config/edge.yaml"), run_id="run-hardware-4")
+    ) == 0
     events = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+    assert all(event["run_id"] == "run-hardware-4" for event in events)
+    assert all(event["emitted_at"].endswith("Z") for event in events)
     assert any(
         event["kind"] == "lifecycle_changed"
         and event["payload"]["stage"] == "monitoring"

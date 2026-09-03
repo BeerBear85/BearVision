@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+from datetime import datetime, timezone
 import json
 import logging
 from pathlib import Path
 import sys
 from typing import Any
+from uuid import uuid4
 
 from bearvision.config import load_edge_config
 from bearvision.contracts import RuntimeEventKind, serialize_runtime_event
@@ -21,14 +23,25 @@ def emit(
     kind: RuntimeEventKind,
     payload: dict | None = None,
     *,
+    run_id: str,
     at_s: float | None = None,
 ) -> None:
-    print(serialize_runtime_event(kind, payload or {}, at_s=at_s), flush=True)
+    print(
+        serialize_runtime_event(
+            kind,
+            payload or {},
+            run_id=run_id,
+            emitted_at=datetime.now(timezone.utc),
+            at_s=at_s,
+        ),
+        flush=True,
+    )
 
 
 def simulate(
     path: Path,
     *,
+    run_id: str,
     realtime: bool,
     speed: float,
     local_queue_root: Path | None = None,
@@ -45,7 +58,7 @@ def simulate(
         local_queue_root=local_queue_root,
     )
     for event in execution.replay(replay):
-        emit(event.kind, event.payload, at_s=event.at_s)
+        emit(event.kind, event.payload, run_id=run_id, at_s=event.at_s)
     return execution.exit_code
 
 
@@ -67,6 +80,7 @@ def readiness(
 async def hardware(
     config_path: Path,
     *,
+    run_id: str,
     capture_dir: Path = Path("temp/captures"),
     scratch_dir: Path = Path("temp/scratch"),
 ) -> int:
@@ -79,14 +93,14 @@ async def hardware(
         config,
         capture_dir=capture_dir,
         scratch_dir=scratch_dir,
-        event_sink=lambda event: emit(event.kind, event.payload),
+        event_sink=lambda event: emit(event.kind, event.payload, run_id=run_id),
     )
-    emit("hardware_initializing", {"config": str(config_path)})
+    emit("hardware_initializing", {"config": str(config_path)}, run_id=run_id)
     command_task = asyncio.create_task(_read_control_commands(orchestrator))
     try:
         await orchestrator.run()
     except KeyboardInterrupt:
-        emit("hardware_stopping", {"reason": "interrupt"})
+        emit("hardware_stopping", {"reason": "interrupt"}, run_id=run_id)
     except Exception as exc:
         emit(
             "component_failed",
@@ -99,6 +113,7 @@ async def hardware(
                 "severity": "terminal",
                 "retryable": False,
             },
+            run_id=run_id,
         )
         return 1
     finally:
@@ -142,10 +157,12 @@ def main() -> int:
     simulation.add_argument("--speed", type=float, default=1.0)
     simulation.add_argument("--local-queue-root", type=Path)
     simulation.add_argument("--config", type=Path, default=Path("config/edge.yaml"))
+    simulation.add_argument("--run-id", default=f"local-{uuid4()}")
     real = commands.add_parser("hardware")
     real.add_argument("--config", type=Path, default=Path("config/edge.yaml"))
     real.add_argument("--capture-dir", type=Path, default=Path("temp/captures"))
     real.add_argument("--scratch-dir", type=Path, default=Path("temp/scratch"))
+    real.add_argument("--run-id", default=f"local-{uuid4()}")
     preflight = commands.add_parser("preflight")
     preflight.add_argument("--config", type=Path, default=Path("config/edge.yaml"))
     preflight.add_argument("--capture-dir", type=Path, default=Path("temp/captures"))
@@ -154,6 +171,7 @@ def main() -> int:
     if args.command == "simulate":
         return simulate(
             args.scenario,
+            run_id=args.run_id,
             realtime=args.realtime,
             speed=args.speed,
             local_queue_root=args.local_queue_root,
@@ -170,6 +188,7 @@ def main() -> int:
     return asyncio.run(
         hardware(
             args.config,
+            run_id=args.run_id,
             capture_dir=args.capture_dir,
             scratch_dir=args.scratch_dir,
         )

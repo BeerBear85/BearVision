@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+from datetime import datetime, timezone
 import logging
 from pathlib import Path
+from uuid import uuid4
 
 from bearvision.config import load_edge_config
 from bearvision.contracts import serialize_runtime_event
@@ -40,6 +42,7 @@ def simulate_main() -> int:
     parser = argparse.ArgumentParser(description="Run a BearVision behavioural scenario")
     parser.add_argument("scenario", type=Path)
     parser.add_argument("--config", type=Path, default=Path("config/edge.yaml"))
+    parser.add_argument("--run-id", default=f"local-{uuid4()}")
     parser.add_argument(
         "--realtime",
         action="store_true",
@@ -63,7 +66,13 @@ def simulate_main() -> int:
     execution = ScenarioExecution.run(args.scenario, config_path=args.config)
     for event in execution.replay(replay):
         print(
-            serialize_runtime_event(event.kind, event.payload, at_s=event.at_s),
+            serialize_runtime_event(
+                event.kind,
+                event.payload,
+                run_id=args.run_id,
+                emitted_at=datetime.now(timezone.utc),
+                at_s=event.at_s,
+            ),
             flush=True,
         )
     return execution.exit_code

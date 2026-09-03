@@ -262,9 +262,6 @@ behavioural coverage.
 
 ## Remaining hardening
 
-- Carry run and occurrence metadata directly in the Python lifecycle envelope;
-  the MVP currently attaches `run_id` and `emitted_at` at the authoritative Node
-  run-state boundary.
 - Decide a deployment-specific cleanup policy for force-stopped partial files.
   The API currently reports whether partial artefacts were retained and avoids
   deleting operator evidence automatically.
@@ -277,6 +274,9 @@ behavioural coverage.
   keyboard operation and the 320 px layout.
 - Prevented stale HTTP command responses from replacing newer authoritative SSE
   snapshots by comparing control-event sequence numbers in the browser.
+- Added Python-owned `run_id` and timezone-aware `emitted_at` metadata to the
+  runtime event envelope. Node now preserves occurrence times and rejects stale
+  events from a different run instead of relabelling them.
 
 ## Delivery slices and dependencies
 

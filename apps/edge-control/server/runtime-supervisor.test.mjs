@@ -57,10 +57,23 @@ test("runtime output updates authoritative state and abnormal exit remains actio
   const run = await supervisor.start({ mode: "hardware" });
   assert.equal(state.snapshot().active_run.process_state, "running");
   child.stdout.write(`${JSON.stringify({
-    control_event_version: "1.0",
+    control_event_version: "1.1",
+    run_id: run.run_id,
+    emitted_at: "2026-09-03T08:15:00Z",
     kind: "lifecycle_changed",
     at_s: null,
     payload: { stage: "recording", operation_id: "capture-1" },
+  })}\n`);
+  await nextTurn();
+  assert.equal(state.snapshot().active_run.stage, "recording");
+
+  child.stdout.write(`${JSON.stringify({
+    control_event_version: "1.1",
+    run_id: "run-from-an-older-process",
+    emitted_at: "2026-09-03T08:16:00Z",
+    kind: "lifecycle_changed",
+    at_s: null,
+    payload: { stage: "uploading", operation_id: "stale-operation" },
   })}\n`);
   await nextTurn();
   assert.equal(state.snapshot().active_run.stage, "recording");
@@ -143,9 +156,11 @@ test("a Python terminal failure is not duplicated when the process exits", async
   const state = new RunState();
   const child = fakeChild();
   const supervisor = new RuntimeSupervisor({ state, spawnRuntime: () => child });
-  await supervisor.start({ mode: "hardware" });
+  const run = await supervisor.start({ mode: "hardware" });
   child.stdout.write(`${JSON.stringify({
-    control_event_version: "1.0",
+    control_event_version: "1.1",
+    run_id: run.run_id,
+    emitted_at: "2026-09-03T08:15:00Z",
     kind: "component_failed",
     at_s: null,
     payload: {

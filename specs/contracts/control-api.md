@@ -40,10 +40,12 @@ explicitly acknowledged by ID in `acknowledged_warning_ids`.
 ## Python event and command boundary
 
 Python emits a discriminated runtime-event envelope with
-`control_event_version: "1.0"`, a known `kind`, a typed payload and a
-non-negative scenario `at_s` or `null`. Lifecycle and capture events use stable
-operation IDs. Failure events carry operator text, corrective action, severity
-and retryability.
+`control_event_version: "1.1"`, the Node-assigned `run_id`, a timezone-aware
+Python `emitted_at`, a known `kind`, a typed payload and a non-negative scenario
+`at_s` or `null`. Lifecycle and capture events use stable operation IDs. Failure
+events carry operator text, corrective action, severity and retryability. Node
+preserves Python timestamps for stages, failures, resolutions and artefacts and
+rejects runtime events whose `run_id` does not match the active run.
 
 Node sends versioned newline-delimited commands over standard input. Version
 `1.0` supports `retry_failure`; publication is the only supported operation

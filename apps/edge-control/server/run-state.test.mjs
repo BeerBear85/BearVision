@@ -43,6 +43,46 @@ test("typed events build an authoritative run snapshot with persistent failures"
   assert.equal(snapshot.active_run.failures[0].resolved_at, null);
 });
 
+test("Python event identity and occurrence time remain authoritative", () => {
+  const state = deterministicState();
+  const started = state.start({ mode: "hardware" });
+  const emittedAt = "2026-09-03T08:15:00.000Z";
+
+  state.record({
+    control_event_version: "1.1",
+    run_id: started.run_id,
+    emitted_at: emittedAt,
+    at_s: null,
+    kind: "component_failed",
+    payload: {
+      failure_id: "failure-camera-17",
+      stage: "recording",
+      component: "camera",
+      error: "Camera disconnected",
+      severity: "terminal",
+      retryable: false,
+    },
+  });
+
+  const run = state.snapshot().active_run;
+  assert.equal(run.events[0].run_id, started.run_id);
+  assert.equal(run.events[0].emitted_at, emittedAt);
+  assert.equal(run.stage_started_at, emittedAt);
+  assert.equal(run.failures[0].occurred_at, emittedAt);
+  assert.throws(
+    () => state.record({
+      control_event_version: "1.1",
+      run_id: "run-from-an-older-process",
+      emitted_at: "2026-09-03T08:16:00.000Z",
+      at_s: null,
+      kind: "lifecycle_changed",
+      payload: { stage: "uploading", operation_id: "stale-operation" },
+    }),
+    /does not match active run/,
+  );
+  assert.equal(state.snapshot().active_run.stage, "failed");
+});
+
 test("capture state follows stable operation ids across repeated captures", () => {
   const state = deterministicState();
   state.start({ mode: "hardware" });

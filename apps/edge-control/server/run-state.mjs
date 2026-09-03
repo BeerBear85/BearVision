@@ -126,39 +126,58 @@ export class RunState {
   record(event) {
     const run = this.data.active_run;
     if (!run) return this.snapshot();
+    if (event.run_id != null && event.run_id !== run.run_id) {
+      throw new Error("runtime event run id does not match active run");
+    }
     const recorded = {
       ...copy(event),
       sequence: ++this.data.sequence,
       emitted_at: event.emitted_at ?? this.now(),
-      run_id: run.run_id,
+      run_id: event.run_id ?? run.run_id,
     };
     const payload = recorded.payload ?? {};
 
     if (recorded.kind === "lifecycle_changed") {
-      this.#setStage(payload.stage, payload.operation_id ?? null);
+      this.#setStage(payload.stage, payload.operation_id ?? null, recorded.emitted_at);
     } else if (recorded.kind === "runtime_started") {
       run.process_state = "running";
-      this.#setStage("monitoring", null);
+      this.#setStage("monitoring", null, recorded.emitted_at);
     } else if (recorded.kind === "capture_started") {
-      this.#setStage("recording", payload.operation_id ?? payload.request_id ?? payload.asset_id ?? null);
+      this.#setStage(
+        "recording",
+        payload.operation_id ?? payload.request_id ?? payload.asset_id ?? null,
+        recorded.emitted_at,
+      );
     } else if (recorded.kind === "finalize_clip") {
-      this.#setStage("post_processing", payload.operation_id ?? payload.request_id ?? null);
+      this.#setStage(
+        "post_processing",
+        payload.operation_id ?? payload.request_id ?? null,
+        recorded.emitted_at,
+      );
     } else if (recorded.kind === "capture_completed") {
-      this.#addArtefact("capture", payload);
+      this.#addArtefact("capture", payload, recorded.emitted_at);
     } else if (recorded.kind === "virtual_cameraman_completed") {
       this.#addArtefact("processed", {
         filename: payload.processed_filename,
         size_bytes: payload.processed_size_bytes,
-      });
-      this.#addArtefact("tracking", { filename: payload.tracking_filename });
-      this.#addArtefact("debug", { filename: payload.debug_video_filename });
+      }, recorded.emitted_at);
+      this.#addArtefact(
+        "tracking",
+        { filename: payload.tracking_filename },
+        recorded.emitted_at,
+      );
+      this.#addArtefact(
+        "debug",
+        { filename: payload.debug_video_filename },
+        recorded.emitted_at,
+      );
     } else if (recorded.kind === "clip_uploaded") {
-      this.#setStage("monitoring", null);
+      this.#setStage("monitoring", null, recorded.emitted_at);
     } else if (recorded.kind === "component_failed" || recorded.kind === "runtime_failed") {
-      this.#addFailure(payload);
+      this.#addFailure(payload, recorded.emitted_at);
     } else if (recorded.kind === "failure_resolved") {
       const failure = run.failures.find((item) => item.failure_id === payload.failure_id);
-      if (failure && failure.resolved_at == null) failure.resolved_at = this.now();
+      if (failure && failure.resolved_at == null) failure.resolved_at = recorded.emitted_at;
     }
 
     if (!TRANSIENT_EVENT_KINDS.has(recorded.kind)) {
@@ -168,22 +187,22 @@ export class RunState {
     return recorded;
   }
 
-  #setStage(stage, operationId) {
+  #setStage(stage, operationId, occurredAt = this.now()) {
     if (!stage) return;
     const run = this.data.active_run;
     run.stage = stage;
-    run.stage_started_at = this.now();
+    run.stage_started_at = occurredAt;
     run.current_operation = operationId ? { operation_id: operationId, stage } : null;
   }
 
-  #addArtefact(kind, payload) {
+  #addArtefact(kind, payload, occurredAt = this.now()) {
     if (!payload?.filename) return;
     const run = this.data.active_run;
     const artefact = {
       kind,
       filename: payload.filename,
       size_bytes: payload.size_bytes ?? null,
-      created_at: this.now(),
+      created_at: occurredAt,
     };
     run.artefacts = [
       ...run.artefacts.filter((item) => !(item.kind === kind && item.filename === artefact.filename)),
@@ -191,7 +210,7 @@ export class RunState {
     ];
   }
 
-  #addFailure(payload) {
+  #addFailure(payload, occurredAt = this.now()) {
     const run = this.data.active_run;
     const failureId = payload.failure_id ?? this.createId("failure");
     const existing = run.failures.find((item) => item.failure_id === failureId);
@@ -205,12 +224,14 @@ export class RunState {
       corrective_action: payload.corrective_action ?? "Review the technical details, then restart the runtime.",
       severity: payload.severity ?? "terminal",
       retryable: payload.retryable === true,
-      occurred_at: existing?.occurred_at ?? this.now(),
+      occurred_at: existing?.occurred_at ?? occurredAt,
       resolved_at: null,
       attempts: existing ? existing.attempts + 1 : 1,
     };
     run.failures = [failure, ...run.failures.filter((item) => item.failure_id !== failureId)];
-    if (failure.severity !== "warning") this.#setStage("failed", failure.operation_id);
+    if (failure.severity !== "warning") {
+      this.#setStage("failed", failure.operation_id, failure.occurred_at);
+    }
   }
 
   resolveFailure(failureId) {

@@ -6,18 +6,21 @@ import { expect, test } from "@playwright/test";
 import { createEdgeControlServer } from "../../server/server.mjs";
 
 class FakeRuntime extends EventEmitter {
-  constructor({ exitOnTerminate = false } = {}) {
+  constructor({ exitOnTerminate = false, runId } = {}) {
     super();
     this.pid = 4242;
     this.stdout = new PassThrough();
     this.stderr = new PassThrough();
     this.stdin = new PassThrough();
     this.exitOnTerminate = exitOnTerminate;
+    this.runId = runId;
   }
 
   send(kind, payload, atSeconds = 0) {
     this.stdout.write(`${JSON.stringify({
-      control_event_version: "1.0",
+      control_event_version: "1.1",
+      run_id: this.runId,
+      emitted_at: new Date().toISOString(),
       kind,
       at_s: atSeconds,
       payload,
@@ -42,8 +45,8 @@ async function startFixture(options = {}) {
   try {
     control = createEdgeControlServer({
       persistState: false,
-      spawnRuntime: () => {
-        const runtime = new FakeRuntime(options.runtime);
+      spawnRuntime: ({ runId }) => {
+        const runtime = new FakeRuntime({ ...options.runtime, runId });
         runtimes.push(runtime);
         return runtime;
       },

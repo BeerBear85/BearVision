@@ -8,6 +8,7 @@ import { parse as parseYaml } from "yaml";
 import { EventStream } from "./event-stream.mjs";
 import { safeLeafPath, parseByteRange } from "./media-files.mjs";
 import { ControlError, ReadinessService } from "./readiness-service.mjs";
+import { runtimeArguments } from "./runtime-command.mjs";
 import { RunState } from "./run-state.mjs";
 import { RuntimeSupervisor } from "./runtime-supervisor.mjs";
 
@@ -203,17 +204,17 @@ export function createEdgeControlServer(options = {}) {
     control_snapshot: { ...state.snapshot(), readiness: readiness.current() },
   });
 
-  const spawnRuntime = options.spawnRuntime ?? (({ mode, scenario }) => {
+  const spawnRuntime = options.spawnRuntime ?? (({ mode, scenario, runId }) => {
     if (mode === "hardware") rmSync(previewFramePath, { force: true });
-    const args = mode === "simulation"
-      ? [
-        "-m", "bearvision.control", "simulate", safeScenario(scenario),
-        "--realtime", "--local-queue-root", localQueueRoot, "--config", configPath,
-      ]
-      : [
-        "-m", "bearvision.control", "hardware", "--config", configPath,
-        "--capture-dir", captureRoot, "--scratch-dir", scratchRoot,
-      ];
+    const args = runtimeArguments({
+      mode,
+      runId,
+      scenarioPath: mode === "simulation" ? safeScenario(scenario) : null,
+      configPath,
+      captureRoot,
+      scratchRoot,
+      localQueueRoot,
+    });
     return spawn(pythonCommand(repoRoot), args, {
       cwd: repoRoot,
       env: process.env,

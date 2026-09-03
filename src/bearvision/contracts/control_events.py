@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Annotated, Literal, TypeAlias
 
-from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, TypeAdapter
 
 from .jobs import JobResultManifest
 from .models import BoundingBox, PersonDetection, Vector3
@@ -180,7 +181,9 @@ class HardwareStoppingPayload(EventModel):
 
 
 class RuntimeEventBase(EventModel):
-    control_event_version: Literal["1.0"] = "1.0"
+    control_event_version: Literal["1.1"] = "1.1"
+    run_id: str = Field(min_length=1)
+    emitted_at: AwareDatetime
     at_s: float | None = Field(default=None, ge=0)
 
 
@@ -292,13 +295,17 @@ def serialize_runtime_event(
     kind: RuntimeEventKind,
     payload: object,
     *,
+    run_id: str,
+    emitted_at: datetime,
     at_s: float | None = None,
 ) -> str:
     """Validate one complete event before it crosses the process seam."""
 
     event = RUNTIME_EVENT_ADAPTER.validate_python(
         {
-            "control_event_version": "1.0",
+            "control_event_version": "1.1",
+            "run_id": run_id,
+            "emitted_at": emitted_at,
             "at_s": at_s,
             "kind": kind,
             "payload": payload,
