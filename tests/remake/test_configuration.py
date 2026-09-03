@@ -27,7 +27,7 @@ def test_active_edge_config_is_versioned_and_valid() -> None:
     assert config.performance.buffer_drain
     assert config.performance.callback_queue_size == 1
     assert config.error_recovery.max_restarts == 0
-    assert config.readiness.camera_preview_timeout_s == 12
+    assert config.readiness.camera_preview_timeout_s == 30
     assert config.readiness.ble_scan_duration_s == 2
     assert config.readiness.cleanup_timeout_s == 3
 

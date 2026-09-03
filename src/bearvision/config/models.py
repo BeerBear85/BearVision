@@ -96,7 +96,7 @@ class ErrorRecoveryConfig(StrictConfigModel):
 class HardwareReadinessConfig(StrictConfigModel):
     """Time bounds for non-destructive physical preflight handshakes."""
 
-    camera_preview_timeout_s: float = Field(default=12.0, gt=0, le=60)
+    camera_preview_timeout_s: float = Field(default=30.0, gt=0, le=60)
     ble_scan_duration_s: float = Field(default=2.0, gt=0, le=30)
     cleanup_timeout_s: float = Field(default=3.0, gt=0, le=30)
 
