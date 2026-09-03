@@ -12,6 +12,13 @@ def test_linux_deployment_scripts_are_checked_out_with_lf() -> None:
     attributes = (REPO_ROOT / ".gitattributes").read_text(encoding="utf-8")
 
     assert "*.sh text eol=lf" in attributes
+    for manifest in (
+        "pyproject.toml",
+        "uv.lock",
+        "apps/edge-control/package.json",
+        "apps/edge-control/pnpm-lock.yaml",
+    ):
+        assert f"{manifest} text eol=lf" in attributes
 
 
 def test_code_only_redeploy_runs_updater_without_root() -> None:

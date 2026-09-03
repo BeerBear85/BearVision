@@ -7,3 +7,7 @@
 *.blend filter=lfs diff=lfs merge=lfs -text
 tests/data/preview_low.mp4 filter=lfs diff=lfs merge=lfs -text
 *.sh text eol=lf
+pyproject.toml text eol=lf
+uv.lock text eol=lf
+apps/edge-control/package.json text eol=lf
+apps/edge-control/pnpm-lock.yaml text eol=lf
