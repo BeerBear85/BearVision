@@ -42,3 +42,12 @@ def test_code_deployment_bootstrap_is_narrowly_scoped() -> None:
     assert '"$DEPLOY_USER" "$CONTROL_SERVICE_NAME"' in source
     assert 'usermod --append --groups "$SERVICE_GROUP" "$DEPLOY_USER"' in source
     assert '[[ $UNIT_USER == "$SERVICE_USER" ]]' in source
+
+
+def test_full_setup_waits_for_bluetooth_controller_after_restart() -> None:
+    source = script("setup-raspberry-pi.sh")
+
+    assert "power_on_bluetooth()" in source
+    assert "for attempt in {1..15}" in source
+    assert "bluetoothctl power on" in source
+    assert 'die "Bluetooth controller did not become ready' in source

@@ -73,6 +73,20 @@ on_error() {
 
 trap on_error ERR
 
+power_on_bluetooth() {
+    local attempt
+    for attempt in {1..15}; do
+        if bluetoothctl power on >/dev/null 2>&1; then
+            return 0
+        fi
+        if ((attempt == 1)); then
+            log "Waiting for the Bluetooth controller to become ready"
+        fi
+        sleep 1
+    done
+    return 1
+}
+
 require_value() {
     local option=$1
     local value=${2-}
@@ -418,7 +432,8 @@ systemctl daemon-reload
 systemctl enable bluetooth.service >/dev/null
 rfkill unblock bluetooth
 systemctl restart bluetooth.service
-bluetoothctl power on >/dev/null
+power_on_bluetooth || \
+    die "Bluetooth controller did not become ready within 15 seconds; inspect bluetoothctl list and rfkill list"
 systemctl disable "$SERVICE_NAME.service" >/dev/null 2>&1 || true
 systemctl enable "$CONTROL_SERVICE_NAME.service" >/dev/null
 
