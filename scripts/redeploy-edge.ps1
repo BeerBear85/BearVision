@@ -75,7 +75,7 @@ function Invoke-NativeCommand {
     }
 }
 
-function Stop-GoProHindsightBeforeRedeploy {
+function Set-GoProReadyForMaintenance {
     param(
         [Parameter(Mandatory)]
         [string]$Destination,
@@ -88,7 +88,7 @@ function Stop-GoProHindsightBeforeRedeploy {
     )
 
     $localScript = Join-Path $repoRoot 'scripts/stop_gopro_hindsight.py'
-    Write-Host 'Preparing GoPro for Edge redeployment'
+    Write-Host 'Setting GoPro ready for maintenance'
     Invoke-NativeCommand scp $localScript "${Destination}:$RemoteScript"
 
     $missingRuntimeAction = if ($RequireExistingRuntime) {
@@ -120,7 +120,7 @@ try {
     Invoke-NativeCommand ssh '-o' 'BatchMode=yes' '-o' 'ConnectTimeout=8' $destination 'true'
 
     if (-not $ConfigureCodeDeploy) {
-        Stop-GoProHindsightBeforeRedeploy `
+        Set-GoProReadyForMaintenance `
             -Destination $destination `
             -RemoteScript $remotePreparationScript `
             -RequireExistingRuntime ([bool]$CodeOnly)

@@ -4,7 +4,7 @@ from types import SimpleNamespace
 import pytest
 from open_gopro.models.constants import SettingId, settings
 
-from scripts.stop_gopro_hindsight import stop_hindsight_before_redeployment
+from scripts.stop_gopro_hindsight import set_gopro_ready_for_maintenance
 
 
 class Response:
@@ -13,7 +13,7 @@ class Response:
         self.ok = ok
 
 
-def test_redeployment_cleanup_stops_hindsight_without_opening_usb_control() -> None:
+def test_ready_for_maintenance_stops_hindsight_without_opening_usb_control() -> None:
     async def exercise() -> None:
         calls: list[object] = []
         states = [settings.Hindsight.NUM_15_SECONDS, settings.Hindsight.OFF]
@@ -37,7 +37,7 @@ def test_redeployment_cleanup_stops_hindsight_without_opening_usb_control() -> N
                 calls.append(("set", value))
                 return Response()
 
-        serial = await stop_hindsight_before_redeployment(
+        serial = await set_gopro_ready_for_maintenance(
             timeout_s=3,
             discover=discover,
             camera_factory=Camera,
@@ -54,7 +54,7 @@ def test_redeployment_cleanup_stops_hindsight_without_opening_usb_control() -> N
     asyncio.run(exercise())
 
 
-def test_redeployment_cleanup_fails_closed_without_off_confirmation() -> None:
+def test_ready_for_maintenance_fails_closed_without_off_confirmation() -> None:
     async def exercise() -> None:
         async def discover(service: str, timeout: int):
             return SimpleNamespace(name="C3456789012345._gopro-web._tcp.local.")
@@ -75,7 +75,7 @@ def test_redeployment_cleanup_fails_closed_without_off_confirmation() -> None:
                 return Response(ok=False)
 
         with pytest.raises(RuntimeError, match="did not confirm HindSight OFF"):
-            await stop_hindsight_before_redeployment(
+            await set_gopro_ready_for_maintenance(
                 discover=discover,
                 camera_factory=Camera,
             )

@@ -32,12 +32,12 @@ def test_code_only_redeploy_runs_updater_without_root() -> None:
     assert '$remoteCommand = $remoteCommand.Replace("`r`n", "`n")' in source
 
 
-def test_redeploy_stops_gopro_hindsight_before_running_deployment() -> None:
+def test_redeploy_sets_gopro_ready_for_maintenance_before_deployment() -> None:
     source = script("redeploy-edge.ps1")
 
     assert "'scripts/stop_gopro_hindsight.py'" in source
     deployment = source[source.index("try {") :]
-    assert deployment.index("Stop-GoProHindsightBeforeRedeploy") < deployment.index(
+    assert deployment.index("Set-GoProReadyForMaintenance") < deployment.index(
         "Creating Edge deployment archive"
     )
 

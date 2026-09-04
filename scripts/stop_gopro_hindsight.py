@@ -1,4 +1,4 @@
-"""Put a USB-connected GoPro in a redeployment-safe state."""
+"""Put a USB-connected GoPro in the ready-for-maintenance state."""
 
 from __future__ import annotations
 
@@ -24,13 +24,13 @@ def _hindsight_value(response: Any) -> Any:
     return response.data.get(SettingId.HINDSIGHT)
 
 
-async def stop_hindsight_before_redeployment(
+async def set_gopro_ready_for_maintenance(
     *,
     timeout_s: int = 8,
     discover: Callable[[str, int], Awaitable[Any]] = find_first_ip_addr,
     camera_factory: Callable[..., Any] = WiredGoPro,
 ) -> str:
-    """Disable and verify HindSight without starting wired USB control."""
+    """Make the camera ready for maintenance without starting USB control."""
 
     discovered = await discover(GOPRO_WEB_SERVICE, timeout_s)
     serial = discovered.name.split(".", 1)[0]
@@ -50,7 +50,7 @@ async def stop_hindsight_before_redeployment(
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Disable GoPro HindSight before BearVision redeployment"
+        description="Set the GoPro ready for BearVision maintenance"
     )
     parser.add_argument("--timeout", type=int, default=8)
     args = parser.parse_args()
@@ -59,7 +59,7 @@ def main() -> int:
 
     try:
         serial = asyncio.run(
-            stop_hindsight_before_redeployment(timeout_s=args.timeout)
+            set_gopro_ready_for_maintenance(timeout_s=args.timeout)
         )
     except Exception as exc:
         print(
@@ -68,7 +68,10 @@ def main() -> int:
         )
         return 1
 
-    print(f"[BearVision redeploy] GoPro {serial}: HindSight is OFF")
+    print(
+        f"[BearVision redeploy] GoPro {serial} is ready for maintenance "
+        "(HindSight OFF)"
+    )
     return 0
 
 
