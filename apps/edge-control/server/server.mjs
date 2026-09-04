@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { createReadStream, existsSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { dirname, extname, join, normalize, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -135,6 +136,7 @@ export function createEdgeControlServer(options = {}) {
   const localQueueRoot = options.localQueueRoot ?? process.env.BEARVISION_LOCAL_QUEUE_ROOT
     ?? join(repoRoot, "temp", "simulation-queue");
   const previewFramePath = join(scratchRoot, "live-preview.jpg");
+  const readPreviewFrame = options.readPreviewFrame ?? readFile;
   const stateFile = options.persistState === false
     ? null
     : options.stateFile ?? process.env.BEARVISION_CONTROL_STATE_PATH
@@ -351,15 +353,21 @@ export function createEdgeControlServer(options = {}) {
           serveMedia(request, response, filePath);
         }
       } else if (request.method === "GET" && url.pathname === "/api/preview/frame.jpg") {
-        if (!existsSync(previewFramePath) || !statSync(previewFramePath).isFile()) {
-          throw new ControlError("PREVIEW_NOT_READY", "Hardware preview is not ready.", { status: 503 });
+        let previewFrame;
+        try {
+          previewFrame = await readPreviewFrame(previewFramePath);
+        } catch (error) {
+          if (["EISDIR", "ENOENT"].includes(error.code)) {
+            throw new ControlError("PREVIEW_NOT_READY", "Hardware preview is not ready.", { status: 503 });
+          }
+          throw error;
         }
         response.writeHead(200, {
           "cache-control": "no-store, max-age=0",
-          "content-length": statSync(previewFramePath).size,
+          "content-length": previewFrame.length,
           "content-type": "image/jpeg",
         });
-        createReadStream(previewFramePath).pipe(response);
+        response.end(previewFrame);
       } else if (url.pathname.startsWith("/api/")) {
         throw new ControlError("NOT_FOUND", "Route was not found.", { status: 404 });
       } else {

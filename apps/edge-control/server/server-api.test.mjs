@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
 import { EventEmitter, once } from "node:events";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { get } from "node:http";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { PassThrough } from "node:stream";
 import test from "node:test";
 
@@ -113,4 +117,70 @@ test("high-volume debug output does not retain a full state snapshot per log lin
     "debug events must not amplify memory by retaining repeated control snapshots",
   );
   assert.ok(JSON.stringify(control.eventStream.history).length < 100_000);
+});
+
+test("preview response stays complete when a new frame replaces the measured file", async (context) => {
+  const root = mkdtempSync(join(tmpdir(), "bearvision-preview-race-"));
+  const previewPath = join(root, "live-preview.jpg");
+  writeFileSync(previewPath, Buffer.alloc(96 * 1024, 1));
+  const control = createEdgeControlServer({
+    persistState: false,
+    scratchRoot: root,
+    readPreviewFrame: async (path) => {
+      const nextFrame = Buffer.alloc(16 * 1024, 2);
+      writeFileSync(path, nextFrame);
+      return nextFrame;
+    },
+  });
+  control.server.listen(0, "127.0.0.1");
+  await once(control.server, "listening");
+  const { port } = control.server.address();
+
+  context.after(() => {
+    control.close();
+    control.server.closeAllConnections();
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  const outcome = await new Promise((resolve) => {
+    const request = get({
+      hostname: "127.0.0.1",
+      port,
+      path: "/api/preview/frame.jpg",
+      headers: { connection: "close" },
+      agent: false,
+    }, (response) => {
+      let receivedBytes = 0;
+      response.on("data", (chunk) => { receivedBytes += chunk.length; });
+      response.on("aborted", () => resolve({
+        complete: false,
+        declaredBytes: Number(response.headers["content-length"]),
+        receivedBytes,
+      }));
+      response.on("end", () => resolve({
+        complete: response.complete,
+        declaredBytes: Number(response.headers["content-length"]),
+        receivedBytes,
+      }));
+    });
+    request.on("error", (error) => resolve({ complete: false, error: error.code }));
+  });
+
+  assert.equal(outcome.complete, true);
+  assert.equal(outcome.declaredBytes, 16 * 1024);
+  assert.equal(outcome.receivedBytes, 16 * 1024);
+});
+
+test("missing preview remains a structured service-unavailable response", async (context) => {
+  const root = mkdtempSync(join(tmpdir(), "bearvision-preview-missing-"));
+  const control = await runningServer({ persistState: false, scratchRoot: root });
+  context.after(() => {
+    control.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  const { response, body } = await control.request("/api/preview/frame.jpg");
+
+  assert.equal(response.status, 503);
+  assert.equal(body.code, "PREVIEW_NOT_READY");
 });
