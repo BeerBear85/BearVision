@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+from contextlib import suppress
 from datetime import datetime, timezone
 import json
 import logging
@@ -96,9 +97,12 @@ async def hardware(
         event_sink=lambda event: emit(event.kind, event.payload, run_id=run_id),
     )
     emit("hardware_initializing", {"config": str(config_path)}, run_id=run_id)
-    command_task = asyncio.create_task(_read_control_commands(orchestrator))
+    shutdown_requested = asyncio.Event()
+    command_task = asyncio.create_task(
+        _read_control_commands(orchestrator, shutdown_requested=shutdown_requested)
+    )
     try:
-        await orchestrator.run()
+        await _run_until_shutdown(orchestrator, shutdown_requested)
     except KeyboardInterrupt:
         emit("hardware_stopping", {"reason": "interrupt"}, run_id=run_id)
     except Exception as exc:
@@ -118,14 +122,48 @@ async def hardware(
         return 1
     finally:
         command_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await command_task
     return 0
 
 
-async def process_control_command(orchestrator: Any, command: dict[str, object]) -> None:
+async def _run_until_shutdown(orchestrator: Any, shutdown_requested: asyncio.Event) -> None:
+    runtime_task = asyncio.create_task(orchestrator.run())
+    shutdown_task = asyncio.create_task(shutdown_requested.wait())
+    await asyncio.sleep(0)
+    try:
+        done, _ = await asyncio.wait(
+            {runtime_task, shutdown_task},
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+        if runtime_task in done:
+            await runtime_task
+            return
+
+        runtime_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await runtime_task
+    finally:
+        shutdown_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await shutdown_task
+
+
+async def process_control_command(
+    orchestrator: Any,
+    command: dict[str, object],
+    *,
+    shutdown_requested: asyncio.Event | None = None,
+) -> None:
     """Apply one versioned command received from the Node supervisor."""
 
     if command.get("command_version") != "1.0":
         raise ValueError("unsupported control command version")
+    if command.get("kind") == "stop_runtime":
+        if shutdown_requested is None:
+            raise ValueError("stop_runtime requires a shutdown coordinator")
+        shutdown_requested.set()
+        return
     if command.get("kind") != "retry_failure":
         raise ValueError("unsupported control command kind")
     failure_id = command.get("failure_id")
@@ -134,16 +172,27 @@ async def process_control_command(orchestrator: Any, command: dict[str, object])
     await orchestrator.retry_failure(failure_id)
 
 
-async def _read_control_commands(orchestrator: Any) -> None:
+async def _read_control_commands(
+    orchestrator: Any,
+    *,
+    shutdown_requested: asyncio.Event,
+) -> None:
     while True:
-        line = await asyncio.to_thread(sys.stdin.readline)
+        try:
+            line = await asyncio.to_thread(sys.stdin.readline)
+        except OSError:
+            return
         if not line:
             return
         try:
             command = json.loads(line)
             if not isinstance(command, dict):
                 raise ValueError("control command must be an object")
-            await process_control_command(orchestrator, command)
+            await process_control_command(
+                orchestrator,
+                command,
+                shutdown_requested=shutdown_requested,
+            )
         except Exception as exc:
             logging.getLogger(__name__).error("Control command failed: %s", exc)
 

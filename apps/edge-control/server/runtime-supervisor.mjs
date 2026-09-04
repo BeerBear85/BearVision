@@ -159,12 +159,26 @@ export class RuntimeSupervisor {
     return run;
   }
 
+  #writeCommand(command) {
+    if (!this.child?.stdin?.writable) {
+      throw new Error("runtime process command channel is not available");
+    }
+    this.child.stdin.write(`${JSON.stringify(command)}\n`);
+  }
+
   stop(runId) {
-    this.#assertRun(runId);
+    const run = this.#assertRun(runId);
     if (!this.child) throw new Error("runtime process is not active");
+    if (run.mode === "hardware" && !this.child.stdin?.writable) {
+      throw new Error("runtime process command channel is not available");
+    }
     this.state.requestStop();
     this.#record({ kind: "stop_requested", payload: { pid: this.child.pid } });
-    this.child.kill("SIGTERM");
+    if (run.mode === "hardware") {
+      this.#writeCommand({ command_version: "1.0", kind: "stop_runtime" });
+    } else {
+      this.child.kill("SIGTERM");
+    }
     this.stopTimer = this.setTimer(() => {
       const run = this.state.snapshot().active_run;
       if (!run || run.run_id !== runId || run.stop_state !== "graceful_requested") return;
@@ -195,7 +209,7 @@ export class RuntimeSupervisor {
       kind: "retry_failure",
       failure_id: failure.failure_id,
     };
-    this.child.stdin.write(`${JSON.stringify(command)}\n`);
+    this.#writeCommand(command);
     this.#record({ kind: "retry_requested", payload: {
       failure_id: failure.failure_id,
       operation_id: failure.operation_id,
@@ -213,6 +227,12 @@ export class RuntimeSupervisor {
 
   shutdown() {
     if (this.stopTimer != null) this.clearTimer(this.stopTimer);
-    if (this.child) this.child.kill("SIGTERM");
+    if (!this.child) return;
+    const run = this.state.snapshot().active_run;
+    if (run?.mode === "hardware" && this.child.stdin?.writable) {
+      this.#writeCommand({ command_version: "1.0", kind: "stop_runtime" });
+    } else {
+      this.child.kill("SIGTERM");
+    }
   }
 }

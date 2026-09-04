@@ -98,13 +98,32 @@ test("graceful stop exposes force stop only after timeout", async () => {
   const run = await supervisor.start({ mode: "hardware" });
 
   supervisor.stop(run.run_id);
-  assert.deepEqual(child.signals, ["SIGTERM"]);
+  assert.deepEqual(JSON.parse(child.commands[0]), {
+    command_version: "1.0",
+    kind: "stop_runtime",
+  });
+  assert.deepEqual(child.signals, []);
   assert.equal(state.snapshot().active_run.stop_state, "graceful_requested");
   assert.throws(() => supervisor.forceStop(run.run_id), /not available/);
 
   timeoutCallback();
   supervisor.forceStop(run.run_id);
-  assert.deepEqual(child.signals, ["SIGTERM", "SIGKILL"]);
+  assert.deepEqual(child.signals, ["SIGKILL"]);
+});
+
+test("control shutdown requests hardware cleanup before exiting", async () => {
+  const state = new RunState();
+  const child = fakeChild();
+  const supervisor = new RuntimeSupervisor({ state, spawnRuntime: () => child });
+  await supervisor.start({ mode: "hardware" });
+
+  supervisor.shutdown();
+
+  assert.deepEqual(JSON.parse(child.commands[0]), {
+    command_version: "1.0",
+    kind: "stop_runtime",
+  });
+  assert.deepEqual(child.signals, []);
 });
 
 test("retry sends a command only for a backend-declared retryable failure", async () => {

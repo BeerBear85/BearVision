@@ -181,7 +181,12 @@ For routine application-code updates, skip OS packages and dependency installs:
 
 Code-only deployment synchronizes the Python runtime, Edge Control and scenario
 files, rebuilds the UI with the dependencies already installed on the device,
-and restarts `bearvision-edge-control` without prompting for sudo. Full setup
+and restarts `bearvision-edge-control` without prompting for sudo. Before either
+code-only or full redeployment changes the installed runtime, it discovers the
+USB-connected GoPro, turns HindSight off without starting a new wired-control
+session and verifies the reported setting. Redeployment stops on any cleanup or
+verification failure; only an initial setup with no installed runtime skips this
+guard. Full setup
 grants the selected SSH user ownership of deployable application directories
 and passwordless permission to restart only that service; the service itself
 continues to run as the unprivileged `bearvision` account. It refuses to

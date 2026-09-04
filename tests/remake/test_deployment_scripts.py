@@ -32,6 +32,16 @@ def test_code_only_redeploy_runs_updater_without_root() -> None:
     assert '$remoteCommand = $remoteCommand.Replace("`r`n", "`n")' in source
 
 
+def test_redeploy_stops_gopro_hindsight_before_running_deployment() -> None:
+    source = script("redeploy-edge.ps1")
+
+    assert "'scripts/stop_gopro_hindsight.py'" in source
+    deployment = source[source.index("try {") :]
+    assert deployment.index("Stop-GoProHindsightBeforeRedeploy") < deployment.index(
+        "Creating Edge deployment archive"
+    )
+
+
 def test_code_updater_only_escalates_the_service_restart() -> None:
     source = script("update-raspberry-pi-code.sh")
 

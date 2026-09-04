@@ -118,8 +118,18 @@ class AsyncGoProController:
 
         return await self._current_hindsight() == value
 
-    async def disable_hindsight(self) -> None:
-        await self._gopro.http_setting.hindsight.set(settings.Hindsight.OFF)
+    async def disable_hindsight(self) -> bool:
+        value = settings.Hindsight.OFF
+        if await self._current_hindsight() == value:
+            return True
+
+        await self._gopro.http_setting.hindsight.set(value)
+        for attempt in range(3):
+            if await self._current_hindsight() == value:
+                return True
+            if attempt < 2:
+                await asyncio.sleep(0.1)
+        return False
 
     async def start_recording(self) -> None:
         await self._gopro.http_command.set_shutter(

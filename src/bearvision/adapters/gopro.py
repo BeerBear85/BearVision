@@ -56,6 +56,14 @@ class GoProCameraAdapter:
             return await method(*args)
         return await asyncio.to_thread(method, *args)
 
+    async def _disable_hindsight(self) -> None:
+        disable = getattr(self.controller, "disable_hindsight", None)
+        if disable is None:
+            disable = self.controller.disableHindsightMode
+        disabled = await self._call(disable)
+        if disabled is False:
+            raise RuntimeError("GoPro did not disable HindSight")
+
     async def connect(self) -> None:
         connected = False
         try:
@@ -68,13 +76,14 @@ class GoProCameraAdapter:
                 if enabled is False:
                     raise RuntimeError("GoPro did not enable HindSight")
             else:
-                disable = getattr(self.controller, "disable_hindsight", None)
-                if disable is None:
-                    disable = self.controller.disableHindsightMode
-                await self._call(disable)
+                await self._disable_hindsight()
             self._available_since_monotonic_s = self.clock.monotonic()
         except Exception as exc:
             if connected:
+                try:
+                    await self._disable_hindsight()
+                except Exception:
+                    pass
                 try:
                     await self._call(self.controller.disconnect)
                 except Exception:
@@ -82,10 +91,18 @@ class GoProCameraAdapter:
             raise translated_error(exc, "connect GoPro") from exc
 
     async def disconnect(self) -> None:
+        errors: list[Exception] = []
+        try:
+            await self._disable_hindsight()
+        except Exception as exc:
+            errors.append(translated_error(exc, "disable GoPro HindSight"))
         try:
             await self._call(self.controller.disconnect)
         except Exception as exc:
-            raise translated_error(exc, "disconnect GoPro") from exc
+            errors.insert(0, translated_error(exc, "disconnect GoPro"))
+        self._available_since_monotonic_s = None
+        if errors:
+            raise errors[0]
 
     async def start_preview(self) -> str:
         try:

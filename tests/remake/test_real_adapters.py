@@ -180,6 +180,32 @@ def test_async_camera_integration_stays_on_the_runtime_event_loop(tmp_path: Path
     asyncio.run(exercise())
 
 
+def test_gopro_disconnect_disables_hindsight_before_releasing_usb(tmp_path: Path) -> None:
+    async def exercise() -> None:
+        calls: list[str] = []
+
+        class OrderedStubGoPro(StubGoPro):
+            def disableHindsightMode(self):
+                calls.append("disable_hindsight")
+                super().disableHindsightMode()
+
+            def disconnect(self):
+                calls.append("disconnect")
+
+        controller = OrderedStubGoPro()
+        camera = GoProCameraAdapter(controller, VirtualClock(), tmp_path / "captures")
+
+        await camera.connect()
+        assert controller.hindsight_duration_s == 15
+
+        await camera.disconnect()
+
+        assert controller.hindsight_duration_s == 0
+        assert calls == ["disable_hindsight", "disconnect"]
+
+    asyncio.run(exercise())
+
+
 def test_async_gopro_controller_maps_the_sdk_without_a_thread_bridge(
     tmp_path: Path,
 ) -> None:
@@ -308,6 +334,33 @@ def test_async_gopro_verifies_hindsight_after_rejected_write() -> None:
         controller = AsyncGoProController(gopro=sdk)
 
         assert await controller.enable_hindsight(15)
+        assert states == []
+
+    asyncio.run(exercise())
+
+
+def test_async_gopro_verifies_hindsight_is_off_before_disconnect() -> None:
+    async def exercise() -> None:
+        sdk = FakeGoPro()
+        states = [
+            settings.Hindsight.NUM_15_SECONDS,
+            settings.Hindsight.OFF,
+        ]
+
+        async def camera_state():
+            return SimpleNamespace(
+                ok=True,
+                data={SettingId.HINDSIGHT: states.pop(0)},
+            )
+
+        async def rejected_write(value):
+            assert value == settings.Hindsight.OFF
+            return SimpleNamespace(ok=False)
+
+        sdk.http_command.get_camera_state = camera_state
+        sdk.http_setting.hindsight.set = rejected_write
+
+        assert await AsyncGoProController(gopro=sdk).disable_hindsight()
         assert states == []
 
     asyncio.run(exercise())

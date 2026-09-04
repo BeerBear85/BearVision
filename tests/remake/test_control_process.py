@@ -7,7 +7,13 @@ from types import SimpleNamespace
 import pytest
 from pydantic import ValidationError
 
-from bearvision.control import hardware, process_control_command, readiness, simulate
+from bearvision.control import (
+    _run_until_shutdown,
+    hardware,
+    process_control_command,
+    readiness,
+    simulate,
+)
 from bearvision.edge import OrchestrationEvent
 from bearvision.contracts import serialize_runtime_event
 
@@ -223,5 +229,39 @@ def test_versioned_retry_command_targets_one_retained_failure() -> None:
                     "kind": "retry_failure",
                     "failure_id": "failure-upload",
                 },
-            )
         )
+    )
+
+
+def test_versioned_stop_command_runs_orchestrator_cleanup() -> None:
+    async def exercise() -> None:
+        shutdown_requested = asyncio.Event()
+
+        class Orchestrator:
+            def __init__(self) -> None:
+                self.started = asyncio.Event()
+                self.cleaned_up = False
+
+            async def run(self) -> None:
+                try:
+                    self.started.set()
+                    await asyncio.Event().wait()
+                finally:
+                    self.cleaned_up = True
+
+        orchestrator = Orchestrator()
+        runtime = asyncio.create_task(
+            _run_until_shutdown(orchestrator, shutdown_requested)
+        )
+        await orchestrator.started.wait()
+
+        await process_control_command(
+            orchestrator,
+            {"command_version": "1.0", "kind": "stop_runtime"},
+            shutdown_requested=shutdown_requested,
+        )
+        await runtime
+
+        assert orchestrator.cleaned_up
+
+    asyncio.run(exercise())

@@ -28,6 +28,7 @@ $deploymentId = [Guid]::NewGuid().ToString('N')
 $archivePath = Join-Path ([IO.Path]::GetTempPath()) "bearvision-$deploymentId.tar.gz"
 $remoteArchive = "/tmp/bearvision-$deploymentId.tar.gz"
 $remoteDirectory = "/tmp/bearvision-$deploymentId"
+$remotePreparationScript = "/tmp/bearvision-stop-hindsight-$deploymentId.py"
 $destination = "$UserName@$HostName"
 
 [string[]]$payload = if ($ConfigureCodeDeploy) {
@@ -74,9 +75,56 @@ function Invoke-NativeCommand {
     }
 }
 
+function Stop-GoProHindsightBeforeRedeploy {
+    param(
+        [Parameter(Mandatory)]
+        [string]$Destination,
+
+        [Parameter(Mandatory)]
+        [string]$RemoteScript,
+
+        [Parameter(Mandatory)]
+        [bool]$RequireExistingRuntime
+    )
+
+    $localScript = Join-Path $repoRoot 'scripts/stop_gopro_hindsight.py'
+    Write-Host 'Preparing GoPro for Edge redeployment'
+    Invoke-NativeCommand scp $localScript "${Destination}:$RemoteScript"
+
+    $missingRuntimeAction = if ($RequireExistingRuntime) {
+        "printf '[BearVision redeploy] ERROR: installed Python runtime is missing\n' >&2`nexit 1"
+    }
+    else {
+        "printf '[BearVision redeploy] No existing runtime; treating this as initial setup\n'"
+    }
+    $preparationCommand = @"
+set -eu
+readonly preparation_script='$RemoteScript'
+readonly installed_python='/opt/bearvision/.venv/bin/python'
+cleanup() {
+    rm -f -- "`$preparation_script"
+}
+trap cleanup EXIT
+if [[ -x "`$installed_python" ]]; then
+    "`$installed_python" "`$preparation_script"
+else
+    $missingRuntimeAction
+fi
+"@
+    $preparationCommand = $preparationCommand.Replace("`r`n", "`n")
+    Invoke-NativeCommand ssh $Destination $preparationCommand
+}
+
 try {
     Write-Host "Checking SSH access to $destination"
     Invoke-NativeCommand ssh '-o' 'BatchMode=yes' '-o' 'ConnectTimeout=8' $destination 'true'
+
+    if (-not $ConfigureCodeDeploy) {
+        Stop-GoProHindsightBeforeRedeploy `
+            -Destination $destination `
+            -RemoteScript $remotePreparationScript `
+            -RequireExistingRuntime ([bool]$CodeOnly)
+    }
 
     Write-Host 'Creating Edge deployment archive'
     Invoke-NativeCommand tar '-czf' $archivePath '-C' $repoRoot `
