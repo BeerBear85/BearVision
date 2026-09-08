@@ -2,6 +2,7 @@ import asyncio
 from types import SimpleNamespace
 
 import pytest
+from open_gopro.domain.exceptions import FailedToFindDevice
 from open_gopro.models.constants import SettingId, settings
 
 from scripts.stop_gopro_hindsight import set_gopro_ready_for_maintenance
@@ -79,5 +80,31 @@ def test_ready_for_maintenance_fails_closed_without_off_confirmation() -> None:
                 discover=discover,
                 camera_factory=Camera,
             )
+
+    asyncio.run(exercise())
+
+
+def test_ready_for_maintenance_requires_gopro_by_default() -> None:
+    async def exercise() -> None:
+        async def discover(service: str, timeout: int):
+            raise FailedToFindDevice()
+
+        with pytest.raises(FailedToFindDevice):
+            await set_gopro_ready_for_maintenance(discover=discover)
+
+    asyncio.run(exercise())
+
+
+def test_ready_for_maintenance_can_explicitly_allow_no_gopro() -> None:
+    async def exercise() -> None:
+        async def discover(service: str, timeout: int):
+            raise FailedToFindDevice()
+
+        serial = await set_gopro_ready_for_maintenance(
+            allow_no_gopro=True,
+            discover=discover,
+        )
+
+        assert serial is None
 
     asyncio.run(exercise())

@@ -199,6 +199,15 @@ configure an existing installation without reinstalling packages, run once:
 .\scripts\redeploy-edge.ps1 -ConfigureCodeDeploy
 ```
 
+To redeploy intentionally without a connected and powered-on GoPro, use:
+
+```powershell
+.\scripts\redeploy-edge.ps1 -CodeOnly -AllowNoGoPro
+```
+
+This flag only permits a missing GoPro. If a camera is discovered but cannot be
+confirmed ready for maintenance, deployment still stops.
+
 That bootstrap prompts for sudo once. All later `-CodeOnly` deployments run
 without a password.
 

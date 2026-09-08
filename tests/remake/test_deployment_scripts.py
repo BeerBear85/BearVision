@@ -40,6 +40,8 @@ def test_redeploy_sets_gopro_ready_for_maintenance_before_deployment() -> None:
     assert deployment.index("Set-GoProReadyForMaintenance") < deployment.index(
         "Creating Edge deployment archive"
     )
+    assert "[switch]$AllowNoGoPro" in source
+    assert "'--allow-no-gopro'" in source
 
 
 def test_code_updater_only_escalates_the_service_restart() -> None:

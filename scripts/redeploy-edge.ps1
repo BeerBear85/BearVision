@@ -16,7 +16,11 @@ param(
     [switch]$CodeOnly,
 
     [Parameter()]
-    [switch]$ConfigureCodeDeploy
+    [switch]$ConfigureCodeDeploy,
+
+    [Parameter()]
+    [Alias('allow_no_gopro')]
+    [switch]$AllowNoGoPro
 )
 
 $ErrorActionPreference = 'Stop'
@@ -84,7 +88,10 @@ function Set-GoProReadyForMaintenance {
         [string]$RemoteScript,
 
         [Parameter(Mandatory)]
-        [bool]$RequireExistingRuntime
+        [bool]$RequireExistingRuntime,
+
+        [Parameter(Mandatory)]
+        [bool]$AllowNoGoPro
     )
 
     $localScript = Join-Path $repoRoot 'scripts/stop_gopro_hindsight.py'
@@ -97,6 +104,7 @@ function Set-GoProReadyForMaintenance {
     else {
         "printf '[BearVision redeploy] No existing runtime; treating this as initial setup\n'"
     }
+    $cameraArgument = if ($AllowNoGoPro) { "'--allow-no-gopro'" } else { '' }
     $preparationCommand = @"
 set -eu
 readonly preparation_script='$RemoteScript'
@@ -106,7 +114,7 @@ cleanup() {
 }
 trap cleanup EXIT
 if [[ -x "`$installed_python" ]]; then
-    "`$installed_python" "`$preparation_script"
+    "`$installed_python" "`$preparation_script" $cameraArgument
 else
     $missingRuntimeAction
 fi
@@ -123,7 +131,8 @@ try {
         Set-GoProReadyForMaintenance `
             -Destination $destination `
             -RemoteScript $remotePreparationScript `
-            -RequireExistingRuntime ([bool]$CodeOnly)
+            -RequireExistingRuntime ([bool]$CodeOnly) `
+            -AllowNoGoPro ([bool]$AllowNoGoPro)
     }
 
     Write-Host 'Creating Edge deployment archive'
