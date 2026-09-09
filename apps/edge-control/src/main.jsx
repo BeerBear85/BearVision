@@ -18,7 +18,7 @@ import "./styles.css";
 
 const initialState = {
   control_api_version: "2.0",
-  mode: "simulation",
+  mode: "hardware",
   phase: "loading",
   active_run: null,
   recent_runs: [],
@@ -187,7 +187,7 @@ function MediaIssue({ issue, onRetry }) {
   );
 }
 
-function Pipeline({ mode, run, readiness, summary, now }) {
+function Pipeline({ mode, run, readiness, readinessChecking, summary, now }) {
   const queue = run?.clip_queue ?? {
     counts: { queued: 0, processing: 0, failed: 0, completed: 0 },
     current_job: null,
@@ -218,7 +218,7 @@ function Pipeline({ mode, run, readiness, summary, now }) {
         <article className="operation-track" aria-label="Live track">
           <h3>Live</h3>
           <ol className="pipeline-steps">
-            <li className={readiness?.blocking ? "failed" : "complete"}><span>1</span><strong>{mode === "simulation" ? "Readiness: Not used" : "Readiness"}</strong></li>
+            <li className={readinessChecking ? "current" : readiness?.blocking ? "failed" : "complete"} aria-current={readinessChecking ? "step" : undefined}><span>1</span><strong>{mode === "simulation" ? "Readiness: Not used" : readinessChecking ? "Readiness: Checking" : "Readiness"}</strong></li>
             <li className={run?.stage === "monitoring" ? "current" : run ? "complete" : "upcoming"} aria-current={run?.stage === "monitoring" ? "step" : undefined}><span>2</span><strong>Monitoring</strong></li>
             <li className={camera.activity === "capturing" ? "current" : "upcoming"}><span>3</span><strong>Camera: {formatLabel(camera.activity)}</strong></li>
           </ol>
@@ -248,9 +248,9 @@ function Pipeline({ mode, run, readiness, summary, now }) {
           <p>{queue.counts.failed} failed · {queue.counts.completed} completed</p>
         </article>
         <article>
-          <h3><span className={`dot ${mode === "simulation" || !readiness?.blocking ? "ok" : "attention"}`} />Readiness</h3>
-          <strong>{mode === "simulation" ? "Not used" : readiness?.blocking ? "Blocked" : readiness ? "Checked" : "Not checked"}</strong>
-          <p>{mode === "simulation" ? "Simulation does not check physical equipment." : "Hardware checks are shown below."}</p>
+          <h3><span className={`dot ${readinessChecking ? "working" : mode === "simulation" || !readiness?.blocking ? "ok" : "attention"}`} />Readiness</h3>
+          <strong>{mode === "simulation" ? "Not used" : readinessChecking ? "Checking" : readiness?.blocking ? "Blocked" : readiness ? "Checked" : "Not checked"}</strong>
+          <p>{mode === "simulation" ? "Simulation does not check physical equipment." : readinessChecking ? "Previous results are hidden until this check finishes." : "Hardware checks are shown below."}</p>
         </article>
         <details>
           <summary>Show pipeline details</summary>
@@ -272,8 +272,9 @@ function ReadinessPanel({ report, acknowledged, onAcknowledge, onRun, busy }) {
           {busy ? "Checking…" : "Run readiness"}
         </button>
       </div>
-      {status === "not_checked" && <p className="panel-empty">Readiness has not been checked.</p>}
-      {checks.length > 0 && [
+      {busy && <p className="panel-empty" role="status">Checking the camera, BearTags and required services. Previous results are hidden until this check finishes.</p>}
+      {!busy && status === "not_checked" && <p className="panel-empty">Readiness has not been checked.</p>}
+      {!busy && checks.length > 0 && [
         ["fail", "Blocking issues"],
         ["warning", "Warnings"],
         ["pass", "Passed"],
@@ -565,16 +566,18 @@ function App() {
   }, [hardwareRunning]);
 
   const selected = scenarios.find((scenario) => scenario.name === selectedScenario);
+  const readinessChecking = busyAction === "readiness";
   const connectionState = snapshotReceivedAt == null
     ? "loading"
     : streamConnected ? "connected" : "reconnecting";
   const operator = useMemo(
     () => deriveOperatorView(state, acknowledgedWarnings, {
       connectionState,
+      readinessChecking,
       startupGuidance: startupGuidance(selected),
       stopRequested: requestedStopRunId === state.active_run?.run_id,
     }),
-    [acknowledgedWarnings, connectionState, requestedStopRunId, selected, state],
+    [acknowledgedWarnings, connectionState, readinessChecking, requestedStopRunId, selected, state],
   );
   const mediaRun = capturedClip?.run_id
     ? state.active_run?.run_id === capturedClip.run_id
@@ -835,7 +838,7 @@ function App() {
             </div>
           </section>
 
-          <Pipeline mode={state.mode} run={run} readiness={state.readiness} summary={operator.summary} now={now} />
+          <Pipeline mode={state.mode} run={run} readiness={state.readiness} readinessChecking={readinessChecking} summary={operator.summary} now={now} />
 
           {operator.unresolvedFailures.length > 0 && (
             <section className="failure-section" aria-labelledby="failure-heading" aria-live="assertive">
@@ -949,7 +952,7 @@ function App() {
                   <Indicator label="Current clip job" status={run?.clip_queue?.current_job ? "working" : "idle"} detail={run?.clip_queue?.current_job ?? "None"} />
                   <Indicator label="Oldest queued" status={run?.clip_queue?.oldest_queued_at_utc ? "working" : "idle"} detail={run?.clip_queue?.oldest_queued_at_utc ? formatDate(run.clip_queue.oldest_queued_at_utc) : "None"} />
                   <Indicator label="Failed clips" status={(run?.clip_queue?.counts?.failed ?? 0) > 0 ? "attention" : "ok"} detail={String(run?.clip_queue?.counts?.failed ?? 0)} />
-                  <Indicator label="Readiness" status={state.mode === "simulation" ? "idle" : state.readiness?.blocking ? "attention" : state.readiness ? "ok" : "idle"} detail={state.mode === "simulation" ? "Not used in simulation" : state.readiness?.blocking ? "Blocked" : state.readiness ? "Checked" : "Not checked"} />
+                  <Indicator label="Readiness" status={state.mode === "simulation" ? "idle" : readinessChecking ? "working" : state.readiness?.blocking ? "attention" : state.readiness ? "ok" : "idle"} detail={state.mode === "simulation" ? "Not used in simulation" : readinessChecking ? "Checking" : state.readiness?.blocking ? "Blocked" : state.readiness ? "Checked" : "Not checked"} />
                 </div>
               </section>
               <RecentRuns runs={state.recent_runs ?? []} />

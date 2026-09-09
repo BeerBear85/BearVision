@@ -17,7 +17,7 @@ function copy(value) {
 function defaultData() {
   return {
     control_api_version: "2.0",
-    mode: "simulation",
+    mode: "hardware",
     active_run: null,
     recent_runs: [],
     sequence: 0,
@@ -52,11 +52,13 @@ export class RunState {
     try {
       const parsed = JSON.parse(readFileSync(this.stateFile, "utf8"));
       if (parsed?.control_api_version !== "2.0") return defaultData();
-      return {
+      const loaded = {
         ...defaultData(),
         ...parsed,
         recent_runs: Array.isArray(parsed.recent_runs) ? parsed.recent_runs.slice(0, 10) : [],
       };
+      if (!loaded.active_run) loaded.mode = "hardware";
+      return loaded;
     } catch {
       return defaultData();
     }

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -15,6 +15,31 @@ function deterministicState(options = {}) {
     ...options,
   });
 }
+
+test("hardware is the startup default while an active simulation keeps its mode", () => {
+  assert.equal(deterministicState().snapshot().mode, "hardware");
+
+  const directory = mkdtempSync(join(tmpdir(), "bearvision-edge-default-"));
+  const stateFile = join(directory, "runs.json");
+  writeFileSync(stateFile, JSON.stringify({
+    control_api_version: "2.0",
+    mode: "simulation",
+    active_run: null,
+    recent_runs: [],
+    sequence: 0,
+  }));
+
+  assert.equal(deterministicState({ stateFile }).snapshot().mode, "hardware");
+
+  const activeStateFile = join(directory, "active-runs.json");
+  const activeState = deterministicState({ stateFile: activeStateFile });
+  activeState.selectMode("simulation");
+  activeState.start({ mode: "simulation", scenario: "active.yaml" });
+
+  const recovered = deterministicState({ stateFile: activeStateFile }).snapshot();
+  assert.equal(recovered.mode, "simulation");
+  assert.equal(recovered.active_run.scenario, "active.yaml");
+});
 
 test("typed events build an authoritative run snapshot with persistent failures", () => {
   const state = deterministicState();

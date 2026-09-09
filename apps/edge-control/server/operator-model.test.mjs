@@ -90,6 +90,18 @@ test("loading and reconnecting suppress an authoritative ready state", () => {
   assert.match(reconnecting.summary.explanation, /may be out of date/);
 });
 
+test("a new hardware readiness check suppresses the previous result", () => {
+  const checking = deriveOperatorView({
+    mode: "hardware",
+    active_run: null,
+    readiness: { blocking: true, checks: [{ check_id: "camera", status: "fail" }] },
+  }, new Set(), { readinessChecking: true });
+
+  assert.equal(checking.summary.code, "checking_readiness");
+  assert.equal(checking.summary.headline, "Checking hardware readiness");
+  assert.equal(checking.canStart, false);
+});
+
 test("recorded-video startup guidance and local stop acknowledgement stay operator-facing", () => {
   const state = {
     mode: "simulation",

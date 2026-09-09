@@ -28,7 +28,12 @@ export function pipelineForStage(stage, failedStage = null) {
 export function deriveOperatorView(
   state,
   acknowledgedWarnings = new Set(),
-  { connectionState = "connected", startupGuidance = null, stopRequested = false } = {},
+  {
+    connectionState = "connected",
+    readinessChecking = false,
+    startupGuidance = null,
+    stopRequested = false,
+  } = {},
 ) {
   const run = state.active_run ?? null;
   const readiness = state.readiness ?? null;
@@ -41,6 +46,7 @@ export function deriveOperatorView(
     connectionState,
     hardwareReady,
     missingWarnings,
+    readinessChecking,
     startupGuidance,
     stopRequested,
   });
@@ -51,6 +57,7 @@ export function deriveOperatorView(
     resolvedFailures: (run?.failures ?? []).filter((failure) => failure.resolved_at),
     missingWarnings,
     canStart: connectionState === "connected"
+      && !readinessChecking
       && !run
       && (state.mode === "simulation" || hardwareReady),
     canStop: Boolean(run && ["starting", "running"].includes(run.process_state)),
@@ -66,6 +73,7 @@ export function deriveOperatorSummary(
     connectionState = "connected",
     hardwareReady = false,
     missingWarnings = [],
+    readinessChecking = false,
     startupGuidance = null,
     stopRequested = false,
   } = {},
@@ -87,6 +95,16 @@ export function deriveOperatorSummary(
       headline: "Reconnecting to Edge Control",
       explanation: "The last known status may be out of date. Wait for the live connection before acting.",
       tone: "attention",
+      requiresAction: false,
+    };
+  }
+  if (readinessChecking) {
+    return {
+      code: "checking_readiness",
+      label: "Checking hardware",
+      headline: "Checking hardware readiness",
+      explanation: "Wait while Edge Control checks the camera, BearTags and required services.",
+      tone: "working",
       requiresAction: false,
     };
   }

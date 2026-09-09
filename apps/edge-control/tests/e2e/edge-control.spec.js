@@ -52,6 +52,7 @@ async function startFixture(options = {}) {
       },
       runReadiness: options.runReadiness,
     });
+    if (!options.useStartupDefault) control.state.selectMode(options.initialMode ?? "simulation");
   } finally {
     if (previousStopTimeout == null) delete process.env.BEARVISION_STOP_TIMEOUT_MS;
     else process.env.BEARVISION_STOP_TIMEOUT_MS = previousStopTimeout;
@@ -79,6 +80,57 @@ function readinessReport({ checks, warningIds = [] }) {
     checks,
   };
 }
+
+test("hardware is the safe startup default", async ({ page }) => {
+  const fixture = await startFixture({ useStartupDefault: true });
+  try {
+    await page.goto(fixture.url);
+
+    await expect(page.getByRole("button", { name: "Hardware", exact: true })).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByRole("heading", { name: "Check the hardware before starting" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Start hardware" })).toBeDisabled();
+    await expect(page.getByRole("combobox", { name: "Scenario" })).toHaveCount(0);
+  } finally {
+    await fixture.close();
+  }
+});
+
+test("a repeated readiness check hides the previous failure until the new result arrives", async ({ page }) => {
+  let callCount = 0;
+  let finishSecondCheck;
+  const failedReport = readinessReport({
+    checks: [{
+      check_id: "camera",
+      label: "GoPro camera",
+      status: "fail",
+      critical: true,
+      evidence: "Previous camera failure.",
+      corrective_action: "Reconnect the camera.",
+    }],
+  });
+  const fixture = await startFixture({
+    runReadiness: async () => {
+      callCount += 1;
+      if (callCount === 1) return failedReport;
+      return new Promise((resolve) => { finishSecondCheck = () => resolve(failedReport); });
+    },
+  });
+  try {
+    await page.goto(fixture.url);
+    await page.getByRole("button", { name: "Hardware" }).click();
+    await expect(page.getByText("Previous camera failure.")).toBeVisible();
+
+    await page.getByRole("button", { name: "Run readiness" }).click();
+    await expect(page.getByRole("heading", { name: "Checking hardware readiness" })).toBeVisible();
+    await expect(page.getByText("Previous camera failure.")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Checking…" })).toBeDisabled();
+
+    finishSecondCheck();
+    await expect(page.getByText("Previous camera failure.")).toBeVisible();
+  } finally {
+    await fixture.close();
+  }
+});
 
 test("the default simulation uses the repository input test video", async ({ page }) => {
   const fixture = await startFixture();
