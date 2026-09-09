@@ -148,6 +148,8 @@ def test_real_video_runs_through_yolo_virtual_camera_queue_and_assignment(
 
     clipper = FfmpegVideoClipper(ClipExtractionConfig())
     for capture_event, processed_event in zip(completed, virtual_camera, strict=True):
+        assert capture_event.payload["size_bytes"] > 0
+        assert processed_event.payload["processed_size_bytes"] > 0
         extracted = capture_dir / capture_event.payload["filename"]
         output = capture_dir / processed_event.payload["processed_filename"]
         tracking = capture_dir / processed_event.payload["tracking_filename"]

@@ -25,7 +25,11 @@ export function pipelineForStage(stage, failedStage = null) {
   }));
 }
 
-export function deriveOperatorView(state, acknowledgedWarnings = new Set()) {
+export function deriveOperatorView(
+  state,
+  acknowledgedWarnings = new Set(),
+  { connectionState = "connected", startupGuidance = null, stopRequested = false } = {},
+) {
   const run = state.active_run ?? null;
   const readiness = state.readiness ?? null;
   const unresolvedFailures = (run?.failures ?? []).filter((failure) => !failure.resolved_at);
@@ -33,14 +37,22 @@ export function deriveOperatorView(state, acknowledgedWarnings = new Set()) {
     (warningId) => !acknowledgedWarnings.has(warningId),
   );
   const hardwareReady = Boolean(readiness && !readiness.blocking && missingWarnings.length === 0);
-  const summary = deriveOperatorSummary(state, { hardwareReady, missingWarnings });
+  const summary = deriveOperatorSummary(state, {
+    connectionState,
+    hardwareReady,
+    missingWarnings,
+    startupGuidance,
+    stopRequested,
+  });
   return {
     run,
     summary,
     unresolvedFailures,
     resolvedFailures: (run?.failures ?? []).filter((failure) => failure.resolved_at),
     missingWarnings,
-    canStart: !run && (state.mode === "simulation" || hardwareReady),
+    canStart: connectionState === "connected"
+      && !run
+      && (state.mode === "simulation" || hardwareReady),
     canStop: Boolean(run && ["starting", "running"].includes(run.process_state)),
     canForceStop: run?.stop_state === "force_available",
     canRestart: Boolean(run && run.stage === "failed" && run.process_state === "exited"),
@@ -50,8 +62,34 @@ export function deriveOperatorView(state, acknowledgedWarnings = new Set()) {
 
 export function deriveOperatorSummary(
   state,
-  { hardwareReady = false, missingWarnings = [] } = {},
+  {
+    connectionState = "connected",
+    hardwareReady = false,
+    missingWarnings = [],
+    startupGuidance = null,
+    stopRequested = false,
+  } = {},
 ) {
+  if (connectionState === "loading") {
+    return {
+      code: "loading",
+      label: "Loading status",
+      headline: "Loading the current Edge status",
+      explanation: "Wait for the live connection before starting or stopping BearVision.",
+      tone: "working",
+      requiresAction: false,
+    };
+  }
+  if (connectionState === "reconnecting") {
+    return {
+      code: "reconnecting",
+      label: "Reconnecting",
+      headline: "Reconnecting to Edge Control",
+      explanation: "The last known status may be out of date. Wait for the live connection before acting.",
+      tone: "attention",
+      requiresAction: false,
+    };
+  }
   const run = state.active_run ?? null;
   if (run) {
     if (run.stage === "failed") {
@@ -64,7 +102,7 @@ export function deriveOperatorSummary(
         requiresAction: true,
       };
     }
-    if (run.stage === "stopping" || run.process_state === "stopping") {
+    if (stopRequested || run.stage === "stopping" || run.process_state === "stopping") {
       return {
         code: "stopping",
         label: "Stopping",
@@ -89,7 +127,7 @@ export function deriveOperatorSummary(
         code: "starting",
         label: "Starting",
         headline: "BearVision is starting",
-        explanation: "Preparing the selected runtime. No action is needed yet.",
+        explanation: startupGuidance ?? "Preparing the selected runtime. No action is needed yet.",
         tone: "working",
         requiresAction: false,
       };
@@ -163,6 +201,20 @@ export function deriveOperatorSummary(
       : "Complete readiness before starting.",
     tone: hardwareReady ? "ok" : "attention",
     requiresAction: !hardwareReady,
+  };
+}
+
+export function stopOutcomePresentation(run) {
+  const outputCount = run?.artefacts?.length ?? 0;
+  const queue = run?.clip_queue?.counts ?? {};
+  const remainingClips = (queue.processing ?? 0) + (queue.queued ?? 0);
+  const outputText = `${outputCount} output file${outputCount === 1 ? "" : "s"} retained.`;
+  const queueText = remainingClips === 0
+    ? "No clips were active or queued when shutdown completed."
+    : `${remainingClips} clip${remainingClips === 1 ? " was" : "s were"} still active or queued when shutdown completed.`;
+  return {
+    headline: "BearVision stopped",
+    message: `Camera stopped. ${outputText} ${queueText}`,
   };
 }
 

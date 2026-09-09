@@ -12,6 +12,7 @@ import {
   mediaFailureNotice,
   reconcileActionNotice,
   restoreCapturedClip,
+  stopOutcomePresentation,
 } from "./operator-model.js";
 import "./styles.css";
 
@@ -23,6 +24,23 @@ const initialState = {
   recent_runs: [],
   readiness: null,
 };
+
+const DEFAULT_SIMULATION_SCENARIO = "wakeboard-testmovie1-yolo.yaml";
+
+function preferredScenarioName(scenarios) {
+  return scenarios.find((scenario) => scenario.name === DEFAULT_SIMULATION_SCENARIO)?.name
+    ?? scenarios.find((scenario) => scenario.video_url)?.name
+    ?? scenarios[0]?.name
+    ?? "";
+}
+
+function startupGuidance(scenario) {
+  if (!scenario?.video_url) return "Preparing the simulation. This usually takes a few seconds.";
+  const duration = Number.isFinite(Number(scenario.duration_s))
+    ? `${Math.ceil(Number(scenario.duration_s))}-second `
+    : "";
+  return `Loading and analysing the ${duration}input test video. The first run can take up to a minute before replay starts.`;
+}
 
 function formatLabel(value) {
   if (!value) return "Connecting";
@@ -90,7 +108,13 @@ function Indicator({ label, status = "idle", detail }) {
   );
 }
 
-function OperatorOverview({ mode, run, streamConnected, summary }) {
+function connectionLabel(connectionState) {
+  if (connectionState === "loading") return "Connecting";
+  if (connectionState === "reconnecting") return "Reconnecting";
+  return "Live";
+}
+
+function OperatorOverview({ connectionState, mode, run, summary }) {
   const queue = run?.clip_queue?.counts ?? {};
   const camera = run?.capture_activity ?? { activity: "idle", pending_captures: 0 };
   return (
@@ -102,12 +126,25 @@ function OperatorOverview({ mode, run, streamConnected, summary }) {
         <div className="operator-facts">
           <span><strong>Camera</strong> · {formatLabel(camera.activity)}</span>
           <span><strong>Background</strong> · {queue.processing ?? 0} active, {queue.queued ?? 0} queued</span>
-          <span><strong>Connection</strong> · {streamConnected ? "Live" : "Reconnecting"}</span>
+          <span><strong>Connection</strong> · {connectionLabel(connectionState)}</span>
           <span><strong>Mode</strong> · {formatLabel(mode)}</span>
         </div>
       </div>
       <span className={`status-badge ${summary.tone}`}><span className="status-dot" />{summary.label}</span>
     </section>
+  );
+}
+
+function StopOutcome({ outcome, onDismiss }) {
+  return (
+    <div className="stop-outcome" role="status">
+      <div>
+        <span className="eyebrow">Stop completed</span>
+        <strong>{outcome.headline}</strong>
+        <p>{outcome.message}</p>
+      </div>
+      <button className="dismiss-stop-outcome" type="button" aria-label="Dismiss stop result" onClick={onDismiss}>×</button>
+    </div>
   );
 }
 
@@ -357,6 +394,8 @@ function App() {
   const [previewAvailable, setPreviewAvailable] = useState(false);
   const [acknowledgedWarnings, setAcknowledgedWarnings] = useState(new Set());
   const [busyAction, setBusyAction] = useState("");
+  const [requestedStopRunId, setRequestedStopRunId] = useState(null);
+  const [stopOutcome, setStopOutcome] = useState(null);
   const [now, setNow] = useState(Date.now());
   const videoRef = useRef(null);
 
@@ -400,7 +439,7 @@ function App() {
       .then(([health, scenarioList]) => {
         updateSnapshot(health);
         setScenarios(scenarioList.scenarios);
-        setSelectedScenario(health.scenario ?? scenarioList.scenarios[0]?.name ?? "");
+        setSelectedScenario(health.scenario ?? preferredScenarioName(scenarioList.scenarios));
       })
       .catch((reason) => setActionNotice(actionFailureNotice("load", reason, {
         mode: initialState.mode,
@@ -486,6 +525,16 @@ function App() {
   }, [state, streamConnected]);
 
   useEffect(() => {
+    if (!requestedStopRunId) return;
+    if (state.active_run?.run_id === requestedStopRunId) return;
+    const stoppedRun = state.recent_runs?.find((item) => item.run_id === requestedStopRunId);
+    if (stoppedRun?.stage === "stopped") {
+      setStopOutcome(stopOutcomePresentation(stoppedRun));
+    }
+    setRequestedStopRunId(null);
+  }, [requestedStopRunId, state.active_run, state.recent_runs]);
+
+  useEffect(() => {
     if (!capturedClip?.tracking_url) {
       setTrackingError(null);
       return undefined;
@@ -515,11 +564,18 @@ function App() {
     return () => window.clearInterval(timer);
   }, [hardwareRunning]);
 
-  const operator = useMemo(
-    () => deriveOperatorView(state, acknowledgedWarnings),
-    [state, acknowledgedWarnings],
-  );
   const selected = scenarios.find((scenario) => scenario.name === selectedScenario);
+  const connectionState = snapshotReceivedAt == null
+    ? "loading"
+    : streamConnected ? "connected" : "reconnecting";
+  const operator = useMemo(
+    () => deriveOperatorView(state, acknowledgedWarnings, {
+      connectionState,
+      startupGuidance: startupGuidance(selected),
+      stopRequested: requestedStopRunId === state.active_run?.run_id,
+    }),
+    [acknowledgedWarnings, connectionState, requestedStopRunId, selected, state],
+  );
   const mediaRun = capturedClip?.run_id
     ? state.active_run?.run_id === capturedClip.run_id
       ? state.active_run
@@ -536,7 +592,9 @@ function App() {
     setActionNotice(null);
     setCopiedSupport(false);
     try {
-      updateSnapshot(await action());
+      const next = await action();
+      updateSnapshot(next);
+      return next;
     } catch (reason) {
       setActionNotice(actionFailureNotice(name, reason, {
         run: state.active_run,
@@ -545,6 +603,7 @@ function App() {
         streamConnected,
         lastKnownAt: snapshotReceivedAt,
       }));
+      return null;
     } finally {
       setBusyAction("");
     }
@@ -584,6 +643,7 @@ function App() {
   }
 
   function startRun() {
+    setStopOutcome(null);
     resetMediaContext();
     return perform("start", () => request("/api/runs", {
       method: "POST",
@@ -596,8 +656,13 @@ function App() {
     }));
   }
 
-  function stopRun() {
-    return perform("stop", () => request(`/api/runs/${encodeURIComponent(run.run_id)}/stop`, { method: "POST" }));
+  async function stopRun() {
+    const runId = run.run_id;
+    setStopOutcome(null);
+    setRequestedStopRunId(runId);
+    const result = await perform("stop", () => request(`/api/runs/${encodeURIComponent(runId)}/stop`, { method: "POST" }));
+    if (!result) setRequestedStopRunId(null);
+    return result;
   }
 
   function forceStop() {
@@ -685,7 +750,7 @@ function App() {
   const showOverlay = Boolean(
     overlaySpace && (detectorBox || estimate) && ["scenario", "capture"].includes(displayedMedia),
   );
-  const phaseTone = streamConnected ? operator.summary.tone : "attention";
+  const phaseTone = operator.summary.tone;
 
   return (
     <div className="app-shell">
@@ -709,7 +774,7 @@ function App() {
       <main>
         <header className="topbar">
           <div><h1>Edge Control</h1><p>Operate one nearby Edge node and recover failures safely.</p></div>
-          <span className={`status-badge ${phaseTone}`}><span className="status-dot" />{streamConnected ? operator.summary.label : "Reconnecting"}</span>
+          <span className={`status-badge ${phaseTone}`}><span className="status-dot" />{operator.summary.label}</span>
         </header>
 
         {actionNotice && (
@@ -722,11 +787,13 @@ function App() {
           />
         )}
 
+        {stopOutcome && <StopOutcome outcome={stopOutcome} onDismiss={() => setStopOutcome(null)} />}
+
         <div className="page">
           <OperatorOverview
+            connectionState={connectionState}
             mode={state.mode}
             run={run}
-            streamConnected={streamConnected}
             summary={operator.summary}
           />
 
@@ -876,7 +943,7 @@ function App() {
                 <div className="panel-title"><div><span className="eyebrow">Supporting information</span><h2 id="system-heading">Operational details</h2></div></div>
                 <div className="indicator-list">
                   <Indicator label="BearVision status" status={operator.summary.tone} detail={operator.summary.label} />
-                  <Indicator label="Control connection" status={streamConnected ? "ok" : "attention"} detail={streamConnected ? "Live" : "Reconnecting"} />
+                  <Indicator label="Control connection" status={connectionState === "connected" ? "ok" : "attention"} detail={connectionLabel(connectionState)} />
                   <Indicator label="Camera" status={run?.capture_activity?.activity === "capturing" ? "working" : "idle"} detail={`${formatLabel(run?.capture_activity?.activity ?? "idle")} · ${run?.capture_activity?.pending_captures ?? 0} pending`} />
                   <Indicator label="Queue depth" status={(run?.clip_queue?.counts?.queued ?? 0) > 0 ? "working" : "idle"} detail={String(run?.clip_queue?.counts?.queued ?? 0)} />
                   <Indicator label="Current clip job" status={run?.clip_queue?.current_job ? "working" : "idle"} detail={run?.clip_queue?.current_job ?? "None"} />

@@ -80,6 +80,46 @@ function readinessReport({ checks, warningIds = [] }) {
   };
 }
 
+test("the default simulation uses the repository input test video", async ({ page }) => {
+  const fixture = await startFixture();
+  try {
+    await page.goto(fixture.url);
+
+    await expect(page.getByRole("combobox", { name: "Scenario" })).toHaveValue(
+      "wakeboard-testmovie1-yolo.yaml",
+    );
+    await page.getByRole("button", { name: "Run scenario" }).click();
+    await expect(page.getByText(/input test video/)).toBeVisible();
+    await expect(page.getByText(/first run can take up to a minute/i)).toBeVisible();
+  } finally {
+    await fixture.close();
+  }
+});
+
+test("a completed stop explains retained outputs and remaining clip work", async ({ page }) => {
+  const fixture = await startFixture({ runtime: { exitOnTerminate: true } });
+  try {
+    await page.goto(fixture.url);
+    await page.getByRole("button", { name: "Run scenario" }).click();
+    fixture.runtimes[0].send("capture_completed", {
+      asset_id: "capture-1",
+      filename: "capture-1.mp4",
+      size_bytes: 2048,
+      clip_start_s: 0,
+      clip_duration_s: 4,
+    });
+
+    await page.getByRole("button", { name: "Stop runtime" }).click();
+
+    const outcome = page.getByRole("status");
+    await expect(outcome).toContainText("BearVision stopped");
+    await expect(outcome).toContainText("1 output file retained");
+    await expect(outcome).toContainText("No clips were active or queued");
+  } finally {
+    await fixture.close();
+  }
+});
+
 test("live monitoring stays active while background clip work progresses", async ({ page }) => {
   const fixture = await startFixture();
   try {

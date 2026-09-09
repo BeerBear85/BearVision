@@ -9,6 +9,7 @@ import {
   pipelineForStage,
   reconcileActionNotice,
   restoreCapturedClip,
+  stopOutcomePresentation,
 } from "../src/operator-model.js";
 
 test("pipeline marks completed, current and upcoming stages", () => {
@@ -74,6 +75,52 @@ test("simulation readiness and a finishing runtime have one operator status", ()
   });
   assert.equal(finishing.summary.code, "finishing");
   assert.equal(finishing.summary.headline, "Recording stopped — finishing the run");
+});
+
+test("loading and reconnecting suppress an authoritative ready state", () => {
+  const state = { mode: "simulation", active_run: null, readiness: null };
+  const loading = deriveOperatorView(state, new Set(), { connectionState: "loading" });
+  const reconnecting = deriveOperatorView(state, new Set(), { connectionState: "reconnecting" });
+
+  assert.equal(loading.summary.code, "loading");
+  assert.equal(loading.canStart, false);
+  assert.match(loading.summary.headline, /Loading/);
+  assert.equal(reconnecting.summary.code, "reconnecting");
+  assert.equal(reconnecting.canStart, false);
+  assert.match(reconnecting.summary.explanation, /may be out of date/);
+});
+
+test("recorded-video startup guidance and local stop acknowledgement stay operator-facing", () => {
+  const state = {
+    mode: "simulation",
+    active_run: {
+      run_id: "run-1",
+      stage: "initializing",
+      process_state: "starting",
+      stop_state: "none",
+      failures: [],
+    },
+    readiness: null,
+  };
+  const starting = deriveOperatorView(state, new Set(), {
+    startupGuidance: "Loading and analysing the 16-second input test video.",
+  });
+  const stopping = deriveOperatorView(state, new Set(), { stopRequested: true });
+
+  assert.match(starting.summary.explanation, /16-second input test video/);
+  assert.equal(stopping.summary.code, "stopping");
+  assert.match(stopping.summary.headline, /stopping safely/);
+});
+
+test("stopped run summary explains retained outputs and remaining clip work", () => {
+  const stopped = stopOutcomePresentation({
+    artefacts: [{ kind: "capture" }, { kind: "processed" }],
+    clip_queue: { counts: { processing: 0, queued: 0 } },
+  });
+
+  assert.equal(stopped.headline, "BearVision stopped");
+  assert.match(stopped.message, /2 output files retained/);
+  assert.match(stopped.message, /No clips were active or queued/);
 });
 
 test("a disconnected stop becomes an unconfirmed command with support context", () => {
