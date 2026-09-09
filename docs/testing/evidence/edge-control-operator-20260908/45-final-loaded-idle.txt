@@ -1,0 +1,128 @@
+- complementary:
+  - text: BV
+  - strong: BearVision
+  - text: Edge Control
+  - navigation "Page sections":
+    - link "Control":
+      - /url: "#control"
+    - link "Pipeline":
+      - /url: "#pipeline-heading"
+    - link "Preview":
+      - /url: "#preview"
+    - link "Diagnostics":
+      - /url: "#diagnostics"
+  - strong: Idle
+  - text: Simulation runtime
+- main:
+  - heading "Edge Control" [level=1]
+  - paragraph: Operate one nearby Edge node and recover failures safely.
+  - text: Idle
+  - region "Choose how to run":
+    - text: Operator setup
+    - heading "Choose how to run" [level=2]
+    - paragraph: Configuration is locked while a run remains active.
+    - group "Runtime mode":
+      - text: Runtime mode
+      - button "Simulation" [pressed]
+      - button "Hardware"
+    - text: Scenario
+    - combobox "Scenario":
+      - option "single rider success" [selected]
+      - option "wakeboard fs360 60fps blender regression · Blender"
+      - option "wakeboard testmovie1 yolo"
+      - option "wakeboard testmovie3 yolo"
+      - option "wakeboard testmovie5 two riders yolo"
+      - option "wakeboard two riders 60fps blender regression · Blender"
+      - option "wakeboard video yolo"
+    - button "Run scenario"
+  - region "Concurrent pipeline":
+    - text: Live operation
+    - heading "Concurrent pipeline" [level=2]
+    - text: Idle
+    - article "Live track":
+      - heading "Live" [level=3]
+      - list:
+        - listitem:
+          - text: "1"
+          - strong: Readiness
+        - listitem:
+          - text: "2"
+          - strong: Monitoring
+        - listitem:
+          - text: "3"
+          - strong: "Camera: Idle"
+      - paragraph: 0 pending captures
+    - article "Background queue track":
+      - heading "Background queue" [level=3]
+      - list:
+        - listitem:
+          - strong: Queued
+        - listitem:
+          - strong: Processing
+        - listitem:
+          - strong: Packaging
+        - listitem:
+          - strong: Uploading
+        - listitem:
+          - strong: Failed
+        - listitem:
+          - strong: Completed
+      - paragraph: 0 queued · 0 active · 0 failed · 0 completed
+  - region "Runtime workspace":
+    - region "Scenario preview":
+      - text: Primary work surface
+      - heading "Scenario preview" [level=2]
+      - text: Simulation
+      - strong: Behavioural scenario
+      - paragraph: This scenario has no recorded video.
+      - text: "frames: synthetic detector: declared bear_tag: synthetic camera: simulated storage: memory"
+    - complementary:
+      - region "System":
+        - text: At a glance
+        - heading "System" [level=2]
+        - strong: Control connection
+        - text: Live
+        - strong: Runtime process
+        - text: Idle
+        - strong: Current stage
+        - text: Idle
+        - strong: Camera
+        - text: Idle · 0 pending
+        - strong: Queue depth
+        - text: "0"
+        - strong: Current clip job
+        - text: None
+        - strong: Oldest queued
+        - text: None
+        - strong: Failed clips
+        - text: "0"
+        - strong: Readiness
+        - text: Not checked
+      - region "Recent runs":
+        - text: Restored evidence
+        - heading "Recent runs" [level=2]
+        - list:
+          - listitem:
+            - text: Stopped
+            - strong: zz-operator-camera-failure.yaml
+            - text: Sep 8, 2026, 9:53 PM 0 outputs · 0 failures
+          - listitem:
+            - text: Failed
+            - strong: zz-operator-camera-failure.yaml
+            - text: Sep 8, 2026, 9:52 PM 0 outputs · 1 failures
+          - listitem:
+            - text: Completed
+            - strong: zz-operator-upload-failure.yaml
+            - text: Sep 8, 2026, 9:51 PM 1 outputs · 0 failures
+          - listitem:
+            - text: Failed
+            - strong: zz-operator-upload-failure.yaml
+            - text: Sep 8, 2026, 9:50 PM 0 outputs · 1 failures
+          - listitem:
+            - text: Failed
+            - strong: zz-operator-upload-failure.yaml
+            - text: Sep 8, 2026, 9:50 PM 0 outputs · 1 failures
+  - group:
+    - text: Technical evidence
+    - strong: Diagnostics
+    - text: 0/0

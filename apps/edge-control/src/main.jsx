@@ -6,7 +6,9 @@ import {
   showsAtMinimumLogLevel,
 } from "./log-level.js";
 import {
+  actionFailureNotice,
   deriveOperatorView,
+  failurePresentation,
   restoreCapturedClip,
 } from "./operator-model.js";
 import "./styles.css";
@@ -86,7 +88,50 @@ function Indicator({ label, status = "idle", detail }) {
   );
 }
 
-function Pipeline({ run, readiness, now }) {
+function OperatorOverview({ mode, run, streamConnected, summary }) {
+  const queue = run?.clip_queue?.counts ?? {};
+  const camera = run?.capture_activity ?? { activity: "idle", pending_captures: 0 };
+  return (
+    <section className={`operator-overview ${summary.tone}`} aria-labelledby="operator-status-heading" aria-live="polite">
+      <div>
+        <span className="eyebrow">{summary.requiresAction ? "Action required" : "Operator status"}</span>
+        <h2 id="operator-status-heading">{summary.headline}</h2>
+        <p>{summary.explanation}</p>
+        <div className="operator-facts">
+          <span><strong>Camera</strong> · {formatLabel(camera.activity)}</span>
+          <span><strong>Background</strong> · {queue.processing ?? 0} active, {queue.queued ?? 0} queued</span>
+          <span><strong>Connection</strong> · {streamConnected ? "Live" : "Reconnecting"}</span>
+          <span><strong>Mode</strong> · {formatLabel(mode)}</span>
+        </div>
+      </div>
+      <span className={`status-badge ${summary.tone}`}><span className="status-dot" />{summary.label}</span>
+    </section>
+  );
+}
+
+function ActionNotice({ notice, copied, onCopy, onDismiss, onRetry }) {
+  return (
+    <div className="action-notice" role="alert">
+      <div>
+        <span className="eyebrow">{notice.eyebrow}</span>
+        <strong>{notice.headline}</strong>
+        <p>{notice.message}</p>
+        <small>{notice.lastKnown} · {formatDate(notice.occurredAt)}</small>
+        <details>
+          <summary>Technical details</summary>
+          <pre>{notice.supportDetails}</pre>
+        </details>
+      </div>
+      <div className="action-notice-actions">
+        <button className="secondary" type="button" onClick={onCopy}>{copied ? "Copied" : "Copy support details"}</button>
+        {notice.retryable && <button className="danger" type="button" onClick={onRetry}>Try stop again</button>}
+        <button className="dismiss-notice" type="button" aria-label="Dismiss message" onClick={onDismiss}>×</button>
+      </div>
+    </div>
+  );
+}
+
+function Pipeline({ mode, run, readiness, summary, now }) {
   const queue = run?.clip_queue ?? {
     counts: { queued: 0, processing: 0, failed: 0, completed: 0 },
     current_job: null,
@@ -107,9 +152,9 @@ function Pipeline({ run, readiness, now }) {
           <span className="eyebrow">Live operation</span>
           <h2 id="pipeline-heading">Concurrent pipeline</h2>
         </div>
-        <span className={`status-badge ${run?.stage === "failed" ? "attention" : run ? "working" : "ok"}`}>
+        <span className={`status-badge ${summary.tone}`}>
           <span className="status-dot" />
-          {run ? formatLabel(run.stage) : readiness?.blocking ? "Not ready" : "Idle"}
+          {summary.label}
           {run?.stage_started_at && <small>{elapsedSince(run.stage_started_at, now)}</small>}
         </span>
       </div>
@@ -117,7 +162,7 @@ function Pipeline({ run, readiness, now }) {
         <article className="operation-track" aria-label="Live track">
           <h3>Live</h3>
           <ol className="pipeline-steps">
-            <li className={readiness?.blocking ? "failed" : "complete"}><span>1</span><strong>Readiness</strong></li>
+            <li className={readiness?.blocking ? "failed" : "complete"}><span>1</span><strong>{mode === "simulation" ? "Readiness: Not used" : "Readiness"}</strong></li>
             <li className={run?.stage === "monitoring" ? "current" : run ? "complete" : "upcoming"} aria-current={run?.stage === "monitoring" ? "step" : undefined}><span>2</span><strong>Monitoring</strong></li>
             <li className={camera.activity === "capturing" ? "current" : "upcoming"}><span>3</span><strong>Camera: {formatLabel(camera.activity)}</strong></li>
           </ol>
@@ -134,6 +179,27 @@ function Pipeline({ run, readiness, now }) {
           </ol>
           <p className="pipeline-detail">{queue.counts.queued} queued · {queue.counts.processing} active · {queue.counts.failed} failed · {queue.counts.completed} completed</p>
         </article>
+      </div>
+      <div className="mobile-operation-summary" role="region" aria-label="Mobile operation status">
+        <article>
+          <h3><span className={`dot ${camera.activity === "capturing" ? "working" : "idle"}`} />Camera</h3>
+          <strong>{formatLabel(camera.activity)}</strong>
+          <p>{camera.pending_captures} pending capture{camera.pending_captures === 1 ? "" : "s"}</p>
+        </article>
+        <article>
+          <h3><span className={`dot ${(queue.counts.processing + queue.counts.queued) > 0 ? "working" : "ok"}`} />Background clips</h3>
+          <strong>{queue.counts.processing} active · {queue.counts.queued} queued</strong>
+          <p>{queue.counts.failed} failed · {queue.counts.completed} completed</p>
+        </article>
+        <article>
+          <h3><span className={`dot ${mode === "simulation" || !readiness?.blocking ? "ok" : "attention"}`} />Readiness</h3>
+          <strong>{mode === "simulation" ? "Not used" : readiness?.blocking ? "Blocked" : readiness ? "Checked" : "Not checked"}</strong>
+          <p>{mode === "simulation" ? "Simulation does not check physical equipment." : "Hardware checks are shown below."}</p>
+        </article>
+        <details>
+          <summary>Show pipeline details</summary>
+          <p>Live stage: {formatLabel(run?.stage ?? "idle")} · Background job: {formatLabel(activeJob?.status ?? "none")}</p>
+        </details>
       </div>
     </section>
   );
@@ -192,17 +258,19 @@ function ReadinessPanel({ report, acknowledged, onAcknowledge, onRun, busy }) {
   );
 }
 
-function FailureCard({ failure, onRetry, retrying }) {
+function FailureCard({ failure, mode, onRetry, retrying }) {
+  const presentation = failurePresentation(failure, mode);
   return (
     <article className="failure-card">
       <header>
         <div>
           <span className="failure-stage">{formatLabel(failure.stage)} · {formatLabel(failure.component)}</span>
-          <h3>{failure.operator_message ?? "The runtime operation failed."}</h3>
+          <h3>{presentation.headline}</h3>
         </div>
         <time>{formatDate(failure.occurred_at)}</time>
       </header>
-      <p className="corrective-action">{failure.corrective_action}</p>
+      {presentation.impact && <p className="failure-impact">{presentation.impact}</p>}
+      <p className="corrective-action">{presentation.correctiveAction}</p>
       <div className="failure-actions">
         {failure.retryable && (
           <button className="primary" type="button" onClick={() => onRetry(failure)} disabled={retrying}>
@@ -255,7 +323,9 @@ function App() {
   const [selectedScenario, setSelectedScenario] = useState("");
   const [events, setEvents] = useState([]);
   const [minimumLogLevel, setMinimumLogLevel] = useState("info");
-  const [requestError, setRequestError] = useState(null);
+  const [actionNotice, setActionNotice] = useState(null);
+  const [copiedSupport, setCopiedSupport] = useState(false);
+  const [snapshotReceivedAt, setSnapshotReceivedAt] = useState(null);
   const [playhead, setPlayhead] = useState(0);
   const [capturedClip, setCapturedClip] = useState(null);
   const [displayedMedia, setDisplayedMedia] = useState("scenario");
@@ -286,6 +356,7 @@ function App() {
 
   function updateSnapshot(next) {
     if (!next) return;
+    setSnapshotReceivedAt(new Date().toISOString());
     setState((current) => {
       if (
         Number.isFinite(next.sequence)
@@ -306,24 +377,26 @@ function App() {
   useEffect(() => {
     Promise.all([request("/api/health"), request("/api/scenarios")])
       .then(([health, scenarioList]) => {
-        setState(health);
+        updateSnapshot(health);
         setScenarios(scenarioList.scenarios);
         setSelectedScenario(health.scenario ?? scenarioList.scenarios[0]?.name ?? "");
       })
-      .catch((reason) => setRequestError(reason));
+      .catch((reason) => setActionNotice(actionFailureNotice("load", reason, {
+        mode: initialState.mode,
+        streamConnected: false,
+      })));
 
     const source = new EventSource("/api/events");
     source.onopen = () => {
       setStreamConnected(true);
-      setRequestError((current) => current?.code === "STREAM_DISCONNECTED" ? null : current);
     };
     source.onmessage = ({ data }) => {
       const event = JSON.parse(data);
       if (event.kind === "control_snapshot") {
-        setState(event.payload);
+        updateSnapshot(event.payload);
         return;
       }
-      if (event.control_snapshot) setState(event.control_snapshot);
+      if (event.control_snapshot) updateSnapshot(event.control_snapshot);
       if (event.at_s != null) {
         const nextTime = Number(event.at_s);
         setPlayhead(nextTime);
@@ -337,6 +410,9 @@ function App() {
       if (event.kind === "capture_completed" && event.payload?.filename) {
         setCapturedClip({
           ...event.payload,
+          run_id: event.run_id ?? event.control_snapshot?.active_run?.run_id ?? null,
+          scenario: event.control_snapshot?.active_run?.scenario ?? null,
+          captured_at: event.emitted_at ?? null,
           url: `/api/captures/${encodeURIComponent(event.payload.filename)}`,
         });
         setDisplayedMedia("capture");
@@ -352,9 +428,10 @@ function App() {
       }
       if (event.kind === "tracking_observation") setTrackingFrame(event.payload);
       if (event.kind === "virtual_cameraman_completed") {
-        setCapturedClip((current) => ({
+        setCapturedClip((current) => current?.run_id && current.run_id !== event.run_id ? current : ({
           ...current,
           ...event.payload,
+          run_id: event.run_id ?? current?.run_id ?? null,
           processed_url: `/api/captures/${encodeURIComponent(event.payload.processed_filename)}`,
           debug_url: `/api/captures/${encodeURIComponent(event.payload.debug_video_filename)}`,
           tracking_url: `/api/captures/${encodeURIComponent(event.payload.tracking_filename)}`,
@@ -367,24 +444,33 @@ function App() {
     };
     source.onerror = () => {
       setStreamConnected(false);
-      const error = new Error("Live updates disconnected. Reconnecting…");
-      error.code = "STREAM_DISCONNECTED";
-      setRequestError(error);
     };
     return () => source.close();
   }, []);
 
   useEffect(() => {
-    const evidenceRun = state.active_run ?? state.recent_runs?.[0];
-    const restored = restoreCapturedClip(evidenceRun);
-    if (restored) setCapturedClip((current) => current?.filename === restored.filename ? current : restored);
-  }, [state.active_run, state.recent_runs]);
+    const activeRun = state.active_run;
+    if (!activeRun) return;
+    const restored = restoreCapturedClip(activeRun);
+    if (!restored) return;
+    setCapturedClip((current) => (
+      current?.run_id === restored.run_id && current?.filename === restored.filename
+        ? current
+        : restored
+    ));
+  }, [state.active_run]);
 
   useEffect(() => {
     if (!capturedClip?.tracking_url) return;
     request(capturedClip.tracking_url)
       .then(setTrackingData)
-      .catch((reason) => setRequestError(reason));
+      .catch((reason) => setActionNotice(actionFailureNotice("load tracking data", reason, {
+        run: state.active_run,
+        mode: state.mode,
+        scenario: selectedScenario,
+        streamConnected,
+        lastKnownAt: snapshotReceivedAt,
+      })));
   }, [capturedClip?.tracking_url]);
 
   const run = state.active_run;
@@ -408,13 +494,32 @@ function App() {
 
   async function perform(name, action) {
     setBusyAction(name);
-    setRequestError(null);
+    setActionNotice(null);
+    setCopiedSupport(false);
     try {
       updateSnapshot(await action());
     } catch (reason) {
-      setRequestError(reason);
+      setActionNotice(actionFailureNotice(name, reason, {
+        run: state.active_run,
+        mode: state.mode,
+        scenario: selectedScenario,
+        streamConnected,
+        lastKnownAt: snapshotReceivedAt,
+      }));
     } finally {
       setBusyAction("");
+    }
+  }
+
+  function resetMediaContext() {
+    setPlayhead(0);
+    setCapturedClip(null);
+    setTrackingFrame(null);
+    setTrackingData(null);
+    setDisplayedMedia("scenario");
+    if (videoRef.current) {
+      videoRef.current.pause();
+      videoRef.current.currentTime = 0;
     }
   }
 
@@ -426,11 +531,7 @@ function App() {
     }));
     setAcknowledgedWarnings(new Set());
     setEvents([]);
-    setPlayhead(0);
-    setCapturedClip(null);
-    setTrackingFrame(null);
-    setTrackingData(null);
-    setDisplayedMedia("scenario");
+    resetMediaContext();
   }
 
   function runReadiness() {
@@ -442,6 +543,7 @@ function App() {
   }
 
   function startRun() {
+    resetMediaContext();
     return perform("start", () => request("/api/runs", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -479,6 +581,21 @@ function App() {
       if (checked) next.add(checkId); else next.delete(checkId);
       return next;
     });
+  }
+
+  function chooseScenario(scenario) {
+    setSelectedScenario(scenario);
+    resetMediaContext();
+  }
+
+  async function copySupportDetails() {
+    if (!actionNotice?.supportDetails) return;
+    try {
+      await navigator.clipboard.writeText(actionNotice.supportDetails);
+      setCopiedSupport(true);
+    } catch {
+      setCopiedSupport(false);
+    }
   }
 
   function showMedia(kind) {
@@ -519,9 +636,7 @@ function App() {
   const showOverlay = Boolean(
     overlaySpace && (detectorBox || estimate) && ["scenario", "capture"].includes(displayedMedia),
   );
-  const phaseTone = run?.stage === "failed"
-    ? "attention"
-    : run ? "working" : streamConnected ? "ok" : "attention";
+  const phaseTone = streamConnected ? operator.summary.tone : "attention";
 
   return (
     <div className="app-shell">
@@ -538,27 +653,34 @@ function App() {
         </nav>
         <div className="runtime-state" aria-live="polite">
           <span className={`dot ${phaseTone}`} aria-hidden="true" />
-          <span><strong>{formatLabel(run?.stage ?? state.phase)}</strong><small>{formatLabel(state.mode)} runtime</small></span>
+          <span><strong>{operator.summary.label}</strong><small>{formatLabel(state.mode)} runtime</small></span>
         </div>
       </aside>
 
       <main>
         <header className="topbar">
           <div><h1>Edge Control</h1><p>Operate one nearby Edge node and recover failures safely.</p></div>
-          <span className={`status-badge ${phaseTone}`}><span className="status-dot" />{formatLabel(run?.stage ?? state.phase)}</span>
+          <span className={`status-badge ${phaseTone}`}><span className="status-dot" />{streamConnected ? operator.summary.label : "Reconnecting"}</span>
         </header>
 
-        {requestError && (
-          <div className="error-banner" role="alert">
-            <span>
-              <strong>{requestError.message}</strong>
-              {requestError.correctiveAction && <small>{requestError.correctiveAction}</small>}
-            </span>
-            <button type="button" aria-label="Dismiss error" onClick={() => setRequestError(null)}>×</button>
-          </div>
+        {actionNotice && (
+          <ActionNotice
+            notice={actionNotice}
+            copied={copiedSupport}
+            onCopy={copySupportDetails}
+            onDismiss={() => setActionNotice(null)}
+            onRetry={stopRun}
+          />
         )}
 
         <div className="page">
+          <OperatorOverview
+            mode={state.mode}
+            run={run}
+            streamConnected={streamConnected}
+            summary={operator.summary}
+          />
+
           <section className="control-card" id="control" aria-labelledby="control-heading">
             <div className="section-heading">
               <div><span className="eyebrow">Operator setup</span><h2 id="control-heading">Choose how to run</h2></div>
@@ -574,7 +696,7 @@ function App() {
               </fieldset>
               {state.mode === "simulation" && (
                 <label className="scenario-field">Scenario
-                  <select value={selectedScenario} disabled={Boolean(run)} onChange={(event) => setSelectedScenario(event.target.value)}>
+                  <select value={selectedScenario} disabled={Boolean(run)} onChange={(event) => chooseScenario(event.target.value)}>
                     {scenarios.map((scenario) => (
                       <option key={scenario.name} value={scenario.name}>
                         {scenario.title ?? scenario.name}{scenario.generated_from ? " · Blender" : ""}
@@ -596,7 +718,7 @@ function App() {
             </div>
           </section>
 
-          <Pipeline run={run} readiness={state.readiness} now={now} />
+          <Pipeline mode={state.mode} run={run} readiness={state.readiness} summary={operator.summary} now={now} />
 
           {operator.unresolvedFailures.length > 0 && (
             <section className="failure-section" aria-labelledby="failure-heading" aria-live="assertive">
@@ -608,6 +730,7 @@ function App() {
                 <FailureCard
                   key={failure.failure_id}
                   failure={failure}
+                  mode={state.mode}
                   onRetry={retryFailure}
                   retrying={busyAction === `retry:${failure.failure_id}`}
                 />
@@ -699,17 +822,16 @@ function App() {
 
             <aside className="status-rail" id="activity">
               <section className="panel indicators" aria-labelledby="system-heading">
-                <div className="panel-title"><div><span className="eyebrow">At a glance</span><h2 id="system-heading">System</h2></div></div>
+                <div className="panel-title"><div><span className="eyebrow">Supporting information</span><h2 id="system-heading">Operational details</h2></div></div>
                 <div className="indicator-list">
+                  <Indicator label="BearVision status" status={operator.summary.tone} detail={operator.summary.label} />
                   <Indicator label="Control connection" status={streamConnected ? "ok" : "attention"} detail={streamConnected ? "Live" : "Reconnecting"} />
-                  <Indicator label="Runtime process" status={run?.process_state === "running" ? "working" : run?.process_state === "exited" && run?.stage === "failed" ? "attention" : "idle"} detail={formatLabel(run?.process_state ?? "idle")} />
-                  <Indicator label="Current stage" status={run?.stage === "failed" ? "attention" : run ? "working" : "idle"} detail={formatLabel(run?.stage ?? "idle")} />
                   <Indicator label="Camera" status={run?.capture_activity?.activity === "capturing" ? "working" : "idle"} detail={`${formatLabel(run?.capture_activity?.activity ?? "idle")} · ${run?.capture_activity?.pending_captures ?? 0} pending`} />
                   <Indicator label="Queue depth" status={(run?.clip_queue?.counts?.queued ?? 0) > 0 ? "working" : "idle"} detail={String(run?.clip_queue?.counts?.queued ?? 0)} />
                   <Indicator label="Current clip job" status={run?.clip_queue?.current_job ? "working" : "idle"} detail={run?.clip_queue?.current_job ?? "None"} />
                   <Indicator label="Oldest queued" status={run?.clip_queue?.oldest_queued_at_utc ? "working" : "idle"} detail={run?.clip_queue?.oldest_queued_at_utc ? formatDate(run.clip_queue.oldest_queued_at_utc) : "None"} />
                   <Indicator label="Failed clips" status={(run?.clip_queue?.counts?.failed ?? 0) > 0 ? "attention" : "ok"} detail={String(run?.clip_queue?.counts?.failed ?? 0)} />
-                  <Indicator label="Readiness" status={state.readiness?.blocking ? "attention" : state.readiness ? "ok" : "idle"} detail={state.readiness?.blocking ? "Blocked" : state.readiness ? "Checked" : "Not checked"} />
+                  <Indicator label="Readiness" status={state.mode === "simulation" ? "idle" : state.readiness?.blocking ? "attention" : state.readiness ? "ok" : "idle"} detail={state.mode === "simulation" ? "Not used in simulation" : state.readiness?.blocking ? "Blocked" : state.readiness ? "Checked" : "Not checked"} />
                 </div>
               </section>
               <RecentRuns runs={state.recent_runs ?? []} />

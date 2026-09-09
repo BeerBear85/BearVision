@@ -33,8 +33,10 @@ export function deriveOperatorView(state, acknowledgedWarnings = new Set()) {
     (warningId) => !acknowledgedWarnings.has(warningId),
   );
   const hardwareReady = Boolean(readiness && !readiness.blocking && missingWarnings.length === 0);
+  const summary = deriveOperatorSummary(state, { hardwareReady, missingWarnings });
   return {
     run,
+    summary,
     unresolvedFailures,
     resolvedFailures: (run?.failures ?? []).filter((failure) => failure.resolved_at),
     missingWarnings,
@@ -42,6 +44,199 @@ export function deriveOperatorView(state, acknowledgedWarnings = new Set()) {
     canStop: Boolean(run && ["starting", "running"].includes(run.process_state)),
     canForceStop: run?.stop_state === "force_available",
     canRestart: Boolean(run && run.stage === "failed" && run.process_state === "exited"),
+  };
+}
+
+export function deriveOperatorSummary(
+  state,
+  { hardwareReady = false, missingWarnings = [] } = {},
+) {
+  const run = state.active_run ?? null;
+  if (run) {
+    if (run.stage === "failed") {
+      return {
+        code: "needs_attention",
+        label: "Action required",
+        headline: "BearVision needs attention",
+        explanation: "Review the problem below before continuing.",
+        tone: "attention",
+        requiresAction: true,
+      };
+    }
+    if (run.stage === "stopping" || run.process_state === "stopping") {
+      return {
+        code: "stopping",
+        label: "Stopping",
+        headline: "BearVision is stopping safely",
+        explanation: "Wait until the status says Stopped before disconnecting equipment.",
+        tone: "working",
+        requiresAction: false,
+      };
+    }
+    if (["stopped", "completed"].includes(run.stage) && run.process_state !== "exited") {
+      return {
+        code: "finishing",
+        label: "Finishing",
+        headline: "Recording stopped — finishing the run",
+        explanation: "BearVision is completing the remaining run cleanup.",
+        tone: "working",
+        requiresAction: false,
+      };
+    }
+    if (run.stage === "initializing" || run.process_state === "starting") {
+      return {
+        code: "starting",
+        label: "Starting",
+        headline: "BearVision is starting",
+        explanation: "Preparing the selected runtime. No action is needed yet.",
+        tone: "working",
+        requiresAction: false,
+      };
+    }
+    if (run.capture_activity?.activity === "capturing") {
+      return {
+        code: "recording",
+        label: "Recording",
+        headline: "BearVision is recording riders",
+        explanation: "New clips are being captured while earlier clips can finish in the background.",
+        tone: "working",
+        requiresAction: false,
+      };
+    }
+    return {
+      code: "running",
+      label: "Running",
+      headline: "BearVision is running normally",
+      explanation: "Monitoring is active. No operator action is needed.",
+      tone: "ok",
+      requiresAction: false,
+    };
+  }
+
+  if (state.mode === "simulation") {
+    return {
+      code: "ready",
+      label: "Simulation ready",
+      headline: "Simulation is ready to run",
+      explanation: "Physical equipment is not checked in simulation mode.",
+      tone: "ok",
+      requiresAction: false,
+    };
+  }
+  if (!state.readiness || state.readiness.status === "not_checked") {
+    return {
+      code: "needs_attention",
+      label: "Check required",
+      headline: "Check the hardware before starting",
+      explanation: "Run readiness to verify the camera, scanner and required services.",
+      tone: "attention",
+      requiresAction: true,
+    };
+  }
+  if (state.readiness.blocking) {
+    return {
+      code: "needs_attention",
+      label: "Start blocked",
+      headline: "Hardware is not ready",
+      explanation: "Resolve the blocking readiness issue shown below, then check again.",
+      tone: "attention",
+      requiresAction: true,
+    };
+  }
+  if (missingWarnings.length > 0) {
+    return {
+      code: "needs_attention",
+      label: "Review warnings",
+      headline: "Review the hardware warnings",
+      explanation: "Acknowledge each warning before starting BearVision.",
+      tone: "attention",
+      requiresAction: true,
+    };
+  }
+  return {
+    code: "ready",
+    label: "Hardware ready",
+    headline: "BearVision is ready to start",
+    explanation: hardwareReady
+      ? "Hardware readiness passed."
+      : "Complete readiness before starting.",
+    tone: hardwareReady ? "ok" : "attention",
+    requiresAction: !hardwareReady,
+  };
+}
+
+export function failurePresentation(failure, mode) {
+  if (failure?.component === "camera") {
+    return {
+      headline: mode === "simulation"
+        ? "The simulated camera could not record."
+        : "The camera could not record.",
+      impact: mode === "simulation"
+        ? "No new test clips are being captured."
+        : "No new clips are being captured while the camera is unavailable.",
+      correctiveAction: mode === "simulation"
+        ? "Restart the runtime to continue the test."
+        : "Check the camera power and connection, then restart BearVision. Contact support if the failure returns.",
+    };
+  }
+  return {
+    headline: failure?.operator_message ?? "The runtime operation failed.",
+    impact: failure?.operator_impact ?? null,
+    correctiveAction: failure?.corrective_action ?? "Review the technical details and contact support.",
+  };
+}
+
+function stateLabel(run) {
+  if (!run) return "Idle";
+  return `${run.stage ?? "unknown"} / ${run.process_state ?? "unknown"}`;
+}
+
+export function actionFailureNotice(action, error, context = {}) {
+  const occurredAt = context.occurredAt ?? new Date().toISOString();
+  const run = context.run ?? null;
+  const lastKnownAt = context.lastKnownAt ?? null;
+  const isUnconfirmedStop = action === "stop" && (
+    error?.name === "TypeError"
+    || error?.code === "STREAM_DISCONNECTED"
+    || /fetch|network/i.test(error?.message ?? "")
+  );
+  const supportDetails = [
+    `Action: ${action}`,
+    `Result: ${isUnconfirmedStop ? "unconfirmed" : "failed"}`,
+    `Occurred: ${occurredAt}`,
+    `Run: ${run?.run_id ?? "none"}`,
+    `Mode: ${context.mode ?? run?.mode ?? "unknown"}`,
+    `Scenario: ${run?.scenario ?? context.scenario ?? "none"}`,
+    `Last known runtime state: ${stateLabel(run)}`,
+    `Last snapshot: ${lastKnownAt ?? "unknown"}`,
+    `Control connection: ${context.streamConnected ? "live" : "disconnected"}`,
+    `Error code: ${error?.code ?? "none"}`,
+    `Technical error: ${error?.message ?? "Unknown error"}`,
+  ].join("\n");
+
+  if (isUnconfirmedStop) {
+    return {
+      action,
+      status: "unconfirmed",
+      eyebrow: "Action not confirmed",
+      headline: "We could not confirm that BearVision stopped",
+      message: "Check the control connection, then try again. BearVision may still be recording.",
+      lastKnown: `Last known state: ${stateLabel(run)}`,
+      occurredAt,
+      retryable: true,
+      supportDetails,
+    };
+  }
+  return {
+    action,
+    status: "failed",
+    eyebrow: "Action failed",
+    headline: error?.message ?? "The action failed.",
+    message: error?.correctiveAction ?? "Try again. Contact support if the problem continues.",
+    lastKnown: `Last known state: ${stateLabel(run)}`,
+    occurredAt,
+    retryable: false,
+    supportDetails,
   };
 }
 
@@ -60,6 +255,9 @@ export function restoreCapturedClip(run) {
   const tracking = artefact(run, "tracking");
   if (!capture && !processed) return null;
   return {
+    run_id: run?.run_id ?? null,
+    scenario: run?.scenario ?? null,
+    captured_at: capture?.created_at ?? processed?.created_at ?? null,
     filename: capture?.filename ?? processed?.filename,
     size_bytes: capture?.size_bytes ?? null,
     url: mediaUrl(capture),

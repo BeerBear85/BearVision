@@ -1,0 +1,41 @@
+scenario_schema_version: "2.0"
+name: zz-operator-upload-failure
+seed: 42
+duration_s: 60
+timeline:
+  - at_s: 1
+    event: tag_enters_range
+    payload:
+      tag_id: tag-17
+      rider_id: rider-17
+      rssi_dbm: -52
+      acceleration_mps2: {x: 0, y: 0, z: 9.81}
+  - at_s: 3.8
+    event: tag_observation
+    payload:
+      tag_id: tag-17
+      rssi_dbm: -50
+      acceleration_mps2: {x: 4.0, y: 2.0, z: 19.0}
+  - at_s: 4
+    event: person_detected
+    payload:
+      confidence: 0.91
+  - at_s: 4.1
+    event: tag_observation
+    payload:
+      tag_id: tag-17
+      rssi_dbm: -50
+      acceleration_mps2: {x: 4.0, y: 2.0, z: 19.0}
+  - at_s: 8.9
+    event: tag_observation
+    payload:
+      tag_id: tag-17
+      rssi_dbm: -53
+      acceleration_mps2: {x: 3.0, y: 2.0, z: 18.0}
+  - at_s: 30
+    event: tag_observation
+    payload:
+      tag_id: tag-17
+      rssi_dbm: -53
+      acceleration_mps2: {x: 0, y: 0, z: 9.81}
+faults: {storage_upload: true}

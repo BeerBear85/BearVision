@@ -21,6 +21,7 @@ last_used_config.ini
 .claude/settings.local.json
 temp/*
 .test-temp/
+.codex-pytest-*/
 data/server/user-registry.json
 code/obsolite_junk_box/GPMD2CSV_extract_gopro_sensor_data/gopro2json.exe
 code/obsolite_junk_box/GPMD2CSV_extract_gopro_sensor_data/gpmdinfo.exe

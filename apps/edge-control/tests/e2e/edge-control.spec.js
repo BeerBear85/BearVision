@@ -257,7 +257,11 @@ test("terminal failure offers runtime restart but never operation retry", async 
     runtime.emit("exit", 1, null);
 
     const failures = page.getByRole("region", { name: "Persistent failures" });
-    await expect(failures).toContainText("The camera connection was lost.");
+    await expect(failures).toContainText("The simulated camera could not record.");
+    await expect(failures).toContainText("No new test clips are being captured.");
+    await expect(failures.getByText("Camera disconnected.", { exact: true })).toBeHidden();
+    await failures.getByText("Technical details").click();
+    await expect(failures.getByText("Camera disconnected.", { exact: true })).toBeVisible();
     await expect(failures.getByRole("button", { name: "Retry operation" })).toHaveCount(0);
     const restart = page.getByRole("button", { name: "Restart runtime" });
     await expect(restart).toBeVisible();
@@ -267,6 +271,99 @@ test("terminal failure offers runtime restart but never operation retry", async 
     await expect(page.getByRole("region", { name: "Persistent failures" })).toHaveCount(0);
     await expect(page.getByRole("region", { name: "Recent runs" })).toContainText("Failed");
     expect(fixture.runtimes).toHaveLength(2);
+  } finally {
+    await fixture.close();
+  }
+});
+
+test("changing scenario clears media and overlay from the previous run", async ({ page }) => {
+  const fixture = await startFixture({ runtime: { exitOnTerminate: true } });
+  try {
+    await page.goto(fixture.url);
+    const scenario = page.getByRole("combobox", { name: "Scenario" });
+    const initialScenario = await scenario.inputValue();
+    const otherScenario = await scenario.locator("option").evaluateAll(
+      (options, current) => options.map((option) => option.value).find((value) => value !== current),
+      initialScenario,
+    );
+    expect(otherScenario).toBeTruthy();
+
+    await page.getByRole("button", { name: "Run scenario" }).click();
+    const runtime = fixture.runtimes[0];
+    runtime.send("person_detected", {
+      bounding_box: { x_px: 1, y_px: 1, width_px: 10, height_px: 10 },
+      confidence: 0.9,
+      coordinate_space: { width_px: 100, height_px: 100 },
+    }, 2);
+    runtime.send("capture_completed", { filename: "old-run.mp4", size_bytes: 1024 }, 3);
+    await expect(page.getByRole("button", { name: "Extracted clip" })).toBeVisible();
+    await expect(page.getByText("T+ 3.0 s", { exact: true })).toBeVisible();
+
+    await page.getByRole("button", { name: "Stop runtime" }).click();
+    await expect(scenario).toBeEnabled();
+    await scenario.selectOption(otherScenario);
+
+    await expect(page.getByRole("button", { name: "Extracted clip" })).toHaveCount(0);
+    await expect(page.getByText("T+ 3.0 s", { exact: true })).toHaveCount(0);
+    await expect(page.locator(".tracking-overlay")).toHaveCount(0);
+  } finally {
+    await fixture.close();
+  }
+});
+
+test("offline stop is shown as unconfirmed and can be retried", async ({ page, context }) => {
+  const fixture = await startFixture();
+  try {
+    await page.goto(fixture.url);
+    await page.getByRole("button", { name: "Run scenario" }).click();
+    await expect(page.getByRole("heading", { name: "BearVision is starting" })).toBeVisible();
+
+    await context.setOffline(true);
+    await page.getByRole("button", { name: "Stop runtime" }).click();
+    const notice = page.getByRole("alert");
+    await expect(notice).toContainText("We could not confirm that BearVision stopped");
+    await expect(notice).toContainText("BearVision may still be recording");
+    await expect(notice.getByRole("button", { name: "Try stop again" })).toBeVisible();
+    await expect(notice.getByRole("button", { name: "Copy support details" })).toBeVisible();
+
+    await context.setOffline(false);
+    await notice.getByRole("button", { name: "Try stop again" }).click();
+    await expect(page.getByRole("heading", { name: "BearVision is stopping safely" })).toBeVisible();
+    await expect(page.getByRole("alert")).toHaveCount(0);
+  } finally {
+    await context.setOffline(false);
+    await fixture.close();
+  }
+});
+
+test("320 px view shows camera, queue, readiness and navigation without horizontal scrolling", async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 740 });
+  const fixture = await startFixture();
+  try {
+    await page.goto(fixture.url);
+    await page.getByRole("button", { name: "Run scenario" }).click();
+    const runtime = fixture.runtimes[0];
+    runtime.send("capture_activity_changed", {
+      activity: "capturing", request_id: "capture-mobile", pending_captures: 1,
+    }, 1);
+    runtime.send("clip_job_updated", {
+      job_id: "clip-mobile",
+      status: "processing",
+      state_changed_at_utc: "2026-09-09T08:00:00Z",
+      counts: { queued: 0, processing: 1, failed: 0, completed: 0 },
+    }, 2);
+
+    const mobile = page.getByRole("region", { name: "Mobile operation status" });
+    await expect(mobile).toBeVisible();
+    await expect(mobile).toContainText("Camera");
+    await expect(mobile).toContainText("Capturing");
+    await expect(mobile).toContainText("Background clips");
+    await expect(mobile).toContainText("1 active");
+    await expect(mobile).toContainText("Simulation does not check physical equipment.");
+    await expect(page.getByRole("navigation", { name: "Page sections" }).getByRole("link", { name: "Diagnostics" })).toBeVisible();
+    await expect.poll(() => page.evaluate(
+      () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+    )).toBe(true);
   } finally {
     await fixture.close();
   }

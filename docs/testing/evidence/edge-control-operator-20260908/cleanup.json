@@ -1,0 +1,20 @@
+{
+  "checkedAt": "2026-09-08T21:54:58.8762847+02:00",
+  "stoppedProcessIds": [
+    22332,
+    2380,
+    30216,
+    21592,
+    33924,
+    27560,
+    9976,
+    552,
+    38444,
+    28536,
+    26336,
+    26048
+  ],
+  "remainingOwnedProcesses": [],
+  "remainingTestListeners": [],
+  "temporaryScenariosRemaining": []
+}
