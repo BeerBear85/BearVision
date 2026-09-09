@@ -9,6 +9,8 @@ import {
   actionFailureNotice,
   deriveOperatorView,
   failurePresentation,
+  mediaFailureNotice,
+  reconcileActionNotice,
   restoreCapturedClip,
 } from "./operator-model.js";
 import "./styles.css";
@@ -127,6 +129,23 @@ function ActionNotice({ notice, copied, onCopy, onDismiss, onRetry }) {
         {notice.retryable && <button className="danger" type="button" onClick={onRetry}>Try stop again</button>}
         <button className="dismiss-notice" type="button" aria-label="Dismiss message" onClick={onDismiss}>×</button>
       </div>
+    </div>
+  );
+}
+
+function MediaIssue({ issue, onRetry }) {
+  return (
+    <div className="media-issue" role="status">
+      <div>
+        <strong>{issue.headline}</strong>
+        <p>{issue.message}</p>
+        <p>{issue.correctiveAction}</p>
+        <details>
+          <summary>Technical details</summary>
+          <pre>{issue.supportDetails}</pre>
+        </details>
+      </div>
+      <button className="secondary" type="button" onClick={onRetry}>Try tracking again</button>
     </div>
   );
 }
@@ -331,6 +350,8 @@ function App() {
   const [displayedMedia, setDisplayedMedia] = useState("scenario");
   const [trackingFrame, setTrackingFrame] = useState(null);
   const [trackingData, setTrackingData] = useState(null);
+  const [trackingError, setTrackingError] = useState(null);
+  const [trackingRequestVersion, setTrackingRequestVersion] = useState(0);
   const [streamConnected, setStreamConnected] = useState(false);
   const [previewVersion, setPreviewVersion] = useState(0);
   const [previewAvailable, setPreviewAvailable] = useState(false);
@@ -461,17 +482,26 @@ function App() {
   }, [state.active_run]);
 
   useEffect(() => {
-    if (!capturedClip?.tracking_url) return;
+    setActionNotice((current) => reconcileActionNotice(current, state, streamConnected));
+  }, [state, streamConnected]);
+
+  useEffect(() => {
+    if (!capturedClip?.tracking_url) {
+      setTrackingError(null);
+      return undefined;
+    }
+    let cancelled = false;
     request(capturedClip.tracking_url)
-      .then(setTrackingData)
-      .catch((reason) => setActionNotice(actionFailureNotice("load tracking data", reason, {
-        run: state.active_run,
-        mode: state.mode,
-        scenario: selectedScenario,
-        streamConnected,
-        lastKnownAt: snapshotReceivedAt,
-      })));
-  }, [capturedClip?.tracking_url]);
+      .then((data) => {
+        if (cancelled) return;
+        setTrackingData(data);
+        setTrackingError(null);
+      })
+      .catch((reason) => {
+        if (!cancelled) setTrackingError(reason);
+      });
+    return () => { cancelled = true; };
+  }, [capturedClip?.tracking_url, trackingRequestVersion]);
 
   const run = state.active_run;
   const hardwareRunning = state.mode === "hardware" && run?.process_state !== "exited" && Boolean(run);
@@ -490,6 +520,15 @@ function App() {
     [state, acknowledgedWarnings],
   );
   const selected = scenarios.find((scenario) => scenario.name === selectedScenario);
+  const mediaRun = capturedClip?.run_id
+    ? state.active_run?.run_id === capturedClip.run_id
+      ? state.active_run
+      : state.recent_runs?.find((item) => item.run_id === capturedClip.run_id) ?? null
+    : null;
+  const mediaIssue = trackingError ? mediaFailureNotice("tracking", trackingError, {
+    run: mediaRun,
+    filename: capturedClip?.tracking_filename,
+  }) : null;
   const filteredEvents = events.filter((event) => showsAtMinimumLogLevel(event, minimumLogLevel));
 
   async function perform(name, action) {
@@ -516,6 +555,8 @@ function App() {
     setCapturedClip(null);
     setTrackingFrame(null);
     setTrackingData(null);
+    setTrackingError(null);
+    setTrackingRequestVersion(0);
     setDisplayedMedia("scenario");
     if (videoRef.current) {
       videoRef.current.pause();
@@ -581,6 +622,14 @@ function App() {
       if (checked) next.add(checkId); else next.delete(checkId);
       return next;
     });
+  }
+
+  function endFailedRun() {
+    if (
+      state.mode === "hardware"
+      && !window.confirm("Confirm that the camera and runtime are stopped. Ending the failed run keeps its evidence and unlocks setup.")
+    ) return;
+    return perform("end-failed", () => request(`/api/runs/${encodeURIComponent(run.run_id)}/end`, { method: "POST" }));
   }
 
   function chooseScenario(scenario) {
@@ -713,6 +762,7 @@ function App() {
                 )}
                 {operator.canStop && <button className="danger" disabled={busyAction === "stop"} onClick={stopRun}>Stop runtime</button>}
                 {operator.canRestart && <button className="primary" disabled={busyAction === "restart"} onClick={restartRun}>Restart runtime</button>}
+                {operator.canEndFailedRun && <button className="secondary" disabled={busyAction === "end-failed"} onClick={endFailedRun}>End failed run</button>}
                 {operator.canForceStop && <button className="danger force" disabled={busyAction === "force-stop"} onClick={forceStop}>Force stop</button>}
               </div>
             </div>
@@ -754,6 +804,7 @@ function App() {
                 <div><span className="eyebrow">Primary work surface</span><h2 id="preview-heading">{mediaTitle}</h2></div>
                 <span className="mode-badge">{formatLabel(state.mode)}</span>
               </div>
+              {mediaIssue && <MediaIssue issue={mediaIssue} onRetry={() => setTrackingRequestVersion((current) => current + 1)} />}
               <div className="preview-content">
                 {hardwareRunning && displayedMedia === "scenario" ? (
                   <div className="video-stage hardware-preview">

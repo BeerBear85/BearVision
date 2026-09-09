@@ -85,6 +85,7 @@ test("Edge Control presents operator pipeline, readiness and persistent recovery
     "Run readiness",
     "Retry operation",
     "Restart runtime",
+    "End failed run",
     "Force stop",
   ]) {
     assert.equal(uiSource.includes(token), true, `${token} is missing from the operator UI`);

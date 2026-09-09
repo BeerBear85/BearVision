@@ -44,6 +44,7 @@ export function deriveOperatorView(state, acknowledgedWarnings = new Set()) {
     canStop: Boolean(run && ["starting", "running"].includes(run.process_state)),
     canForceStop: run?.stop_state === "force_available",
     canRestart: Boolean(run && run.stage === "failed" && run.process_state === "exited"),
+    canEndFailedRun: Boolean(run && run.stage === "failed" && run.process_state === "exited"),
   };
 }
 
@@ -179,6 +180,17 @@ export function failurePresentation(failure, mode) {
         : "Check the camera power and connection, then restart BearVision. Contact support if the failure returns.",
     };
   }
+  if (failure?.component === "control_server") {
+    return {
+      headline: "Edge Control lost the previous runtime.",
+      impact: mode === "simulation"
+        ? "The previous test can no longer be controlled. Its evidence is retained."
+        : "Edge Control cannot confirm whether the previous runtime is still recording.",
+      correctiveAction: mode === "simulation"
+        ? "End the failed run, then start another test when ready."
+        : "Check the camera and runtime first. When they are stopped, end the failed run or contact support.",
+    };
+  }
   return {
     headline: failure?.operator_message ?? "The runtime operation failed.",
     impact: failure?.operator_impact ?? null,
@@ -217,6 +229,7 @@ export function actionFailureNotice(action, error, context = {}) {
   if (isUnconfirmedStop) {
     return {
       action,
+      runId: run?.run_id ?? null,
       status: "unconfirmed",
       eyebrow: "Action not confirmed",
       headline: "We could not confirm that BearVision stopped",
@@ -229,6 +242,7 @@ export function actionFailureNotice(action, error, context = {}) {
   }
   return {
     action,
+    runId: run?.run_id ?? null,
     status: "failed",
     eyebrow: "Action failed",
     headline: error?.message ?? "The action failed.",
@@ -237,6 +251,40 @@ export function actionFailureNotice(action, error, context = {}) {
     occurredAt,
     retryable: false,
     supportDetails,
+  };
+}
+
+export function reconcileActionNotice(notice, state, streamConnected) {
+  if (!notice || notice.status !== "unconfirmed" || notice.action !== "stop") return notice;
+  if (!streamConnected || state?.phase === "loading") return notice;
+  const run = state?.active_run ?? null;
+  if (!run || run.run_id !== notice.runId) return null;
+  if (run.stage === "failed" || run.process_state === "exited") return null;
+  if (run.stage === "stopping" || run.process_state === "stopping") return null;
+  return notice;
+}
+
+export function mediaFailureNotice(kind, error, context = {}) {
+  const run = context.run ?? null;
+  const completed = run?.stage === "completed";
+  const label = kind === "tracking" ? "tracking view" : "media view";
+  return {
+    kind,
+    headline: completed
+      ? `Run completed — ${label} unavailable`
+      : `${label.charAt(0).toUpperCase()}${label.slice(1)} unavailable`,
+    message: completed
+      ? "The run result remains Completed. Other media views may still be available."
+      : "Other media views may still be available.",
+    correctiveAction: `Try loading the ${label} again. Contact support if it remains unavailable.`,
+    supportDetails: [
+      `Media: ${kind}`,
+      `Run: ${run?.run_id ?? "none"}`,
+      `Run result: ${run?.stage ?? "unknown"}`,
+      `Filename: ${context.filename ?? "unknown"}`,
+      `Error code: ${error?.code ?? "none"}`,
+      `Technical error: ${error?.message ?? "Unknown error"}`,
+    ].join("\n"),
   };
 }
 

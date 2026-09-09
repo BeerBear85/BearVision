@@ -276,6 +276,60 @@ test("terminal failure offers runtime restart but never operation retry", async 
   }
 });
 
+test("a terminal failed simulation can be ended without restarting it", async ({ page }) => {
+  const fixture = await startFixture();
+  try {
+    await page.goto(fixture.url);
+    const scenario = page.getByRole("combobox", { name: "Scenario" });
+    await page.getByRole("button", { name: "Run scenario" }).click();
+    const runtime = fixture.runtimes[0];
+    runtime.send("component_failed", {
+      failure_id: "failure-camera-end",
+      component: "camera",
+      error: "Camera disconnected.",
+      severity: "terminal",
+      retryable: false,
+    });
+    runtime.emit("exit", 1, null);
+
+    await page.getByRole("button", { name: "End failed run" }).click();
+
+    await expect(scenario).toBeEnabled();
+    await expect(page.getByRole("button", { name: "Run scenario" })).toBeEnabled();
+    await expect(page.getByRole("region", { name: "Recent runs" })).toContainText("Failed");
+    expect(fixture.runtimes).toHaveLength(1);
+  } finally {
+    await fixture.close();
+  }
+});
+
+test("a missing tracking file stays scoped to the completed result", async ({ page }) => {
+  const fixture = await startFixture();
+  try {
+    await page.goto(fixture.url);
+    await page.getByRole("button", { name: "Run scenario" }).click();
+    const runtime = fixture.runtimes[0];
+    runtime.send("capture_completed", {
+      filename: "missing-result-source.mp4",
+      size_bytes: 2048,
+    });
+    runtime.send("virtual_cameraman_completed", {
+      processed_filename: "missing-result-processed.mp4",
+      tracking_filename: "missing-result.tracking.json",
+      debug_video_filename: "missing-result-debug.mp4",
+      processed_size_bytes: 1024,
+    });
+    runtime.emit("exit", 0, null);
+
+    await expect(page.getByRole("region", { name: "Recent runs" })).toContainText("Completed");
+    await expect(page.getByText("Run completed — tracking view unavailable")).toBeVisible();
+    await expect(page.getByRole("alert")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Try tracking again" })).toBeVisible();
+  } finally {
+    await fixture.close();
+  }
+});
+
 test("changing scenario clears media and overlay from the previous run", async ({ page }) => {
   const fixture = await startFixture({ runtime: { exitOnTerminate: true } });
   try {
@@ -330,6 +384,27 @@ test("offline stop is shown as unconfirmed and can be retried", async ({ page, c
     await notice.getByRole("button", { name: "Try stop again" }).click();
     await expect(page.getByRole("heading", { name: "BearVision is stopping safely" })).toBeVisible();
     await expect(page.getByRole("alert")).toHaveCount(0);
+  } finally {
+    await context.setOffline(false);
+    await fixture.close();
+  }
+});
+
+test("terminal recovery replaces a stale unconfirmed stop after reconnect", async ({ page, context }) => {
+  const fixture = await startFixture();
+  try {
+    await page.goto(fixture.url);
+    await page.getByRole("button", { name: "Run scenario" }).click();
+    const runtime = fixture.runtimes[0];
+
+    await context.setOffline(true);
+    await page.getByRole("button", { name: "Stop runtime" }).click();
+    await expect(page.getByRole("button", { name: "Try stop again" })).toBeVisible();
+    runtime.emit("exit", 1, null);
+
+    await context.setOffline(false);
+    await expect(page.getByRole("button", { name: "Try stop again" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "End failed run" })).toBeVisible();
   } finally {
     await context.setOffline(false);
     await fixture.close();

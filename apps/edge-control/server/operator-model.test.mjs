@@ -5,7 +5,9 @@ import {
   actionFailureNotice,
   deriveOperatorView,
   failurePresentation,
+  mediaFailureNotice,
   pipelineForStage,
+  reconcileActionNotice,
   restoreCapturedClip,
 } from "../src/operator-model.js";
 
@@ -90,9 +92,36 @@ test("a disconnected stop becomes an unconfirmed command with support context", 
 
   assert.equal(notice.status, "unconfirmed");
   assert.equal(notice.retryable, true);
+  assert.equal(notice.runId, "run-9");
   assert.match(notice.headline, /could not confirm/);
   assert.match(notice.supportDetails, /Run: run-9/);
   assert.match(notice.supportDetails, /Last known runtime state: monitoring \/ running/);
+});
+
+test("an unconfirmed stop is cleared when a fresh snapshot has terminal recovery", () => {
+  const notice = actionFailureNotice("stop", new TypeError("Failed to fetch"), {
+    run: { run_id: "run-9", stage: "monitoring", process_state: "running" },
+    streamConnected: false,
+  });
+  const state = {
+    phase: "failed",
+    active_run: { run_id: "run-9", stage: "failed", process_state: "exited" },
+  };
+
+  assert.equal(reconcileActionNotice(notice, state, true), null);
+  assert.equal(reconcileActionNotice(notice, state, false), notice);
+});
+
+test("a missing tracking file is presented as a scoped media problem", () => {
+  const notice = mediaFailureNotice("tracking", { code: "MEDIA_NOT_FOUND", message: "Capture does not exist." }, {
+    run: { run_id: "run-4", stage: "completed", process_state: "exited" },
+    filename: "clip.tracking.json",
+  });
+
+  assert.equal(notice.kind, "tracking");
+  assert.match(notice.headline, /completed/i);
+  assert.match(notice.message, /result remains Completed/i);
+  assert.match(notice.supportDetails, /MEDIA_NOT_FOUND/);
 });
 
 test("camera failures explain impact while keeping the raw error separate", () => {
@@ -109,6 +138,20 @@ test("camera failures explain impact while keeping the raw error separate", () =
   assert.match(simulation.impact, /No new test clips/);
   assert.match(hardware.correctiveAction, /camera power and connection/);
   assert.doesNotMatch(simulation.headline, /injected/);
+});
+
+test("control restart failures explain different simulation and hardware recovery", () => {
+  const failure = {
+    component: "control_server",
+    error: "The control server restarted while the runtime was active.",
+  };
+
+  const simulation = failurePresentation(failure, "simulation");
+  const hardware = failurePresentation(failure, "hardware");
+
+  assert.match(simulation.correctiveAction, /End the failed run/);
+  assert.match(hardware.impact, /cannot confirm whether/i);
+  assert.match(hardware.correctiveAction, /Check the camera/i);
 });
 
 test("captured media can be restored from persisted run artefacts", () => {

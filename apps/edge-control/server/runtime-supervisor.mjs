@@ -225,6 +225,17 @@ export class RuntimeSupervisor {
     return this.start({ ...start, restartOfRunId: run.run_id });
   }
 
+  endFailedRun(runId) {
+    this.#assertRun(runId);
+    if (this.child) throw new Error("stop the active runtime before ending the failed run");
+    const completed = this.state.endFailedRun(runId);
+    this.publish({
+      kind: "run_archived",
+      payload: { run_id: completed.run_id, reason: completed.completion_reason },
+    }, this.state.snapshot());
+    return completed;
+  }
+
   shutdown() {
     if (this.stopTimer != null) this.clearTimer(this.stopTimer);
     if (!this.child) return;

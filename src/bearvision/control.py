@@ -45,6 +45,7 @@ def simulate(
     run_id: str,
     realtime: bool,
     speed: float,
+    capture_dir: Path | None = None,
     local_queue_root: Path | None = None,
     config_path: Path = Path("config/edge.yaml"),
 ) -> int:
@@ -56,6 +57,7 @@ def simulate(
     execution = ScenarioExecution.run(
         path,
         config_path=config_path,
+        capture_dir=capture_dir,
         local_queue_root=local_queue_root,
     )
     for event in execution.replay(replay):
@@ -205,6 +207,7 @@ def main() -> int:
     simulation.add_argument("--realtime", action="store_true")
     simulation.add_argument("--speed", type=float, default=1.0)
     simulation.add_argument("--local-queue-root", type=Path)
+    simulation.add_argument("--capture-dir", type=Path)
     simulation.add_argument("--config", type=Path, default=Path("config/edge.yaml"))
     simulation.add_argument("--run-id", default=f"local-{uuid4()}")
     real = commands.add_parser("hardware")
@@ -223,6 +226,7 @@ def main() -> int:
             run_id=args.run_id,
             realtime=args.realtime,
             speed=args.speed,
+            capture_dir=args.capture_dir,
             local_queue_root=args.local_queue_root,
             config_path=args.config,
         )

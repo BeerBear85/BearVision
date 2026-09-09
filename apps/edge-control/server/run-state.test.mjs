@@ -133,6 +133,22 @@ test("an active process is recovered as an actionable failure after control rest
   assert.match(restored.failures[0].corrective_action, /Restart the runtime/);
 });
 
+test("an exited process with an unfinished stage is recovered as interrupted", () => {
+  const root = mkdtempSync(join(tmpdir(), "bearvision-control-partial-exit-"));
+  const stateFile = join(root, "runs.json");
+  const state = deterministicState({ stateFile });
+  const started = state.start({ mode: "simulation", scenario: "video.yaml" });
+  state.record({ kind: "runtime_started", payload: { pid: 1234 } });
+  state.setProcessState("exited");
+
+  const restored = deterministicState({ stateFile }).snapshot().active_run;
+
+  assert.equal(restored.run_id, started.run_id);
+  assert.equal(restored.stage, "failed");
+  assert.equal(restored.process_state, "exited");
+  assert.equal(restored.failures[0].component, "control_server");
+});
+
 test("force stop is unavailable until the graceful timeout expires", () => {
   const state = deterministicState();
   state.start({ mode: "hardware" });
@@ -263,6 +279,34 @@ test("queue snapshot restores retryable clip-job failure cards", () => {
   assert.equal(run.failures[0].failure_id, "failure-job-failed-uploading-1");
   assert.equal(run.failures[0].scope, "clip_job");
   assert.equal(state.retryFailure(run.failures[0].failure_id).job_id, "job-failed");
+});
+
+test("ending a terminal failed run archives its evidence and unlocks setup", () => {
+  const state = deterministicState();
+  const started = state.start({ mode: "simulation", scenario: "camera-failure.yaml" });
+  state.record({ kind: "component_failed", payload: {
+    failure_id: "failure-camera",
+    component: "camera",
+    error: "camera failed",
+    severity: "terminal",
+    retryable: false,
+  } });
+  state.setProcessState("exited");
+
+  const ended = state.endFailedRun(started.run_id);
+
+  assert.equal(ended.stage, "failed");
+  assert.equal(state.snapshot().active_run, null);
+  assert.equal(state.snapshot().recent_runs[0].failures[0].failure_id, "failure-camera");
+  assert.throws(() => state.endFailedRun(started.run_id), /not active/);
+});
+
+test("a running or healthy run cannot be ended as failed", () => {
+  const state = deterministicState();
+  const started = state.start({ mode: "simulation", scenario: "healthy.yaml" });
+
+  assert.throws(() => state.endFailedRun(started.run_id), /terminal failed/);
+  assert.notEqual(state.snapshot().active_run, null);
 });
 
 test("debug and frame noise stay transient while informative logs remain recoverable", () => {

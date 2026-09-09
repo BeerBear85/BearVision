@@ -1,0 +1,138 @@
+- complementary:
+  - generic: BV
+  - navigation "Page sections":
+    - link "Control":
+      - /url: "#control"
+    - link "Pipeline":
+      - /url: "#pipeline-heading"
+    - link "Preview":
+      - /url: "#preview"
+    - link "Diagnostics":
+      - /url: "#diagnostics"
+- main:
+  - heading "Edge Control" [level=1]
+  - paragraph: Operate one nearby Edge node and recover failures safely.
+  - generic: Simulation ready
+  - region "Simulation is ready to run":
+    - text: Operator status
+    - heading "Simulation is ready to run" [level=2]
+    - paragraph: Physical equipment is not checked in simulation mode.
+    - strong: Camera
+    - text: · Idle
+    - strong: Background
+    - text: · 0 active, 0 queued
+    - strong: Connection
+    - text: · Live
+    - strong: Mode
+    - text: · Simulation
+    - generic: Simulation ready
+  - region "Choose how to run":
+    - text: Operator setup
+    - heading "Choose how to run" [level=2]
+    - paragraph: Configuration is locked while a run remains active.
+    - group "Runtime mode":
+      - generic: Runtime mode
+      - button "Simulation" [pressed]
+      - button "Hardware"
+    - text: Scenario
+    - combobox "Scenario":
+      - option "single rider success"
+      - option "wakeboard fs360 60fps blender regression · Blender"
+      - option "wakeboard testmovie1 yolo" [selected]
+      - option "wakeboard testmovie3 yolo"
+      - option "wakeboard testmovie5 two riders yolo"
+      - option "wakeboard two riders 60fps blender regression · Blender"
+      - option "wakeboard video yolo"
+    - button "Run scenario"
+  - region "Concurrent pipeline":
+    - text: Live operation
+    - heading "Concurrent pipeline" [level=2]
+    - generic: Simulation ready
+    - region "Mobile operation status":
+      - article:
+        - heading "Camera" [level=3]: Camera
+        - strong: Idle
+        - paragraph: 0 pending captures
+      - article:
+        - heading "Background clips" [level=3]: Background clips
+        - strong: 0 active · 0 queued
+        - paragraph: 0 failed · 0 completed
+      - article:
+        - heading "Readiness" [level=3]: Readiness
+        - strong: Not used
+        - paragraph: Simulation does not check physical equipment.
+      - generic "Show pipeline details"
+  - region "Runtime workspace":
+    - region "Extracted clip + live overlay":
+      - text: Primary work surface
+      - heading "Extracted clip + live overlay" [level=2]
+      - generic: Simulation
+      - img "Detection and rider position overlay":
+        - generic: YOLO person
+      - generic: YOLO person
+      - generic: Kalman + RTS · 95 %
+      - generic: Butterworth camera crop
+      - generic: "frames: video"
+      - generic: "detector: yolo"
+      - generic: "bear_tag: synthetic"
+      - generic: "camera: simulated_gopro"
+      - generic: "storage: memory"
+      - generic "Media view":
+        - button "Scenario source"
+        - button "Extracted clip" [pressed]
+        - button "Processed upload"
+        - button "Tracking view"
+        - generic: capture-video-frame-186-GX010003.MP4 · 11274 KiB
+      - generic: T+ 15.2 s
+    - complementary:
+      - region "Operational details":
+        - text: Supporting information
+        - heading "Operational details" [level=2]
+        - strong: BearVision status
+        - generic: Simulation ready
+        - strong: Control connection
+        - generic: Live
+        - strong: Camera
+        - generic: Idle · 0 pending
+        - strong: Queue depth
+        - generic: "0"
+        - strong: Current clip job
+        - generic: None
+        - strong: Oldest queued
+        - generic: None
+        - strong: Failed clips
+        - generic: "0"
+        - strong: Readiness
+        - generic: Not used in simulation
+      - region "Recent runs":
+        - text: Restored evidence
+        - heading "Recent runs" [level=2]
+        - list:
+          - generic: Completed
+          - strong: wakeboard-testmovie1-yolo.yaml
+          - generic: Sep 9, 2026, 2:16 PM
+          - generic: 4 outputs · 0 failures
+          - generic: Stopped
+          - strong: single-rider-success.yaml
+          - generic: Sep 9, 2026, 2:15 PM
+          - generic: 0 outputs · 0 failures
+          - generic: Stopped
+          - strong: single-rider-success.yaml
+          - generic: Sep 9, 2026, 2:15 PM
+          - generic: 0 outputs · 0 failures
+          - generic: Completed
+          - strong: single-rider-success.yaml
+          - generic: Sep 9, 2026, 2:15 PM
+          - generic: 1 outputs · 0 failures
+          - generic: Completed
+          - strong: single-rider-success.yaml
+          - generic: Sep 9, 2026, 2:14 PM
+          - generic: 1 outputs · 0 failures
+  - generic "Technical evidence Diagnostics 21/21":
+    - generic: Technical evidence
+    - strong: Diagnostics
+    - generic: 21/21
+  - option "Debug+"
+  - option "Info+" [selected]
+  - option "Warning+"
+  - option "Error"

@@ -1,0 +1,138 @@
+- complementary:
+  - generic: BV
+  - strong: BearVision
+  - generic: Edge Control
+  - navigation "Page sections":
+    - link "Control":
+      - /url: "#control"
+    - link "Pipeline":
+      - /url: "#pipeline-heading"
+    - link "Preview":
+      - /url: "#preview"
+    - link "Diagnostics":
+      - /url: "#diagnostics"
+  - strong: Recording
+  - generic: Simulation runtime
+- main:
+  - heading "Edge Control" [level=1]
+  - paragraph: Operate one nearby Edge node and recover failures safely.
+  - generic: Recording
+  - region "BearVision is recording riders":
+    - text: Operator status
+    - heading "BearVision is recording riders" [level=2]
+    - paragraph: New clips are being captured while earlier clips can finish in the background.
+    - strong: Camera
+    - text: · Capturing
+    - strong: Background
+    - text: · 0 active, 0 queued
+    - strong: Connection
+    - text: · Live
+    - strong: Mode
+    - text: · Simulation
+    - generic: Recording
+  - region "Choose how to run":
+    - text: Operator setup
+    - heading "Choose how to run" [level=2]
+    - paragraph: Configuration is locked while a run remains active.
+    - group "Runtime mode":
+      - generic: Runtime mode
+      - button "Simulation" [disabled] [pressed]
+      - button "Hardware" [disabled]
+    - text: Scenario
+    - combobox "Scenario" [disabled]:
+      - option "single rider success" [selected]
+      - option "wakeboard fs360 60fps blender regression · Blender"
+      - option "wakeboard testmovie1 yolo"
+      - option "wakeboard testmovie3 yolo"
+      - option "wakeboard testmovie5 two riders yolo"
+      - option "wakeboard two riders 60fps blender regression · Blender"
+      - option "wakeboard video yolo"
+    - button "Stop runtime" [disabled]
+  - region "Concurrent pipeline":
+    - text: Live operation
+    - heading "Concurrent pipeline" [level=2]
+    - text: Recording
+    - generic: 6s
+    - article "Live track":
+      - heading "Live" [level=3]
+      - list:
+        - generic: "1"
+        - strong: "Readiness: Not used"
+        - generic: "2"
+        - strong: Monitoring
+        - generic: "3"
+        - strong: "Camera: Capturing"
+      - paragraph: 0 pending captures · capture-frame-2
+    - article "Background queue track":
+      - heading "Background queue" [level=3]
+      - list:
+        - generic: "1"
+        - strong: Queued
+        - generic: "2"
+        - strong: Processing
+        - generic: "3"
+        - strong: Packaging
+        - generic: "4"
+        - strong: Uploading
+        - generic: "5"
+        - strong: Failed
+        - generic: "6"
+        - strong: Completed
+      - paragraph: 0 queued · 0 active · 0 failed · 0 completed
+  - region "Runtime workspace":
+    - region "Scenario preview":
+      - text: Primary work surface
+      - heading "Scenario preview" [level=2]
+      - generic: Simulation
+      - strong: Behavioural scenario
+      - paragraph: This scenario has no recorded video.
+      - generic: "frames: synthetic"
+      - generic: "detector: declared"
+      - generic: "bear_tag: synthetic"
+      - generic: "camera: simulated"
+      - generic: "storage: memory"
+      - generic: T+ 4.1 s
+    - complementary:
+      - region "Operational details":
+        - text: Supporting information
+        - heading "Operational details" [level=2]
+        - strong: BearVision status
+        - generic: Recording
+        - strong: Control connection
+        - generic: Live
+        - strong: Camera
+        - generic: Capturing · 0 pending
+        - strong: Queue depth
+        - generic: "0"
+        - strong: Current clip job
+        - generic: None
+        - strong: Oldest queued
+        - generic: None
+        - strong: Failed clips
+        - generic: "0"
+        - strong: Readiness
+        - generic: Not used in simulation
+      - region "Recent runs":
+        - text: Restored evidence
+        - heading "Recent runs" [level=2]
+        - list:
+          - generic: Stopped
+          - strong: single-rider-success.yaml
+          - generic: Sep 9, 2026, 2:15 PM
+          - generic: 0 outputs · 0 failures
+          - generic: Completed
+          - strong: single-rider-success.yaml
+          - generic: Sep 9, 2026, 2:15 PM
+          - generic: 1 outputs · 0 failures
+          - generic: Completed
+          - strong: single-rider-success.yaml
+          - generic: Sep 9, 2026, 2:14 PM
+          - generic: 1 outputs · 0 failures
+  - generic "Technical evidence Diagnostics 69/69":
+    - generic: Technical evidence
+    - strong: Diagnostics
+    - generic: 69/69
+  - option "Debug+"
+  - option "Info+" [selected]
+  - option "Warning+"
+  - option "Error"

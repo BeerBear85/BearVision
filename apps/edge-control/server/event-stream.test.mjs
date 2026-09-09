@@ -68,6 +68,21 @@ test("SSE sends a snapshot when the browser event id is ahead after server resta
   assert.match(response.chunks.join(""), /"phase":"failed"/);
 });
 
+test("SSE sends an authoritative snapshot when reconnecting at the current event id", () => {
+  const stream = new EventStream({
+    getSnapshot: () => ({ phase: "failed" }),
+    setTimer: () => 1,
+    clearTimer: () => {},
+  });
+  const { request, response } = connection();
+  request.headers["last-event-id"] = "0";
+
+  stream.connect(request, response);
+
+  assert.match(response.chunks.join(""), /"kind":"control_snapshot"/);
+  assert.match(response.chunks.join(""), /"phase":"failed"/);
+});
+
 test("SSE heartbeat keeps connected clients alive", () => {
   let heartbeat = null;
   const stream = new EventStream({

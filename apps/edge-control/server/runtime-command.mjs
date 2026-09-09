@@ -14,6 +14,7 @@ export function runtimeArguments({
       "-m", "bearvision.control", "simulate", scenarioPath,
       "--run-id", runId, "--realtime",
       "--local-queue-root", localQueueRoot, "--config", configPath,
+      "--capture-dir", captureRoot,
     ];
   }
   if (mode === "hardware") {

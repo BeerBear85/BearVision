@@ -46,12 +46,14 @@ class ScenarioExecution:
         scenario_path: Path,
         *,
         config_path: Path = Path("config/edge.yaml"),
+        capture_dir: Path | None = None,
         local_queue_root: Path | None = None,
     ) -> "ScenarioExecution":
         queue = FileSystemJobQueue(local_queue_root) if local_queue_root else None
         result = build_behavioral_system(
             load_scenario(scenario_path),
             edge_config=load_edge_config(config_path),
+            capture_dir=capture_dir,
             job_queue=queue,
             process_server=queue is None,
         ).run()

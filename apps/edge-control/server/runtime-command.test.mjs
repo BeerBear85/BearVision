@@ -20,7 +20,7 @@ test("runtime command carries the authoritative run id into Python", () => {
     "-m", "bearvision.control", "simulate", "specs/scenarios/operator.yaml",
     "--run-id", "run-edge-17", "--realtime",
     "--local-queue-root", "temp/simulation-queue",
-    "--config", "config/edge.yaml",
+    "--config", "config/edge.yaml", "--capture-dir", "temp/captures",
   ]);
   assert.deepEqual(runtimeArguments({ ...common, mode: "hardware" }), [
     "-m", "bearvision.control", "hardware",

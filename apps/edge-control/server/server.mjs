@@ -316,6 +316,10 @@ export function createEdgeControlServer(options = {}) {
         const runId = decodeURIComponent(url.pathname.split("/")[3]);
         await supervisor.restart(runId);
         writeJson(response, 202, snapshot());
+      } else if (request.method === "POST" && /^\/api\/runs\/[^/]+\/end$/.test(url.pathname)) {
+        const runId = decodeURIComponent(url.pathname.split("/")[3]);
+        supervisor.endFailedRun(runId);
+        writeJson(response, 200, snapshot());
       } else if (
         request.method === "POST"
         && /^\/api\/runs\/[^/]+\/failures\/[^/]+\/retry$/.test(url.pathname)

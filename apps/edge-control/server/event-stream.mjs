@@ -42,7 +42,7 @@ export class EventStream {
     const stale = Number.isFinite(lastId)
       && (lastId < oldestId - 1 || lastId > this.sequence);
 
-    if (lastId == null || !Number.isFinite(lastId) || stale) {
+    if (lastId == null || !Number.isFinite(lastId) || stale || lastId === this.sequence) {
       response.write(encodeSse(this.sequence, {
         kind: "control_snapshot",
         payload: this.getSnapshot(),

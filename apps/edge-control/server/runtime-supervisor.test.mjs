@@ -224,3 +224,22 @@ test("restart links the replacement run to the failed run", async () => {
 
   assert.equal(replacement.restart_of_run_id, failedRun.run_id);
 });
+
+test("ending a failed run archives it without spawning another runtime", async () => {
+  const state = new RunState();
+  const child = fakeChild();
+  let spawnCount = 0;
+  const supervisor = new RuntimeSupervisor({
+    state,
+    spawnRuntime: () => { spawnCount += 1; return child; },
+  });
+  const failedRun = await supervisor.start({ mode: "simulation", scenario: "failure.yaml" });
+  child.emit("exit", 1, null);
+
+  const ended = supervisor.endFailedRun(failedRun.run_id);
+
+  assert.equal(ended.stage, "failed");
+  assert.equal(state.snapshot().active_run, null);
+  assert.equal(state.snapshot().recent_runs[0].run_id, failedRun.run_id);
+  assert.equal(spawnCount, 1);
+});

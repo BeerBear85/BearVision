@@ -184,3 +184,29 @@ test("missing preview remains a structured service-unavailable response", async 
   assert.equal(response.status, 503);
   assert.equal(body.code, "PREVIEW_NOT_READY");
 });
+
+test("a terminal failed run can be ended without starting a replacement", async (context) => {
+  const child = fakeRuntimeChild();
+  let spawnCount = 0;
+  const control = await runningServer({
+    persistState: false,
+    spawnRuntime: () => { spawnCount += 1; return child; },
+  });
+  context.after(() => control.close());
+
+  const started = await control.request("/api/runs", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ mode: "simulation", scenario: "single-rider-success.yaml" }),
+  });
+  child.emit("exit", 1, null);
+
+  const ended = await control.request(`/api/runs/${started.body.active_run.run_id}/end`, {
+    method: "POST",
+  });
+
+  assert.equal(ended.response.status, 200);
+  assert.equal(ended.body.active_run, null);
+  assert.equal(ended.body.recent_runs[0].stage, "failed");
+  assert.equal(spawnCount, 1);
+});

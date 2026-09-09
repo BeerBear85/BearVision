@@ -72,7 +72,7 @@ export class RunState {
 
   #recoverInterruptedRun() {
     const run = this.data.active_run;
-    if (!run || run.process_state === "exited") return;
+    if (!run || (run.stage === "failed" && run.process_state === "exited")) return;
     const occurredAt = this.now();
     const failureId = `failure-${run.run_id}-control-restart`;
     run.process_state = "exited";
@@ -360,6 +360,15 @@ export class RunState {
     this.data.active_run = null;
     this.#persist();
     return copy(run);
+  }
+
+  endFailedRun(runId) {
+    const run = this.data.active_run;
+    if (!run || run.run_id !== runId) throw new Error("run is not active");
+    if (run.stage !== "failed" || run.process_state !== "exited") {
+      throw new Error("only a terminal failed run can be ended");
+    }
+    return this.complete("failed");
   }
 
   snapshot() {

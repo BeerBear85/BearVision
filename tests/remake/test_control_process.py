@@ -43,6 +43,31 @@ def test_control_process_replays_versioned_scenario_events(monkeypatch, capsys) 
     assert sum(sleeps) == 4.5
 
 
+def test_simulation_uses_the_requested_capture_directory(monkeypatch, tmp_path) -> None:
+    received: dict[str, Path | None] = {}
+
+    class Execution:
+        exit_code = 0
+
+        def replay(self, _options):
+            return ()
+
+    def run(_path, **options):
+        received["capture_dir"] = options.get("capture_dir")
+        return Execution()
+
+    monkeypatch.setattr("bearvision.control.ScenarioExecution.run", run)
+
+    assert simulate(
+        Path("scenario.yaml"),
+        run_id="run-capture-dir",
+        realtime=False,
+        speed=1,
+        capture_dir=tmp_path,
+    ) == 0
+    assert received["capture_dir"] == tmp_path
+
+
 def test_runtime_event_contract_rejects_unknown_or_malformed_events() -> None:
     with pytest.raises(ValidationError):
         serialize_runtime_event(  # type: ignore[arg-type]
