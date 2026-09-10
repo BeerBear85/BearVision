@@ -277,6 +277,30 @@ select {
 .readiness-list p { margin: 4px 0 0; color: #743333; font-size: 12px; }
 .warning-acknowledgement { min-height: 32px; display: flex; align-items: center; gap: 7px; color: #614b16; font-size: 12px; }
 .warning-acknowledgement input { width: 17px; height: 17px; accent-color: var(--brand); }
+.readiness-timeout { margin: 14px; padding: 16px; border: 1px solid #e4b7b7; border-left: 4px solid var(--danger); border-radius: 10px; display: flex; justify-content: space-between; align-items: center; gap: 20px; background: #fff8f8; }
+.readiness-timeout h3 { margin: 2px 0 5px; font-size: 16px; }
+.readiness-timeout p { margin: 3px 0; color: #643c3c; font-size: 12px; }
+.readiness-timeout small { display: block; margin-top: 7px; color: var(--muted); }
+.readiness-timeout button { flex: 0 0 auto; }
+.diagnostic-launch { align-self: center; white-space: nowrap; }
+.gopro-diagnostics { margin: 14px; border: 1px solid #cbdcd5; border-radius: 10px; overflow: hidden; background: #f8fbfa; }
+.gopro-diagnostics > header { padding: 14px; display: flex; justify-content: space-between; align-items: start; gap: 16px; border-bottom: 1px solid #dce7e2; }
+.gopro-diagnostics h3 { margin: 2px 0 4px; font-size: 16px; }
+.gopro-diagnostics header p { margin: 0; color: var(--muted); font-size: 12px; }
+.diagnostic-meta, .diagnostic-safety { margin: 0; padding: 9px 14px; color: var(--muted); font-size: 11px; }
+.diagnostic-meta { border-bottom: 1px solid #e3ebe7; }
+.diagnostic-safety { border-top: 1px solid #e3ebe7; }
+.gopro-diagnostic-checks { margin: 0; padding: 0; list-style: none; }
+.gopro-diagnostic-checks li { padding: 11px 14px; display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; gap: 10px; align-items: start; border-bottom: 1px solid #e3ebe7; }
+.gopro-diagnostic-checks li:last-child { border-bottom: 0; }
+.gopro-diagnostic-checks li > div { min-width: 0; display: grid; gap: 3px; }
+.gopro-diagnostic-checks strong { font-size: 13px; }
+.gopro-diagnostic-checks small { color: var(--muted); overflow-wrap: anywhere; }
+.gopro-diagnostic-checks p { margin: 3px 0 0; color: #743333; font-size: 12px; }
+.check-mark.unavailable { color: #45504c; background: #d8dfdc; }
+.diagnostic-result { padding: 4px 7px; border-radius: 999px; color: #356d57; background: #dceee7; font-size: 10px; font-weight: 750; text-transform: uppercase; }
+.diagnostic-result.fail { color: #8c3636; background: #f7dddd; }
+.diagnostic-result.unavailable { color: #4c5752; background: #e2e7e5; }
 
 .failure-section { margin-bottom: 18px; }
 .failure-card { margin-top: 10px; padding: 16px 18px; border: 1px solid #e1b5b5; border-left: 5px solid #bd4545; border-radius: 10px; background: #fffafa; box-shadow: 0 5px 16px rgba(132, 42, 42, .06); }
@@ -496,6 +520,11 @@ select {
   .mobile-operation-summary summary { color: var(--brand); cursor: pointer; font-size: 12px; font-weight: 650; }
   .readiness-list li { grid-template-columns: 24px minmax(0, 1fr); }
   .warning-acknowledgement { grid-column: 2; }
+  .readiness-timeout { align-items: start; flex-direction: column; }
+  .diagnostic-launch { grid-column: 2; justify-self: start; }
+  .gopro-diagnostics > header { display: grid; }
+  .gopro-diagnostic-checks li { grid-template-columns: 24px minmax(0, 1fr); }
+  .gopro-diagnostic-checks .diagnostic-result { grid-column: 2; justify-self: start; }
   .failure-card header { display: grid; }
   .failure-card time { white-space: normal; }
   .diagnostic-controls { align-items: flex-start; flex-direction: column; }

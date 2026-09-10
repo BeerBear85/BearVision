@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { PassThrough } from "node:stream";
 import test from "node:test";
 
-import { createEdgeControlServer } from "./server.mjs";
+import { createEdgeControlServer, runJsonProcess } from "./server.mjs";
 
 async function runningServer(options = {}) {
   const control = createEdgeControlServer(options);
@@ -209,4 +209,62 @@ test("a terminal failed run can be ended without starting a replacement", async 
   assert.equal(ended.body.active_run, null);
   assert.equal(ended.body.recent_runs[0].stage, "failed");
   assert.equal(spawnCount, 1);
+});
+
+test("GoPro diagnostics exposes a validated layered report", async (context) => {
+  const diagnostics = {
+    diagnostics_schema_version: "1.0",
+    checked_at: "2026-09-10T10:00:00Z",
+    target: "172.24.106.51:8080",
+    status: "fail",
+    summary: "The GoPro is visible over USB, but its USB network connection is not ready.",
+    checks: [{
+      check_id: "usb_device",
+      label: "USB device detection",
+      status: "pass",
+      evidence: "Detected GoPro.",
+      corrective_action: null,
+    }],
+  };
+  const control = await runningServer({
+    persistState: false,
+    runGoProDiagnostics: async () => diagnostics,
+  });
+  context.after(() => control.close());
+
+  const { response, body } = await control.request("/api/readiness/diagnostics/gopro", {
+    method: "POST",
+  });
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(body, diagnostics);
+});
+
+test("a timed-out JSON process is terminated and returns the configured error", async () => {
+  const child = fakeRuntimeChild();
+  let killedWith = null;
+  child.kill = (signal) => {
+    killedWith = signal;
+    child.emit("exit", null, signal);
+    return true;
+  };
+
+  const processResult = runJsonProcess("python", [], {
+    spawnProcess: () => child,
+    timeoutMs: 10,
+    timeoutError: {
+      code: "READINESS_TIMEOUT",
+      message: "Readiness timed out.",
+      correctiveAction: "Run advanced diagnostics.",
+    },
+  });
+  const harnessTimeout = new Promise((_, reject) => {
+    setTimeout(() => reject(new Error("Regression harness expired.")), 100);
+  });
+
+  await assert.rejects(
+    () => Promise.race([processResult, harnessTimeout]),
+    (error) => error.code === "READINESS_TIMEOUT" && error.status === 504,
+  );
+  assert.equal(killedWith, "SIGTERM");
 });

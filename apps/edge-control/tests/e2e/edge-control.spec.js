@@ -51,6 +51,7 @@ async function startFixture(options = {}) {
         return runtime;
       },
       runReadiness: options.runReadiness,
+      runGoProDiagnostics: options.runGoProDiagnostics,
     });
     if (!options.useStartupDefault) control.state.selectMode(options.initialMode ?? "simulation");
   } finally {
@@ -276,6 +277,95 @@ test("critical hardware failure blocks start and keeps corrective action visible
     await expect(page.getByRole("region", { name: "Hardware readiness" })).toContainText(
       "Connect and power on the GoPro, then run readiness again.",
     );
+  } finally {
+    await fixture.close();
+  }
+});
+
+test("failed GoPro readiness offers layered advanced diagnostics", async ({ page }) => {
+  const fixture = await startFixture({
+    runReadiness: async () => readinessReport({
+      checks: [{
+        check_id: "camera",
+        label: "GoPro camera",
+        status: "fail",
+        critical: true,
+        evidence: "No preview frame arrived.",
+        corrective_action: "Reconnect the camera.",
+      }],
+    }),
+    runGoProDiagnostics: async () => ({
+      diagnostics_schema_version: "1.0",
+      checked_at: "2026-09-10T10:00:00Z",
+      target: "172.24.106.51:8080",
+      status: "fail",
+      summary: "The GoPro is visible over USB, but its USB network connection is not ready.",
+      checks: [
+        { check_id: "usb_device", label: "USB device detection", status: "pass", evidence: "Detected GoPro HERO.", corrective_action: null },
+        { check_id: "usb_network", label: "USB network interface", status: "fail", evidence: "No IPv4 interface can reach the camera subnet.", corrective_action: "Reconnect the cable." },
+        { check_id: "camera_tcp", label: "Camera API connection", status: "fail", evidence: "TCP connection failed.", corrective_action: "Check the interface." },
+        { check_id: "camera_http", label: "GoPro HTTP communication", status: "fail", evidence: "No valid response.", corrective_action: "Restart the GoPro." },
+      ],
+    }),
+  });
+  try {
+    await page.goto(fixture.url);
+    await page.getByRole("button", { name: "Hardware" }).click();
+    await page.getByRole("button", { name: "Review blocking issues" }).click();
+
+    const launch = page.getByRole("button", { name: "Run advanced diagnostics" });
+    await expect(launch).toBeVisible();
+    await launch.click();
+
+    const diagnostics = page.getByRole("region", { name: "GoPro connection path" });
+    await expect(diagnostics).toContainText("Detected GoPro HERO.");
+    await expect(diagnostics).toContainText("No IPv4 interface can reach the camera subnet.");
+    await expect(diagnostics).toContainText("do not start preview or recording");
+  } finally {
+    await fixture.close();
+  }
+});
+
+test("readiness timeout opens a safe path to GoPro diagnostics", async ({ page }) => {
+  const fixture = await startFixture({
+    runReadiness: async () => {
+      const error = new Error("Hardware readiness did not finish within 75 seconds.");
+      Object.assign(error, {
+        code: "READINESS_TIMEOUT",
+        status: 504,
+        correctiveAction: "Run advanced GoPro diagnostics, then retry readiness.",
+      });
+      throw error;
+    },
+    runGoProDiagnostics: async () => ({
+      diagnostics_schema_version: "1.0",
+      checked_at: "2026-09-10T10:00:00Z",
+      target: "172.24.106.51:8080",
+      status: "pass",
+      summary: "The Edge computer can communicate with the GoPro HTTP API.",
+      checks: [{
+        check_id: "usb_device",
+        label: "USB device detection",
+        status: "pass",
+        evidence: "Detected GoPro HERO12 Black.",
+        corrective_action: null,
+      }],
+    }),
+  });
+  try {
+    await page.goto(fixture.url);
+    await page.getByRole("button", { name: "Hardware" }).click();
+
+    await expect(page).toHaveURL(/\/readiness$/);
+    await expect(page.getByRole("heading", { name: "Readiness timed out" })).toBeVisible();
+    const launch = page.getByRole("button", { name: "Run advanced GoPro diagnostics" });
+    await expect(launch).toBeVisible();
+    await launch.click();
+
+    const diagnostics = page.getByRole("region", { name: "GoPro connection path" });
+    await expect(diagnostics).toContainText("Detected GoPro HERO12 Black.");
+    await expect(diagnostics).toContainText("communicate with the GoPro HTTP API");
+    await expect(page.getByRole("button", { name: "Run readiness" })).toBeEnabled();
   } finally {
     await fixture.close();
   }

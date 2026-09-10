@@ -16,6 +16,7 @@ from uuid import uuid4
 from bearvision.config import load_edge_config
 from bearvision.contracts import RuntimeEventKind, serialize_runtime_event
 from bearvision.edge import build_real_orchestrator
+from bearvision.edge.gopro_diagnostics import diagnose_gopro
 from bearvision.edge.preflight import check_edge_readiness
 from bearvision.simulation import ReplayOptions, ScenarioExecution
 
@@ -219,6 +220,7 @@ def main() -> int:
     preflight.add_argument("--config", type=Path, default=Path("config/edge.yaml"))
     preflight.add_argument("--capture-dir", type=Path, default=Path("temp/captures"))
     preflight.add_argument("--scratch-dir", type=Path, default=Path("temp/scratch"))
+    commands.add_parser("diagnose-gopro")
     args = parser.parse_args()
     if args.command == "simulate":
         return simulate(
@@ -238,6 +240,9 @@ def main() -> int:
         )
         print(json.dumps(report), flush=True)
         return 1 if report["blocking"] else 0
+    if args.command == "diagnose-gopro":
+        print(json.dumps(diagnose_gopro().to_dict()), flush=True)
+        return 0
     return asyncio.run(
         hardware(
             args.config,

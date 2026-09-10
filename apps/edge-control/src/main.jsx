@@ -281,19 +281,74 @@ function Pipeline({ mode, run, readiness, readinessChecking, summary, now }) {
   );
 }
 
-function ReadinessPanel({ report, acknowledged, onAcknowledge, onRun, busy }) {
+function GoProDiagnostics({ report }) {
+  if (!report) return null;
+  return (
+    <section className="gopro-diagnostics" aria-labelledby="gopro-diagnostics-heading" aria-live="polite">
+      <header>
+        <div>
+          <span className="eyebrow">Advanced diagnostics</span>
+          <h3 id="gopro-diagnostics-heading">GoPro connection path</h3>
+          <p>{report.summary}</p>
+        </div>
+        <span className={`diagnostic-result ${report.status}`}>{formatLabel(report.status)}</span>
+      </header>
+      <p className="diagnostic-meta">Target {report.target} · Checked {formatDate(report.checked_at)}</p>
+      <ol className="gopro-diagnostic-checks">
+        {report.checks.map((check) => (
+          <li key={check.check_id} className={check.status}>
+            <span className={`check-mark ${check.status}`} aria-hidden="true">
+              {check.status === "pass" ? "✓" : check.status === "fail" ? "×" : "?"}
+            </span>
+            <div>
+              <strong>{check.label}</strong>
+              <small>{check.evidence}</small>
+              {check.status !== "pass" && check.corrective_action && <p>{check.corrective_action}</p>}
+            </div>
+            <span className={`diagnostic-result ${check.status}`}>{formatLabel(check.status)}</span>
+          </li>
+        ))}
+      </ol>
+      <p className="diagnostic-safety">These checks do not start preview or recording and do not change camera settings.</p>
+    </section>
+  );
+}
+
+function ReadinessPanel({
+  report, acknowledged, onAcknowledge, onRun, busy,
+  timeout, diagnostics, onRunDiagnostics, diagnosticsBusy,
+}) {
   const checks = report?.checks ?? [];
   const status = report?.status === "not_checked" ? "not_checked" : report?.blocking ? "blocked" : "ready";
   return (
     <section className="readiness-panel panel" aria-labelledby="readiness-heading">
       <div className="panel-title">
         <div><span className="eyebrow">Before hardware starts</span><h2 id="readiness-heading">Hardware readiness</h2></div>
-        <button className="secondary" type="button" onClick={onRun} disabled={busy}>
+        <button className="secondary" type="button" onClick={onRun} disabled={busy || diagnosticsBusy}>
           {busy ? "Checking…" : "Run readiness"}
         </button>
       </div>
       {busy && <p className="panel-empty" role="status">Checking the camera, BearTags and required services. Previous results are hidden until this check finishes.</p>}
-      {!busy && status === "not_checked" && <p className="panel-empty">Readiness has not been checked.</p>}
+      {!busy && status === "not_checked" && !timeout && <p className="panel-empty">Readiness has not been checked.</p>}
+      {!busy && timeout && (
+        <section className="readiness-timeout" role="alert" aria-labelledby="readiness-timeout-heading">
+          <div>
+            <span className="eyebrow">Check stopped safely</span>
+            <h3 id="readiness-timeout-heading">Readiness timed out</h3>
+            <p>{timeout.message}</p>
+            <p>{timeout.correctiveAction}</p>
+            <small>The full check may be waiting on the camera or another hardware service.</small>
+          </div>
+          <button
+            className="secondary"
+            type="button"
+            onClick={onRunDiagnostics}
+            disabled={diagnosticsBusy}
+          >
+            {diagnosticsBusy ? "Running diagnostics…" : "Run advanced GoPro diagnostics"}
+          </button>
+        </section>
+      )}
       {!busy && checks.length > 0 && [
         ["fail", "Blocking issues"],
         ["warning", "Warnings"],
@@ -315,6 +370,16 @@ function ReadinessPanel({ report, acknowledged, onAcknowledge, onRun, busy }) {
                     <small>{check.evidence}</small>
                     {check.status !== "pass" && <p>{check.corrective_action}</p>}
                   </div>
+                  {check.check_id === "camera" && check.status === "fail" && (
+                    <button
+                      className="secondary diagnostic-launch"
+                      type="button"
+                      onClick={onRunDiagnostics}
+                      disabled={busy || diagnosticsBusy}
+                    >
+                      {diagnosticsBusy ? "Running diagnostics…" : "Run advanced diagnostics"}
+                    </button>
+                  )}
                   {check.status === "warning" && (
                     <label className="warning-acknowledgement">
                       <input
@@ -331,6 +396,7 @@ function ReadinessPanel({ report, acknowledged, onAcknowledge, onRun, busy }) {
           </section>
         );
       })}
+      {!busy && <GoProDiagnostics report={diagnostics} />}
     </section>
   );
 }
@@ -488,6 +554,8 @@ function App() {
   const [previewVersion, setPreviewVersion] = useState(0);
   const [previewAvailable, setPreviewAvailable] = useState(false);
   const [acknowledgedWarnings, setAcknowledgedWarnings] = useState(new Set());
+  const [readinessFailure, setReadinessFailure] = useState(null);
+  const [goproDiagnostics, setGoproDiagnostics] = useState(null);
   const [busyAction, setBusyAction] = useState("");
   const [requestedStopRunId, setRequestedStopRunId] = useState(null);
   const [stopOutcome, setStopOutcome] = useState(null);
@@ -699,6 +767,15 @@ function App() {
   }) : null;
   const filteredEvents = events.filter((event) => showsAtMinimumLogLevel(event, minimumLogLevel));
 
+  function showReadinessTimeout(reason) {
+    setReadinessFailure({
+      message: reason.message,
+      correctiveAction: reason.correctiveAction,
+    });
+    updateSnapshot({ mode: "hardware", readiness: null });
+    navigateTo("readiness");
+  }
+
   async function perform(name, action) {
     setBusyAction(name);
     setActionNotice(null);
@@ -708,13 +785,17 @@ function App() {
       updateSnapshot(next);
       return next;
     } catch (reason) {
-      setActionNotice(actionFailureNotice(name, reason, {
-        run: state.active_run,
-        mode: state.mode,
-        scenario: selectedScenario,
-        streamConnected,
-        lastKnownAt: snapshotReceivedAt,
-      }));
+      if (reason.code === "READINESS_TIMEOUT") {
+        showReadinessTimeout(reason);
+      } else {
+        setActionNotice(actionFailureNotice(name, reason, {
+          run: state.active_run,
+          mode: state.mode,
+          scenario: selectedScenario,
+          streamConnected,
+          lastKnownAt: snapshotReceivedAt,
+        }));
+      }
       return null;
     } finally {
       setBusyAction("");
@@ -736,22 +817,63 @@ function App() {
   }
 
   async function chooseMode(mode) {
+    setAcknowledgedWarnings(new Set());
+    setReadinessFailure(null);
+    setGoproDiagnostics(null);
     await perform("mode", () => request("/api/mode", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ mode }),
     }));
-    setAcknowledgedWarnings(new Set());
     setEvents([]);
     resetMediaContext();
   }
 
-  function runReadiness() {
+  async function runReadiness() {
     setAcknowledgedWarnings(new Set());
-    return perform("readiness", async () => {
+    setReadinessFailure(null);
+    setGoproDiagnostics(null);
+    setBusyAction("readiness");
+    setActionNotice(null);
+    try {
       const report = await request("/api/readiness/run", { method: "POST" });
-      return { readiness: report };
-    });
+      updateSnapshot({ readiness: report });
+      return report;
+    } catch (reason) {
+      if (reason.code === "READINESS_TIMEOUT") {
+        showReadinessTimeout(reason);
+      } else {
+        setActionNotice(actionFailureNotice("readiness", reason, {
+          run: state.active_run,
+          mode: state.mode,
+          streamConnected,
+          lastKnownAt: snapshotReceivedAt,
+        }));
+      }
+      return null;
+    } finally {
+      setBusyAction("");
+    }
+  }
+
+  async function runGoproDiagnostics() {
+    setBusyAction("gopro-diagnostics");
+    setActionNotice(null);
+    try {
+      const report = await request("/api/readiness/diagnostics/gopro", { method: "POST" });
+      setGoproDiagnostics(report);
+      return report;
+    } catch (reason) {
+      setActionNotice(actionFailureNotice("gopro-diagnostics", reason, {
+        run: state.active_run,
+        mode: state.mode,
+        streamConnected,
+        lastKnownAt: snapshotReceivedAt,
+      }));
+      return null;
+    } finally {
+      setBusyAction("");
+    }
   }
 
   function startRun() {
@@ -1128,6 +1250,10 @@ function App() {
                   acknowledged={acknowledgedWarnings}
                   onAcknowledge={acknowledgeWarning}
                   onRun={runReadiness}
+                  timeout={readinessFailure}
+                  diagnostics={goproDiagnostics}
+                  onRunDiagnostics={runGoproDiagnostics}
+                  diagnosticsBusy={busyAction === "gopro-diagnostics"}
                   busy={busyAction === "readiness" || Boolean(run)}
                 />
               ) : (

@@ -95,18 +95,62 @@ function serveMedia(request, response, filePath) {
   createReadStream(filePath, parsed).pipe(response);
 }
 
-function runJsonProcess(command, args, { cwd, env = process.env } = {}) {
+export function runJsonProcess(
+  command,
+  args,
+  {
+    cwd,
+    env = process.env,
+    spawnProcess = spawn,
+    timeoutMs = null,
+    timeoutError = null,
+    terminateGraceMs = 1_000,
+  } = {},
+) {
   return new Promise((resolvePromise, rejectPromise) => {
-    const child = spawn(command, args, { cwd, env, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawnProcess(command, args, {
+      cwd, env, windowsHide: true, stdio: ["ignore", "pipe", "pipe"],
+    });
     let stdout = "";
     let stderr = "";
+    let timedOut = false;
+    let exited = false;
+    let forceKillTimer = null;
+    const timeoutTimer = Number.isFinite(timeoutMs) && timeoutMs > 0
+      ? setTimeout(() => {
+        timedOut = true;
+        rejectPromise(new ControlError(
+          timeoutError?.code ?? "PYTHON_COMMAND_TIMEOUT",
+          timeoutError?.message ?? "The Python command timed out.",
+          {
+            status: 504,
+            correctiveAction: timeoutError?.correctiveAction ?? "Try the operation again.",
+            details: { timeout_ms: timeoutMs },
+          },
+        ));
+        forceKillTimer = setTimeout(() => {
+          if (!exited) {
+            try { child.kill("SIGKILL"); } catch { /* The process has already exited. */ }
+          }
+        }, terminateGraceMs);
+        try { child.kill("SIGTERM"); } catch { /* The process has already exited. */ }
+      }, timeoutMs)
+      : null;
     child.stdout.on("data", (chunk) => {
       stdout += chunk;
       if (stdout.length > 1024 * 1024) child.kill("SIGTERM");
     });
     child.stderr.on("data", (chunk) => { stderr += chunk; });
-    child.once("error", rejectPromise);
+    child.once("error", (error) => {
+      if (timeoutTimer) clearTimeout(timeoutTimer);
+      if (forceKillTimer) clearTimeout(forceKillTimer);
+      if (!timedOut) rejectPromise(error);
+    });
     child.once("exit", () => {
+      exited = true;
+      if (timeoutTimer) clearTimeout(timeoutTimer);
+      if (forceKillTimer) clearTimeout(forceKillTimer);
+      if (timedOut) return;
       try {
         const line = stdout.trim().split(/\r?\n/).at(-1);
         if (!line) throw new Error(stderr.trim() || "Python command returned no JSON");
@@ -135,6 +179,13 @@ export function createEdgeControlServer(options = {}) {
     ?? join(repoRoot, "temp", "scratch");
   const localQueueRoot = options.localQueueRoot ?? process.env.BEARVISION_LOCAL_QUEUE_ROOT
     ?? join(repoRoot, "temp", "simulation-queue");
+  const configuredReadinessTimeoutMs = Number(
+    options.readinessTimeoutMs ?? process.env.BEARVISION_READINESS_TIMEOUT_MS ?? 75_000,
+  );
+  const readinessTimeoutMs = Number.isFinite(configuredReadinessTimeoutMs)
+    && configuredReadinessTimeoutMs > 0
+    ? configuredReadinessTimeoutMs
+    : 75_000;
   const previewFramePath = join(scratchRoot, "live-preview.jpg");
   const readPreviewFrame = options.readPreviewFrame ?? readFile;
   const stateFile = options.persistState === false
@@ -195,7 +246,28 @@ export function createEdgeControlServer(options = {}) {
       "-m", "bearvision.control", "preflight", "--config", configPath,
       "--capture-dir", captureRoot, "--scratch-dir", scratchRoot,
     ],
-    { cwd: repoRoot },
+    {
+      cwd: repoRoot,
+      timeoutMs: readinessTimeoutMs,
+      timeoutError: {
+        code: "READINESS_TIMEOUT",
+        message: `Hardware readiness did not finish within ${Math.round(readinessTimeoutMs / 1_000)} seconds.`,
+        correctiveAction: "Run advanced GoPro diagnostics, then retry readiness.",
+      },
+    },
+  ));
+  const runGoProDiagnostics = options.runGoProDiagnostics ?? (() => runJsonProcess(
+    pythonCommand(repoRoot),
+    ["-m", "bearvision.control", "diagnose-gopro"],
+    {
+      cwd: repoRoot,
+      timeoutMs: 15_000,
+      timeoutError: {
+        code: "GOPRO_DIAGNOSTICS_TIMEOUT",
+        message: "Advanced GoPro diagnostics did not finish within 15 seconds.",
+        correctiveAction: "Check the Edge service logs and retry diagnostics.",
+      },
+    },
   ));
   const readiness = options.readiness ?? new ReadinessService({ runCommand: runReadiness });
   const eventStream = options.eventStream ?? new EventStream({ getSnapshot: () => ({
@@ -280,6 +352,23 @@ export function createEdgeControlServer(options = {}) {
       } else if (request.method === "POST" && url.pathname === "/api/readiness/run") {
         const report = await readiness.run();
         publishControlEvent({ kind: "readiness_updated", payload: report });
+        writeJson(response, 200, report);
+      } else if (
+        request.method === "POST"
+        && url.pathname === "/api/readiness/diagnostics/gopro"
+      ) {
+        const report = await runGoProDiagnostics();
+        if (
+          report?.diagnostics_schema_version !== "1.0"
+          || !["pass", "fail"].includes(report.status)
+          || !Array.isArray(report.checks)
+        ) {
+          throw new ControlError(
+            "GOPRO_DIAGNOSTICS_INVALID",
+            "The runtime returned an invalid GoPro diagnostic report.",
+            { status: 502, correctiveAction: "Review the Python runtime logs." },
+          );
+        }
         writeJson(response, 200, report);
       } else if (request.method === "GET" && url.pathname === "/api/runs/current") {
         writeJson(response, 200, state.snapshot().active_run);
