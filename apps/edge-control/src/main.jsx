@@ -28,6 +28,18 @@ const initialState = {
 
 const DEFAULT_SIMULATION_SCENARIO = "wakeboard-testmovie1-yolo.yaml";
 
+const PAGE_PATHS = {
+  overview: "/",
+  readiness: "/readiness",
+  logs: "/logs",
+};
+
+function pageFromPath(pathname) {
+  if (pathname === PAGE_PATHS.readiness) return "readiness";
+  if (pathname === PAGE_PATHS.logs || pathname === "/diagnostics") return "logs";
+  return "overview";
+}
+
 function preferredScenarioName(scenarios) {
   return scenarios.find((scenario) => scenario.name === DEFAULT_SIMULATION_SCENARIO)?.name
     ?? scenarios.find((scenario) => scenario.video_url)?.name
@@ -202,6 +214,13 @@ function Pipeline({ mode, run, readiness, readinessChecking, summary, now }) {
   const backgroundStages = [
     "queued", "processing", "packaging", "uploading", "failed", "completed",
   ];
+  const monitoringStatus = summary.code === "starting"
+    ? "upcoming"
+    : run?.stage === "monitoring"
+      ? "current"
+      : run
+        ? "complete"
+        : "upcoming";
   return (
     <section className="pipeline panel" aria-labelledby="pipeline-heading" aria-live="polite">
       <div className="pipeline-heading">
@@ -220,7 +239,7 @@ function Pipeline({ mode, run, readiness, readinessChecking, summary, now }) {
           <h3>Live</h3>
           <ol className="pipeline-steps">
             <li className={readinessChecking ? "current" : readiness?.blocking ? "failed" : "complete"} aria-current={readinessChecking ? "step" : undefined}><span>1</span><strong>{mode === "simulation" ? "Readiness: Not used" : readinessChecking ? "Readiness: Checking" : "Readiness"}</strong></li>
-            <li className={run?.stage === "monitoring" ? "current" : run ? "complete" : "upcoming"} aria-current={run?.stage === "monitoring" ? "step" : undefined}><span>2</span><strong>Monitoring</strong></li>
+            <li className={monitoringStatus} aria-current={monitoringStatus === "current" ? "step" : undefined}><span>2</span><strong>Monitoring</strong></li>
             <li className={camera.activity === "capturing" ? "current" : "upcoming"}><span>3</span><strong>Camera: {formatLabel(camera.activity)}</strong></li>
           </ol>
           <p className="pipeline-detail">{camera.pending_captures} pending capture{camera.pending_captures === 1 ? "" : "s"}{camera.request_id ? ` · ${camera.request_id}` : ""}</p>
@@ -316,6 +335,41 @@ function ReadinessPanel({ report, acknowledged, onAcknowledge, onRun, busy }) {
   );
 }
 
+function ReadinessSummary({ report, busy, disabled, onRun, onOpen }) {
+  const checks = report?.checks ?? [];
+  const passed = checks.filter((check) => check.status === "pass").length;
+  const warnings = checks.filter((check) => check.status === "warning").length;
+  const failures = checks.filter((check) => check.status === "fail").length;
+  const status = busy
+    ? { label: "Checking", tone: "working", detail: "Testing hardware and required services" }
+    : !report || report.status === "not_checked"
+      ? { label: "Not checked", tone: "idle", detail: "Run readiness before hardware starts" }
+      : report.blocking
+        ? { label: "Start blocked", tone: "attention", detail: `${failures} blocking issue${failures === 1 ? "" : "s"}` }
+        : warnings > 0
+          ? { label: "Review needed", tone: "attention", detail: `${passed} passed / ${warnings} warning${warnings === 1 ? "" : "s"}` }
+          : { label: "Ready", tone: "ok", detail: `${passed} check${passed === 1 ? "" : "s"} passed` };
+  return (
+    <section className="readiness-summary panel" aria-label="Readiness summary" aria-live="polite">
+      <div className="readiness-summary-copy">
+        <span className="eyebrow">Hardware readiness</span>
+        <div className="readiness-summary-state">
+          <span className={`dot ${status.tone}`} aria-hidden="true" />
+          <strong>{status.label}</strong>
+        </div>
+        <p>{status.detail}</p>
+        {report?.checked_at && <small>Last checked {formatDate(report.checked_at)}</small>}
+      </div>
+      <div className="readiness-summary-actions">
+        <button className="secondary" type="button" onClick={onRun} disabled={busy || disabled}>
+          {busy ? "Checking..." : report ? "Run readiness again" : "Run readiness"}
+        </button>
+        <button className="summary-link" type="button" onClick={onOpen}>View all checks</button>
+      </div>
+    </section>
+  );
+}
+
 function FailureCard({ failure, mode, onRetry, retrying }) {
   const presentation = failurePresentation(failure, mode);
   return (
@@ -375,6 +429,45 @@ function RecentRuns({ runs }) {
   );
 }
 
+function DiagnosticsPage({ events, filteredEvents, minimumLogLevel, onMinimumLogLevelChange }) {
+  return (
+    <div className="diagnostics-page">
+      <div className="detail-page-heading">
+        <div>
+          <span className="eyebrow">Support tool</span>
+          <h2 id="diagnostics-heading">Detailed logs</h2>
+          <p>Normal operation does not require this page. Use it to share evidence with support.</p>
+        </div>
+        <span className="count-badge">{filteredEvents.length}/{events.length} events</span>
+      </div>
+      <section className="diagnostics panel" aria-label="Detailed logs">
+        <div className="diagnostic-controls">
+          <p>Raw events are technical evidence. They do not determine the operator status.</p>
+          <label className="log-filter">
+            <span>Minimum level</span>
+            <select aria-label="Minimum log level" value={minimumLogLevel} onChange={onMinimumLogLevelChange}>
+              <option value="debug">Debug+</option>
+              <option value="info">Info+</option>
+              <option value="warning">Warning+</option>
+              <option value="error">Error</option>
+            </select>
+          </label>
+        </div>
+        <ol className="diagnostic-events">
+          {events.length === 0 && <li className="empty"><strong>No diagnostic events yet</strong><small>Evidence appears when a runtime starts.</small></li>}
+          {events.length > 0 && filteredEvents.length === 0 && <li className="empty"><strong>No matching events</strong><small>Lower the minimum level to show more.</small></li>}
+          {filteredEvents.map((event, index) => (
+            <li key={`${event.sequence ?? "event"}-${index}`}>
+              <time>{event.at_s == null ? "LIVE" : `T+${Number(event.at_s).toFixed(1)}`}</time>
+              <span><strong>{eventMessage(event)}</strong><small>{event.payload?.message ?? event.payload?.error ?? event.payload?.operation_id ?? ""}</small></span>
+            </li>
+          ))}
+        </ol>
+      </section>
+    </div>
+  );
+}
+
 function App() {
   const [state, setState] = useState(initialState);
   const [scenarios, setScenarios] = useState([]);
@@ -399,7 +492,22 @@ function App() {
   const [requestedStopRunId, setRequestedStopRunId] = useState(null);
   const [stopOutcome, setStopOutcome] = useState(null);
   const [now, setNow] = useState(Date.now());
+  const [currentPage, setCurrentPage] = useState(() => pageFromPath(window.location.pathname));
   const videoRef = useRef(null);
+
+  useEffect(() => {
+    const handlePopState = () => setCurrentPage(pageFromPath(window.location.pathname));
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
+
+  function navigateTo(page, event) {
+    event?.preventDefault();
+    const path = PAGE_PATHS[page];
+    if (window.location.pathname !== path) window.history.pushState({}, "", path);
+    setCurrentPage(page);
+    window.scrollTo({ top: 0, behavior: "instant" });
+  }
 
   async function request(path, options) {
     const response = await fetch(path, options);
@@ -755,6 +863,26 @@ function App() {
     overlaySpace && (detectorBox || estimate) && ["scenario", "capture"].includes(displayedMedia),
   );
   const phaseTone = operator.summary.tone;
+  const readinessIssueCount = state.readiness?.checks?.filter(
+    (check) => check.status === "warning" || check.status === "fail",
+  ).length ?? 0;
+  const missingReadinessWarnings = state.readiness?.warning_ids?.filter(
+    (warningId) => !acknowledgedWarnings.has(warningId),
+  ) ?? [];
+  const pageHeader = {
+    overview: {
+      title: "Edge Control",
+      description: "Operate one nearby Edge node and recover failures safely.",
+    },
+    readiness: {
+      title: "Readiness",
+      description: "Check hardware and required services before starting.",
+    },
+    logs: {
+      title: "Logs",
+      description: "Technical evidence for support and engineering diagnosis.",
+    },
+  }[currentPage];
 
   return (
     <div className="app-shell">
@@ -763,11 +891,13 @@ function App() {
           <img className="brand-mark" src={bearVisionLogo} alt="" />
           <span><strong>BearVision</strong><small>Edge Control</small></span>
         </div>
-        <nav aria-label="Page sections">
-          <a href="#control">Control</a>
-          <a href="#pipeline-heading">Pipeline</a>
-          <a href="#preview">Preview</a>
-          <a href="#diagnostics">Diagnostics</a>
+        <nav aria-label="Primary navigation">
+          <a href="/" aria-current={currentPage === "overview" ? "page" : undefined} onClick={(event) => navigateTo("overview", event)}>Overview</a>
+          <a href="/readiness" aria-current={currentPage === "readiness" ? "page" : undefined} onClick={(event) => navigateTo("readiness", event)}>
+            Readiness
+            {readinessIssueCount > 0 && <span className="nav-count">{readinessIssueCount}</span>}
+          </a>
+          <a href="/logs" aria-current={currentPage === "logs" ? "page" : undefined} onClick={(event) => navigateTo("logs", event)}>Logs</a>
         </nav>
         <div className="runtime-state" aria-live="polite">
           <span className={`dot ${phaseTone}`} aria-hidden="true" />
@@ -777,7 +907,7 @@ function App() {
 
       <main>
         <header className="topbar">
-          <div><h1>Edge Control</h1><p>Operate one nearby Edge node and recover failures safely.</p></div>
+          <div><h1>{pageHeader.title}</h1><p>{pageHeader.description}</p></div>
           <span className={`status-badge ${phaseTone}`}><span className="status-dot" />{operator.summary.label}</span>
         </header>
 
@@ -794,6 +924,8 @@ function App() {
         {stopOutcome && <StopOutcome outcome={stopOutcome} onDismiss={() => setStopOutcome(null)} />}
 
         <div className="page">
+          {currentPage === "overview" && (
+            <>
           <OperatorOverview
             connectionState={connectionState}
             mode={state.mode}
@@ -826,9 +958,27 @@ function App() {
                 </label>
               )}
               <div className="control-actions">
-                {!run && (
+                {!run && state.mode === "simulation" && (
                   <button className="primary" disabled={!operator.canStart || busyAction === "start" || (state.mode === "simulation" && !selectedScenario)} onClick={startRun}>
                     {busyAction === "start" ? "Starting…" : state.mode === "simulation" ? "Run scenario" : "Start hardware"}
+                  </button>
+                )}
+                {!run && state.mode === "hardware" && !state.readiness && (
+                  <button className="primary" disabled={readinessChecking || busyAction === "mode"} onClick={runReadiness}>
+                    {readinessChecking ? "Checking..." : "Run readiness"}
+                  </button>
+                )}
+                {!run && state.mode === "hardware" && state.readiness?.blocking && (
+                  <button className="primary" onClick={(event) => navigateTo("readiness", event)}>Review blocking issues</button>
+                )}
+                {!run && state.mode === "hardware" && !state.readiness?.blocking && missingReadinessWarnings.length > 0 && (
+                  <button className="primary" onClick={(event) => navigateTo("readiness", event)}>
+                    Review readiness warning{missingReadinessWarnings.length === 1 ? "" : "s"}
+                  </button>
+                )}
+                {!run && state.mode === "hardware" && state.readiness && !state.readiness.blocking && missingReadinessWarnings.length === 0 && (
+                  <button className="primary" disabled={!operator.canStart || busyAction === "start"} onClick={startRun}>
+                    {busyAction === "start" ? "Starting..." : "Start hardware"}
                   </button>
                 )}
                 {operator.canStop && <button className="danger" disabled={busyAction === "stop"} onClick={stopRun}>Stop runtime</button>}
@@ -838,6 +988,16 @@ function App() {
               </div>
             </div>
           </section>
+
+          {state.mode === "hardware" && (
+            <ReadinessSummary
+              report={state.readiness}
+              busy={readinessChecking}
+              disabled={Boolean(run) || busyAction === "mode"}
+              onRun={runReadiness}
+              onOpen={(event) => navigateTo("readiness", event)}
+            />
+          )}
 
           <Pipeline mode={state.mode} run={run} readiness={state.readiness} readinessChecking={readinessChecking} summary={operator.summary} now={now} />
 
@@ -857,16 +1017,6 @@ function App() {
                 />
               ))}
             </section>
-          )}
-
-          {state.mode === "hardware" && (
-            <ReadinessPanel
-              report={state.readiness}
-              acknowledged={acknowledgedWarnings}
-              onAcknowledge={acknowledgeWarning}
-              onRun={runReadiness}
-              busy={busyAction === "readiness" || Boolean(run)}
-            />
           )}
 
           <section className="dashboard" aria-label="Runtime workspace">
@@ -959,35 +1109,45 @@ function App() {
               <RecentRuns runs={state.recent_runs ?? []} />
             </aside>
           </section>
+            </>
+          )}
 
-          <details className="diagnostics panel" id="diagnostics">
-            <summary>
-              <span><span className="eyebrow">Technical evidence</span><strong>Diagnostics</strong></span>
-              <span className="count-badge">{filteredEvents.length}/{events.length}</span>
-            </summary>
-            <div className="diagnostic-controls">
-              <p>Raw events are intended for support and engineering diagnosis.</p>
-              <label className="log-filter">
-                <span>Minimum level</span>
-                <select aria-label="Minimum log level" value={minimumLogLevel} onChange={(event) => setMinimumLogLevel(event.target.value)}>
-                  <option value="debug">Debug+</option>
-                  <option value="info">Info+</option>
-                  <option value="warning">Warning+</option>
-                  <option value="error">Error</option>
-                </select>
-              </label>
-            </div>
-            <ol className="diagnostic-events">
-              {events.length === 0 && <li className="empty"><strong>No diagnostic events yet</strong><small>Evidence appears when a runtime starts.</small></li>}
-              {events.length > 0 && filteredEvents.length === 0 && <li className="empty"><strong>No matching events</strong><small>Lower the minimum level to show more.</small></li>}
-              {filteredEvents.map((event, index) => (
-                <li key={`${event.sequence ?? "event"}-${index}`}>
-                  <time>{event.at_s == null ? "LIVE" : `T+${Number(event.at_s).toFixed(1)}`}</time>
-                  <span><strong>{eventMessage(event)}</strong><small>{event.payload?.message ?? event.payload?.error ?? event.payload?.operation_id ?? ""}</small></span>
-                </li>
-              ))}
-            </ol>
-          </details>
+          {currentPage === "readiness" && (
+            <section className="readiness-page" aria-labelledby="readiness-page-heading">
+              <div className="detail-page-heading">
+                <div>
+                  <span className="eyebrow">Hardware checks</span>
+                  <h2 id="readiness-page-heading">Readiness details</h2>
+                  <p>Resolve blocking issues and review warnings before hardware starts.</p>
+                </div>
+                <button className="secondary" type="button" onClick={(event) => navigateTo("overview", event)}>Back to overview</button>
+              </div>
+              {state.mode === "hardware" ? (
+                <ReadinessPanel
+                  report={state.readiness}
+                  acknowledged={acknowledgedWarnings}
+                  onAcknowledge={acknowledgeWarning}
+                  onRun={runReadiness}
+                  busy={busyAction === "readiness" || Boolean(run)}
+                />
+              ) : (
+                <section className="readiness-unavailable panel">
+                  <h3>Hardware mode is not selected</h3>
+                  <p>Simulation does not use physical equipment checks. Return to Overview and select Hardware to run readiness.</p>
+                  <button className="secondary" type="button" onClick={(event) => navigateTo("overview", event)}>Open Overview</button>
+                </section>
+              )}
+            </section>
+          )}
+
+          {currentPage === "logs" && (
+            <DiagnosticsPage
+              events={events}
+              filteredEvents={filteredEvents}
+              minimumLogLevel={minimumLogLevel}
+              onMinimumLogLevelChange={(event) => setMinimumLogLevel(event.target.value)}
+            />
+          )}
         </div>
       </main>
     </div>

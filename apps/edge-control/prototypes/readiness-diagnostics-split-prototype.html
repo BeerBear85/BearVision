@@ -1,0 +1,301 @@
+<!doctype html>
+<!--
+  THROWAWAY UI PROTOTYPE.
+  Question: How should Edge Control separate readiness details and diagnostics from the main operator screen?
+  Three structural variants are switchable with ?variant=command|workflow|focus.
+  Review iterations are preserved with ?round=0|1|2 and screens with ?view=overview|readiness|logs.
+  Run from apps/edge-control with: corepack pnpm dev
+-->
+<html lang="da">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BearVision Edge Control prototype</title>
+  <style>
+    :root {
+      font-family: Inter, "Segoe UI", system-ui, sans-serif;
+      color: #17211d;
+      background: #eef3f0;
+      --ink: #17211d;
+      --muted: #68766f;
+      --line: #d5ded9;
+      --surface: #fff;
+      --canvas: #eef3f0;
+      --brand: #176a50;
+      --brand-dark: #0d2c22;
+      --brand-soft: #e0f0e9;
+      --amber: #b77416;
+      --amber-soft: #fff3d9;
+      --red: #9b3939;
+      --red-soft: #fff0ef;
+      --blue: #346a8a;
+      --blue-soft: #e9f3f8;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-width: 1180px; min-height: 100vh; background: var(--canvas); }
+    button, select { font: inherit; }
+    button { cursor: pointer; }
+    .shell { display: grid; grid-template-columns: 230px 1fr; min-height: 100vh; }
+    .sidebar { background: var(--brand-dark); color: #fff; padding: 26px 20px; display: flex; flex-direction: column; gap: 34px; }
+    .brand { display: flex; align-items: center; gap: 11px; }
+    .brand-mark { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 10px; background: #f1b34a; color: #193127; font-weight: 850; letter-spacing: -.5px; }
+    .brand strong { display: block; font-size: 17px; }
+    .brand small { display: block; margin-top: 2px; color: #a9bdb4; }
+    nav { display: grid; gap: 8px; }
+    nav button { width: 100%; border: 0; border-radius: 9px; padding: 12px 13px; color: #bed0c8; background: transparent; text-align: left; font-weight: 650; }
+    nav button[aria-current="page"] { background: #22463a; color: #fff; }
+    nav button span { float: right; color: #f2bd61; font-size: 12px; }
+    .node { margin-top: auto; padding-top: 18px; border-top: 1px solid #315045; display: grid; grid-template-columns: 10px 1fr; gap: 10px; align-items: center; }
+    .dot { width: 10px; height: 10px; border-radius: 50%; background: #4db187; box-shadow: 0 0 0 4px rgba(77,177,135,.13); }
+    .node strong, .node small { display: block; }
+    .node small { margin-top: 2px; color: #9fb4ab; }
+    main { min-width: 0; }
+    .topbar { height: 82px; padding: 18px 34px; background: rgba(255,255,255,.88); border-bottom: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; }
+    .topbar h1 { margin: 0 0 3px; font-size: 24px; letter-spacing: -.5px; }
+    .topbar p { margin: 0; color: var(--muted); font-size: 13px; }
+    .live-chip { display: flex; align-items: center; gap: 8px; padding: 8px 11px; border: 1px solid #cbd8d2; border-radius: 999px; background: #fff; font-size: 12px; font-weight: 700; }
+    .page { padding: 24px 34px 90px; max-width: 1480px; margin: 0 auto; }
+    .eyebrow { display: block; margin-bottom: 6px; color: var(--brand); font-size: 11px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; }
+    h2, h3, p { margin-top: 0; }
+    h2 { margin-bottom: 8px; font-size: 23px; letter-spacing: -.4px; }
+    h3 { margin-bottom: 8px; font-size: 16px; }
+    p { color: var(--muted); line-height: 1.45; }
+    .panel { border: 1px solid var(--line); border-radius: 15px; background: var(--surface); box-shadow: 0 7px 22px rgba(18,41,32,.045); }
+    .status-hero { display: flex; align-items: center; justify-content: space-between; gap: 28px; min-height: 116px; padding: 22px 24px; border-left: 5px solid var(--brand); }
+    .status-hero.warning { border-left-color: var(--amber); }
+    .status-hero .headline { display: flex; gap: 16px; align-items: center; }
+    .status-icon { display: grid; place-items: center; width: 50px; height: 50px; border-radius: 50%; background: var(--brand-soft); color: var(--brand); font-size: 25px; font-weight: 800; flex: 0 0 auto; }
+    .warning .status-icon { background: var(--amber-soft); color: var(--amber); }
+    .status-hero h2 { font-size: 27px; margin-bottom: 3px; }
+    .status-hero p { margin-bottom: 0; }
+    .status-meta { display: flex; gap: 24px; white-space: nowrap; }
+    .status-meta span { display: block; font-size: 12px; color: var(--muted); }
+    .status-meta strong { display: block; margin-top: 4px; color: var(--ink); font-size: 14px; }
+    .workspace { margin-top: 18px; display: grid; grid-template-columns: minmax(0, 1.75fr) minmax(320px, .75fr); gap: 18px; }
+    .preview { min-height: 510px; overflow: hidden; display: flex; flex-direction: column; }
+    .panel-head { padding: 19px 21px; border-bottom: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; }
+    .panel-head h2 { margin: 0; font-size: 19px; }
+    .mode { padding: 6px 9px; border-radius: 7px; background: #edf2ef; color: #4f5d57; font-size: 11px; font-weight: 800; text-transform: uppercase; }
+    .lake { position: relative; flex: 1; min-height: 360px; background: linear-gradient(165deg,#a7d0dd 0 28%,#5b8795 29% 55%,#214d4f 56% 100%); overflow: hidden; }
+    .lake:before { content: ""; position: absolute; inset: 40% -5% auto; height: 45%; background: repeating-linear-gradient(177deg,rgba(255,255,255,.12) 0 3px,transparent 3px 27px); transform: rotate(-2deg); }
+    .lake:after { content: "LIVE PREVIEW"; position: absolute; left: 16px; top: 16px; padding: 6px 9px; border-radius: 6px; background: rgba(13,44,34,.85); color: #fff; font-size: 11px; font-weight: 800; letter-spacing: .8px; }
+    .rider { position: absolute; left: 50%; top: 52%; width: 92px; height: 118px; border: 3px solid #e0b24d; transform: translate(-50%,-50%); }
+    .rider:after { content: "Rider tracking"; position: absolute; left: -3px; top: -24px; color: #fff3c8; font-size: 11px; font-weight: 700; white-space: nowrap; }
+    .preview-foot { padding: 13px 20px; display: flex; justify-content: space-between; align-items: center; color: var(--muted); font-size: 12px; }
+    .preview-foot strong { color: var(--ink); }
+    .rail { display: grid; gap: 18px; align-content: start; }
+    .action-panel { padding: 21px; }
+    .action-panel h2 { font-size: 21px; }
+    .action-panel p { margin-bottom: 17px; }
+    .mode-toggle { display: grid; grid-template-columns: 1fr 1fr; padding: 4px; background: #edf2ef; border-radius: 9px; margin-bottom: 14px; }
+    .mode-toggle button { padding: 9px; border: 0; border-radius: 7px; background: transparent; color: var(--muted); font-weight: 700; }
+    .mode-toggle .active { color: var(--brand-dark); background: white; box-shadow: 0 1px 5px rgba(0,0,0,.08); }
+    .primary, .secondary { border-radius: 9px; padding: 11px 14px; font-weight: 750; }
+    .primary { border: 1px solid var(--brand); color: white; background: var(--brand); }
+    .secondary { border: 1px solid var(--line); color: var(--brand-dark); background: white; }
+    .wide { width: 100%; }
+    .readiness-summary { padding: 19px 21px; }
+    .summary-row { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
+    .summary-row p { margin: 2px 0 0; font-size: 12px; }
+    .state-text { display: inline-flex; align-items: center; gap: 8px; color: var(--brand); font-weight: 800; }
+    .state-text.warning { color: var(--amber); }
+    .link-button { margin-top: 15px; padding: 0; border: 0; background: transparent; color: var(--brand); font-weight: 750; }
+    .pipeline-strip { margin-top: 18px; padding: 17px 20px; display: grid; grid-template-columns: repeat(4,1fr); gap: 0; }
+    .stage { position: relative; padding: 0 14px 0 30px; border-right: 1px solid var(--line); }
+    .stage:last-child { border: 0; }
+    .stage:before { content: ""; position: absolute; left: 10px; top: 4px; width: 9px; height: 9px; border-radius: 50%; background: #b7c3bd; }
+    .stage.active:before { background: var(--brand); box-shadow: 0 0 0 5px var(--brand-soft); }
+    .stage strong, .stage small { display: block; }
+    .stage small { color: var(--muted); margin-top: 4px; }
+    .screen-title { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 18px; }
+    .screen-title p { margin-bottom: 0; }
+    .screen-title .actions { display: flex; gap: 10px; }
+    .check-summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 16px; }
+    .metric { padding: 18px; }
+    .metric strong { display: block; font-size: 28px; margin-top: 4px; }
+    .metric small { color: var(--muted); }
+    .metric.warn { background: var(--amber-soft); border-color: #efd7a7; }
+    .checks { overflow: hidden; }
+    .check { display: grid; grid-template-columns: 34px 1.1fr 1.6fr 110px; gap: 14px; align-items: center; padding: 16px 19px; border-bottom: 1px solid var(--line); }
+    .check:last-child { border: 0; }
+    .check-icon { display: grid; place-items: center; width: 27px; height: 27px; border-radius: 50%; background: var(--brand-soft); color: var(--brand); font-weight: 850; }
+    .check-icon.warn { background: var(--amber-soft); color: var(--amber); }
+    .check strong, .check small { display: block; }
+    .check small { margin-top: 3px; color: var(--muted); }
+    .evidence { font-size: 13px; color: #506059; }
+    .result { justify-self: end; padding: 5px 8px; border-radius: 999px; background: var(--brand-soft); color: var(--brand); font-size: 11px; font-weight: 800; }
+    .result.warn { background: var(--amber-soft); color: var(--amber); }
+    .readiness-note { margin-top: 14px; padding: 14px 16px; border: 1px solid #ecd29d; border-radius: 11px; background: var(--amber-soft); display: flex; justify-content: space-between; gap: 20px; align-items: center; }
+    .readiness-note p { margin: 0; color: #6e501a; font-size: 13px; }
+    .logs-layout { display: grid; grid-template-columns: 280px 1fr; gap: 16px; }
+    .filters { padding: 18px; }
+    .filters label { display: block; margin: 0 0 8px; color: var(--muted); font-size: 12px; font-weight: 700; }
+    .filters select { width: 100%; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: #fff; margin-bottom: 18px; }
+    .support-box { padding: 14px; border-radius: 10px; background: #edf3f0; }
+    .support-box strong { display: block; font-size: 13px; }
+    .support-box p { margin: 5px 0 10px; font-size: 12px; }
+    .log-table { overflow: hidden; }
+    .log-head, .log-row { display: grid; grid-template-columns: 95px 105px 170px 1fr; gap: 12px; padding: 12px 16px; align-items: start; }
+    .log-head { background: #f4f7f5; color: var(--muted); font-size: 11px; font-weight: 800; text-transform: uppercase; }
+    .log-row { border-top: 1px solid var(--line); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12px; }
+    .log-row .level { font-weight: 800; color: var(--blue); }
+    .log-row .level.warning { color: var(--amber); }
+    .log-row .level.error { color: var(--red); }
+    .workflow-header { display: none; }
+    .focus-shell .sidebar { width: 96px; padding-inline: 13px; }
+    .focus-shell { grid-template-columns: 96px 1fr; }
+    .focus-shell .brand span:last-child, .focus-shell .node span:last-child, .focus-shell nav button { font-size: 0; }
+    .focus-shell nav button:before { content: attr(data-short); display: block; font-size: 12px; text-align: center; }
+    .focus-shell .status-hero { min-height: 170px; }
+    .focus-shell .status-hero h2 { font-size: 36px; }
+    .focus-shell .workspace { grid-template-columns: minmax(0,1fr) 360px; }
+    .workflow-shell { grid-template-columns: 1fr; }
+    .workflow-shell .sidebar { display: none; }
+    .workflow-shell .workflow-header { display: flex; align-items: center; gap: 18px; height: 64px; padding: 0 34px; background: var(--brand-dark); color: #fff; }
+    .workflow-header .brand { margin-right: auto; }
+    .workflow-header button { border: 0; background: transparent; color: #abc0b7; font-weight: 700; }
+    .workflow-header button[aria-current="page"] { color: white; }
+    .workflow-shell .topbar { height: 74px; }
+    .workflow-shell .page { max-width: 1320px; }
+    .workflow-shell .workspace { grid-template-columns: 390px 1fr; }
+    .workflow-shell .action-panel { grid-row: 1; }
+    .workflow-shell .preview { grid-column: 2; grid-row: 1 / span 2; }
+    .workflow-shell .readiness-summary { grid-column: 1; }
+    .review-note { display: none; margin: 0 0 16px; padding: 11px 14px; border-radius: 10px; background: var(--blue-soft); color: #315970; font-size: 12px; }
+    [data-round="0"] .r1, [data-round="0"] .r2, [data-round="1"] .r2 { display: none !important; }
+    [data-round="0"] .review-note.r0, [data-round="1"] .review-note.r1, [data-round="2"] .review-note.r2 { display: block; }
+    [data-round="0"] .status-meta { display: none; }
+    [data-round="0"] .readiness-summary .link-button { display: none; }
+    [data-round="0"] .pipeline-strip { grid-template-columns: repeat(6,1fr); }
+    [data-round="0"] .stage.r0-extra { display: block; }
+    [data-round="1"] .stage.r0-extra, [data-round="2"] .stage.r0-extra { display: none; }
+    [data-round="0"] .preview { min-height: 570px; }
+    [data-round="1"] .status-hero { min-height: 130px; }
+    [data-round="2"] .status-hero { min-height: 112px; }
+    .prototype-bar { position: fixed; z-index: 20; left: 50%; bottom: 15px; transform: translateX(-50%); display: flex; align-items: center; gap: 7px; padding: 7px; border-radius: 999px; background: #101915; color: #fff; box-shadow: 0 8px 30px rgba(0,0,0,.28); }
+    .prototype-bar button { border: 0; border-radius: 999px; padding: 8px 12px; background: transparent; color: #d8e3de; font-size: 12px; }
+    .prototype-bar button.active { color: #14231c; background: #e9f4ef; font-weight: 800; }
+    .prototype-bar .divider { width: 1px; height: 22px; background: #3a4641; }
+    .prototype-bar .cycle { width: 34px; padding-inline: 0; font-size: 16px; }
+  </style>
+</head>
+<body data-round="2">
+  <div id="app"></div>
+  <script>
+    const params = new URLSearchParams(location.search);
+    const variants = ["command", "workflow", "focus"];
+    const names = { command: "Command center", workflow: "Guided workflow", focus: "Focus mode" };
+    const views = ["overview", "readiness", "logs"];
+    const variant = variants.includes(params.get("variant")) ? params.get("variant") : "command";
+    const view = views.includes(params.get("view")) ? params.get("view") : "overview";
+    const round = ["0","1","2"].includes(params.get("round")) ? params.get("round") : "2";
+    document.body.dataset.round = round;
+
+    function go(next) {
+      const url = new URL(location.href);
+      Object.entries(next).forEach(([key,value]) => url.searchParams.set(key,value));
+      location.href = url;
+    }
+
+    function nav() {
+      return `<nav aria-label="Primary navigation">
+        <button data-short="OV" aria-current="${view === "overview" ? "page" : "false"}" onclick="go({view:'overview'})">Overview</button>
+        <button data-short="RT" aria-current="${view === "readiness" ? "page" : "false"}" onclick="go({view:'readiness'})">Readiness <span>1</span></button>
+        <button data-short="LG" aria-current="${view === "logs" ? "page" : "false"}" onclick="go({view:'logs'})">Logs</button>
+      </nav>`;
+    }
+
+    function chrome(content) {
+      const shellClass = variant === "focus" ? "focus-shell" : variant === "workflow" ? "workflow-shell" : "";
+      return `<div class="shell ${shellClass}">
+        <aside class="sidebar">
+          <div class="brand"><span class="brand-mark">BV</span><span><strong>BearVision</strong><small>Edge Control</small></span></div>
+          ${nav()}
+          <div class="node"><span class="dot"></span><span><strong>Edge online</strong><small>Updated 4 sec. ago</small></span></div>
+        </aside>
+        <main>
+          <div class="workflow-header"><div class="brand"><span class="brand-mark">BV</span><strong>Edge Control</strong></div>${nav()}</div>
+          <header class="topbar"><div><h1>${view === "overview" ? "Edge Control" : view === "readiness" ? "Readiness" : "Detailed logs"}</h1><p>${view === "overview" ? "Daily operation of one Edge node" : view === "readiness" ? "Checks before hardware starts" : "Technical evidence for support and engineering"}</p></div><span class="live-chip"><span class="dot"></span>Live connection</span></header>
+          <div class="page">${content}</div>
+        </main>
+      </div>`;
+    }
+
+    function overview() {
+      return `<div class="review-note r0">First mockup: separate destinations, but the overview still shows too many parallel details.</div>
+      <div class="review-note r1">Iteration 1: reduced pipeline, visible readiness link, status and primary action grouped.</div>
+      <div class="review-note r2">Iteration 2: last update and next action remain clear after an interruption.</div>
+      <section class="panel status-hero warning">
+        <div class="headline"><div class="status-icon">!</div><div><span class="eyebrow">Operator status</span><h2>${round === "0" ? "Hardware is nearly ready" : "Ready after 1 warning"}</h2><p>${round === "2" ? "Review the warning or run the check again. You can then start hardware." : "Readiness found one warning. Review it before starting."}</p></div></div>
+        <div class="status-meta r1"><div><span>Readiness</span><strong>6 passed, 1 warning</strong></div><div class="r2"><span>Last checked</span><strong>10:42 · today</strong></div></div>
+      </section>
+      <section class="workspace">
+        <article class="panel preview">
+          <div class="panel-head"><h2>Live preview</h2><span class="mode">Hardware</span></div>
+          <div class="lake"><div class="rider"></div></div>
+          <div class="preview-foot"><span><strong>Camera</strong> ready · 0 pending captures</span><span>Latest frame 10:44:18</span></div>
+        </article>
+        <aside class="rail">
+          <section class="panel action-panel"><span class="eyebrow r2">Next action</span><h2>${round === "2" ? "Review the warning" : "Start hardware"}</h2><p>${round === "2" ? "Free storage is below the recommended level. Operation can continue after you acknowledge the warning." : "The check is valid. Hardware can start after the warning is reviewed."}</p><div class="mode-toggle"><button>Simulation</button><button class="active">Hardware</button></div><button class="primary wide" onclick="go({view:'readiness'})">${round === "2" ? "View readiness warning" : "Start hardware"}</button></section>
+          <section class="panel readiness-summary"><div class="summary-row"><div><strong>Readiness</strong><p>6 passed · 1 warning</p></div><span class="state-text warning">! Review needed</span></div><button class="link-button" onclick="go({view:'readiness'})">View all checks</button></section>
+        </aside>
+      </section>
+      <section class="panel pipeline-strip">
+        <div class="stage active"><strong>Monitoring</strong><small>Camera is tracking</small></div>
+        <div class="stage"><strong>Recording</strong><small>Waiting</small></div>
+        <div class="stage"><strong>Clip queue</strong><small>0 pending</small></div>
+        <div class="stage"><strong>Upload</strong><small>0 active</small></div>
+        <div class="stage r0-extra"><strong>Packaging</strong><small>None</small></div>
+        <div class="stage r0-extra"><strong>History</strong><small>12 runs</small></div>
+      </section>`;
+    }
+
+    function readiness() {
+      return `<div class="screen-title"><div><span class="eyebrow">Hardware checks</span><h2>1 warning needs your review</h2><p>Only critical failures block hardware start.</p></div><div class="actions"><button class="secondary" onclick="go({view:'overview'})">Back to overview</button><button class="primary">Run readiness again</button></div></div>
+      <div class="check-summary"><section class="panel metric"><small>Passed</small><strong>6</strong></section><section class="panel metric warn"><small>Warnings</small><strong>1</strong></section><section class="panel metric"><small>Blocks start</small><strong>0</strong></section></div>
+      <section class="panel checks">
+        ${[
+          ["✓","Camera and preview","GoPro responds, and the latest frame is 2 sec. old","Passed",""],
+          ["✓","BearTag scanner","The BLE adapter is active and scanning","Passed",""],
+          ["✓","Model and runtime","The model loads, and the Python runtime responds","Passed",""],
+          ["!","Free storage","18 GB available. 25 GB is recommended for a full day","Warning","warn"],
+          ["✓","FFmpeg tools","Video can be analysed and clipped","Passed",""],
+          ["✓","Upload connection","The storage adapter can be reached","Passed",""],
+        ].map(c => `<div class="check"><span class="check-icon ${c[4]}">${c[0]}</span><div><strong>${c[1]}</strong><small>${c[4] ? "Free space before a long day, or continue for a short run." : "No action needed"}</small></div><div class="evidence">${c[2]}</div><span class="result ${c[4]}">${c[3]}</span></div>`).join("")}
+      </section>
+      <div class="readiness-note"><p><strong>This warning does not block hardware.</strong> Confirm that you reviewed free storage before starting.</p><button class="secondary">I reviewed this warning</button></div>`;
+    }
+
+    function logs() {
+      const rows = [
+        ["10:44:18","INFO","preview","New camera frame received"],
+        ["10:44:12","INFO","readiness","Readiness completed: 6 passed, 1 warning"],
+        ["10:44:11","WARNING","storage","Only 18 GB free storage"],
+        ["10:44:09","INFO","camera","GoPro preview responds at 172.24.106.51"],
+        ["10:44:07","INFO","runtime","Model loaded in 2.1 sec."],
+        ["10:43:59","INFO","control","Browser live connection restored"],
+      ];
+      return `<div class="screen-title"><div><span class="eyebrow">Support tool</span><h2>Technical events</h2><p>Normal operation does not require this page.</p></div><div class="actions"><button class="secondary" onclick="go({view:'overview'})">Back to overview</button><button class="secondary">Copy support bundle</button></div></div>
+      <section class="logs-layout">
+        <aside class="panel filters"><label>Minimum level</label><select><option>Info and above</option><option>Warning and above</option><option>Errors only</option></select><label>Component</label><select><option>All components</option><option>Camera</option><option>Readiness</option><option>Upload</option></select><div class="support-box"><strong>For support</strong><p>Copy events and context without diagnosing the system yourself.</p><button class="secondary wide">Copy visible logs</button></div></aside>
+        <section class="panel log-table"><div class="log-head"><span>Time</span><span>Level</span><span>Component</span><span>Event</span></div>${rows.map(r => `<div class="log-row"><span>${r[0]}</span><span class="level ${r[1].toLowerCase()}">${r[1]}</span><span>${r[2]}</span><span>${r[3]}</span></div>`).join("")}</section>
+      </section>`;
+    }
+
+    const content = view === "overview" ? overview() : view === "readiness" ? readiness() : logs();
+    document.getElementById("app").innerHTML = chrome(content) + `<div class="prototype-bar" aria-label="Prototype switcher">
+      <button class="cycle" onclick="go({variant:variants[(variants.indexOf(variant)+2)%3]})">←</button>
+      ${variants.map(v => `<button class="${v === variant ? "active" : ""}" onclick="go({variant:'${v}'})">${names[v]}</button>`).join("")}
+      <span class="divider"></span>
+      ${["0","1","2"].map(r => `<button class="${r === round ? "active" : ""}" onclick="go({round:'${r}'})">${r === "0" ? "Base" : "Iter. "+r}</button>`).join("")}
+      <button class="cycle" onclick="go({variant:variants[(variants.indexOf(variant)+1)%3]})">→</button>
+    </div>`;
+
+    addEventListener("keydown", event => {
+      if (["INPUT","TEXTAREA","SELECT"].includes(document.activeElement?.tagName)) return;
+      if (event.key === "ArrowLeft") go({variant:variants[(variants.indexOf(variant)+2)%3]});
+      if (event.key === "ArrowRight") go({variant:variants[(variants.indexOf(variant)+1)%3]});
+    });
+  </script>
+</body>
+</html>

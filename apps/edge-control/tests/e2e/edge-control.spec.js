@@ -88,8 +88,31 @@ test("hardware is the safe startup default", async ({ page }) => {
 
     await expect(page.getByRole("button", { name: "Hardware", exact: true })).toHaveAttribute("aria-pressed", "true");
     await expect(page.getByRole("heading", { name: "Check the hardware before starting" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Start hardware" })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Run readiness", exact: true }).first()).toBeEnabled();
+    await expect(page.getByRole("button", { name: "Start hardware" })).toHaveCount(0);
     await expect(page.getByRole("combobox", { name: "Scenario" })).toHaveCount(0);
+  } finally {
+    await fixture.close();
+  }
+});
+
+test("readiness details and logs live on separate routes", async ({ page }) => {
+  const fixture = await startFixture({ useStartupDefault: true });
+  try {
+    await page.goto(fixture.url);
+
+    await expect(page.getByRole("region", { name: "Readiness summary" })).toBeVisible();
+    await expect(page.getByRole("region", { name: "Hardware readiness" })).toHaveCount(0);
+    await expect(page.getByRole("region", { name: "Detailed logs" })).toHaveCount(0);
+
+    await page.getByRole("link", { name: "Readiness" }).click();
+    await expect(page).toHaveURL(/\/readiness$/);
+    await expect(page.getByRole("region", { name: "Hardware readiness" })).toBeVisible();
+
+    await page.getByRole("link", { name: "Logs" }).click();
+    await expect(page).toHaveURL(/\/logs$/);
+    await expect(page.getByRole("region", { name: "Detailed logs" })).toBeVisible();
+    await expect(page.getByRole("combobox", { name: "Minimum log level" })).toBeVisible();
   } finally {
     await fixture.close();
   }
@@ -118,10 +141,11 @@ test("a repeated readiness check hides the previous failure until the new result
   try {
     await page.goto(fixture.url);
     await page.getByRole("button", { name: "Hardware" }).click();
+    await page.getByRole("link", { name: /Readiness/ }).click();
     await expect(page.getByText("Previous camera failure.")).toBeVisible();
 
     await page.getByRole("button", { name: "Run readiness" }).click();
-    await expect(page.getByRole("heading", { name: "Checking hardware readiness" })).toBeVisible();
+    await expect(page.getByText(/Previous results are hidden until this check finishes/)).toBeVisible();
     await expect(page.getByText("Previous camera failure.")).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Checking…" })).toBeDisabled();
 
@@ -143,6 +167,12 @@ test("the default simulation uses the repository input test video", async ({ pag
     await page.getByRole("button", { name: "Run scenario" }).click();
     await expect(page.getByText(/input test video/)).toBeVisible();
     await expect(page.getByText(/first run can take up to a minute/i)).toBeVisible();
+    const monitoringStep = page
+      .getByRole("article", { name: "Live track" })
+      .locator("li")
+      .filter({ hasText: "Monitoring" });
+    await expect(monitoringStep).toHaveClass("upcoming");
+    await expect(monitoringStep).not.toHaveAttribute("aria-current", "step");
   } finally {
     await fixture.close();
   }
@@ -234,12 +264,13 @@ test("critical hardware failure blocks start and keeps corrective action visible
   try {
     await page.goto(fixture.url);
     await page.getByRole("button", { name: "Hardware" }).click();
+    await page.getByRole("button", { name: "Review blocking issues" }).click();
 
     const readiness = page.getByRole("region", { name: "Hardware readiness" });
     await expect(readiness.getByRole("heading", { name: /Blocking issues/ })).toBeVisible();
     await expect(readiness).toContainText("No preview frame arrived.");
     await expect(readiness).toContainText("Connect and power on the GoPro, then run readiness again.");
-    await expect(page.getByRole("button", { name: "Start hardware" })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Start hardware" })).toHaveCount(0);
 
     await page.reload();
     await expect(page.getByRole("region", { name: "Hardware readiness" })).toContainText(
@@ -271,11 +302,15 @@ test("operator acknowledges a hardware warning by keyboard at 320 px and can sta
     await hardware.focus();
     await page.keyboard.press("Enter");
 
-    const start = page.getByRole("button", { name: "Start hardware" });
-    await expect(start).toBeDisabled();
+    const reviewWarning = page.getByRole("button", { name: "Review readiness warning" });
+    await expect(reviewWarning).toBeVisible();
+    await reviewWarning.focus();
+    await page.keyboard.press("Enter");
     const acknowledgement = page.getByRole("checkbox", { name: "I reviewed this warning" });
     await acknowledgement.focus();
     await page.keyboard.press("Space");
+    await page.getByRole("link", { name: "Overview" }).click();
+    const start = page.getByRole("button", { name: "Start hardware" });
     await expect(start).toBeEnabled();
 
     await start.focus();
@@ -527,7 +562,7 @@ test("320 px view shows camera, queue, readiness and navigation without horizont
     await expect(mobile).toContainText("Background clips");
     await expect(mobile).toContainText("1 active");
     await expect(mobile).toContainText("Simulation does not check physical equipment.");
-    await expect(page.getByRole("navigation", { name: "Page sections" }).getByRole("link", { name: "Diagnostics" })).toBeVisible();
+    await expect(page.getByRole("navigation", { name: "Primary navigation" }).getByRole("link", { name: "Logs" })).toBeVisible();
     await expect.poll(() => page.evaluate(
       () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
     )).toBe(true);

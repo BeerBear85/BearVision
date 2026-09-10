@@ -252,12 +252,14 @@ install -d -o "$SERVICE_USER" -g "$SERVICE_GROUP" -m 0750 \
     "$INSTALL_DIR/apps/edge-control" \
     "$INSTALL_DIR/config" \
     "$INSTALL_DIR/code/dnn_models" \
+    "$INSTALL_DIR/logo" \
     "$INSTALL_DIR/specs/scenarios"
 rsync --archive --delete "$SOURCE_DIR/src/" "$INSTALL_DIR/src/"
 rsync --archive --delete \
     --exclude node_modules \
     --exclude dist \
     "$SOURCE_DIR/apps/edge-control/" "$INSTALL_DIR/apps/edge-control/"
+rsync --archive --delete "$SOURCE_DIR/logo/" "$INSTALL_DIR/logo/"
 rsync --archive --delete \
     "$SOURCE_DIR/specs/scenarios/" "$INSTALL_DIR/specs/scenarios/"
 install -o "$SERVICE_USER" -g "$SERVICE_GROUP" -m 0644 \

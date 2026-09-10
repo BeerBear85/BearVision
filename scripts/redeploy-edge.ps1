@@ -41,6 +41,7 @@ $destination = "$UserName@$HostName"
 elseif ($CodeOnly) {
     @(
         'apps/edge-control',
+        'logo',
         'scripts/update-raspberry-pi-code.sh',
         'specs/scenarios',
         'src',
@@ -53,6 +54,7 @@ else {
         'apps/edge-control',
         'code/dnn_models/yolov8n.onnx',
         'config/edge.yaml',
+        'logo',
         'README.md',
         'scripts/configure-code-deployment.sh',
         'scripts/setup-raspberry-pi.sh',

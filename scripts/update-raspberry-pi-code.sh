@@ -55,7 +55,7 @@ for relative_path in \
         die "$relative_path changed; run a full deployment to update dependencies"
 done
 
-for required_directory in src apps/edge-control specs/scenarios; do
+for required_directory in src apps/edge-control logo specs/scenarios; do
     [[ -d "$SOURCE_DIR/$required_directory" ]] || \
         die "deployment is missing $required_directory"
 done
@@ -68,18 +68,21 @@ for writable_directory in \
         die "$writable_directory is not writable; rerun full setup with --deploy-user $(id -un)"
 done
 
+log "Building Edge Control in the staged deployment"
+ln -s "$INSTALL_DIR/apps/edge-control/node_modules" \
+    "$SOURCE_DIR/apps/edge-control/node_modules"
+pnpm --dir "$SOURCE_DIR/apps/edge-control" build
+node --check "$SOURCE_DIR/apps/edge-control/server/server.mjs"
+
 log "Synchronizing application code"
 rsync --archive --no-owner --no-group --chmod="$RSYNC_PERMISSIONS" --delete \
     "$SOURCE_DIR/src/" "$INSTALL_DIR/src/"
 rsync --archive --no-owner --no-group --chmod="$RSYNC_PERMISSIONS" --delete \
     --exclude node_modules \
-    --exclude dist \
     "$SOURCE_DIR/apps/edge-control/" "$INSTALL_DIR/apps/edge-control/"
 rsync --archive --no-owner --no-group --chmod="$RSYNC_PERMISSIONS" --delete \
     "$SOURCE_DIR/specs/scenarios/" "$INSTALL_DIR/specs/scenarios/"
 
-log "Building Edge Control with installed dependencies"
-pnpm --dir "$INSTALL_DIR/apps/edge-control" build
 node --check "$INSTALL_DIR/apps/edge-control/server/server.mjs"
 
 log "Restarting $SERVICE_NAME"
