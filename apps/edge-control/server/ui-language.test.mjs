@@ -42,6 +42,12 @@ test("Edge Control keeps the shared operator shell and accessible states", () =>
   assert.doesNotMatch(styleSource, /min-width:\s*900px/);
 });
 
+test("Edge Control uses the repository BearVision logo instead of a text badge", () => {
+  assert.match(uiSource, /import bearVisionLogo from "\.\.\/\.\.\/\.\.\/logo\/Logo\.svg"/);
+  assert.match(uiSource, /<img className="brand-mark" src=\{bearVisionLogo\} alt="" \/>/);
+  assert.equal(uiSource.includes('<span className="brand-mark">BV</span>'), false);
+});
+
 test("Edge Control does not present server-owned rider assignment", () => {
   assert.equal(uiSource.includes("server_assignment"), false);
   assert.equal(uiSource.includes('label="Rider"'), false);

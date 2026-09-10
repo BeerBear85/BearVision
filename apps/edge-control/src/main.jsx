@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
+import bearVisionLogo from "../../../logo/Logo.svg";
 import {
   appendRetainedTraceEvent,
   runtimeLogLevel,
@@ -759,7 +760,7 @@ function App() {
     <div className="app-shell">
       <aside className="sidebar">
         <div className="brand">
-          <span className="brand-mark">BV</span>
+          <img className="brand-mark" src={bearVisionLogo} alt="" />
           <span><strong>BearVision</strong><small>Edge Control</small></span>
         </div>
         <nav aria-label="Page sections">

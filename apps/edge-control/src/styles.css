@@ -45,14 +45,11 @@ button:focus-visible, select:focus-visible, a:focus-visible {
 .brand strong { font-weight: 650; }
 .brand small, .runtime-state small { color: #9fb9af; }
 .brand-mark {
-  width: 36px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
   border-radius: 10px;
-  display: grid;
-  place-items: center;
-  color: #221708;
-  background: var(--accent);
-  font-weight: 750;
+  display: block;
+  object-fit: cover;
 }
 nav { display: grid; gap: 5px; }
 nav a { padding: 11px 12px; border-radius: 8px; color: #a8beb6; text-decoration: none; }
