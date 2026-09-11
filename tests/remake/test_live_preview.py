@@ -54,7 +54,7 @@ def test_preview_source_discards_buffered_frames_and_yields_the_latest(
     released = Event()
 
     class Capture:
-        def __init__(self, _source: str) -> None:
+        def __init__(self, _source: str, _backend: int, _params: list[int]) -> None:
             self.frame_number = 0
 
         def isOpened(self) -> bool:
@@ -75,6 +75,9 @@ def test_preview_source_discards_buffered_frames_and_yields_the_latest(
 
     cv2 = ModuleType("cv2")
     cv2.VideoCapture = Capture
+    cv2.CAP_FFMPEG = 1900
+    cv2.CAP_PROP_OPEN_TIMEOUT_MSEC = 53
+    cv2.CAP_PROP_READ_TIMEOUT_MSEC = 54
     monkeypatch.setitem(sys.modules, "cv2", cv2)
 
     async def exercise() -> None:

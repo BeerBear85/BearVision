@@ -196,6 +196,10 @@ async def _read_control_commands(
                 command,
                 shutdown_requested=shutdown_requested,
             )
+            if shutdown_requested.is_set():
+                # Do not start another native readline after accepting stop.
+                # Cancelling to_thread cannot unblock stdin or executor shutdown.
+                return
         except Exception as exc:
             logging.getLogger(__name__).error("Control command failed: %s", exc)
 
