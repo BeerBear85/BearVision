@@ -268,3 +268,69 @@ test("a timed-out JSON process is terminated and returns the configured error", 
   );
   assert.equal(killedWith, "SIGTERM");
 });
+
+test("start preflight publishes checking and keeps timeout authoritative", async (context) => {
+  let calls = 0;
+  let failStart;
+  let markStartChecking;
+  const startChecking = new Promise((resolve) => { markStartChecking = resolve; });
+  const readyReport = {
+    readiness_schema_version: "1.0",
+    checked_at: "2026-09-02T10:00:00Z",
+    blocking: false,
+    warning_ids: [],
+    checks: [{ check_id: "camera", status: "pass" }],
+  };
+  const timeout = Object.assign(new Error("Readiness timed out."), {
+    code: "READINESS_TIMEOUT",
+    status: 504,
+    correctiveAction: "Run advanced diagnostics.",
+  });
+  const control = await runningServer({
+    persistState: false,
+    runReadiness: async () => {
+      calls += 1;
+      if (calls === 1) return readyReport;
+      markStartChecking();
+      return new Promise((_, reject) => {
+        failStart = () => reject(timeout);
+      });
+    },
+  });
+  context.after(() => control.close());
+
+  const initial = await control.request("/api/readiness/run", { method: "POST" });
+  assert.equal(initial.body.status, "ready");
+
+  const starting = control.request("/api/runs", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ mode: "hardware", acknowledged_warning_ids: [] }),
+  });
+  await startChecking;
+
+  const checking = await control.request("/api/health");
+  assert.equal(checking.body.readiness.status, "checking");
+  assert.deepEqual(checking.body.readiness.checks, []);
+
+  failStart();
+  const failedStart = await starting;
+  assert.equal(failedStart.response.status, 504);
+  assert.equal(failedStart.body.code, "READINESS_TIMEOUT");
+
+  const [health, readiness] = await Promise.all([
+    control.request("/api/health"),
+    control.request("/api/readiness"),
+  ]);
+  for (const snapshot of [health.body.readiness, readiness.body]) {
+    assert.equal(snapshot.status, "failed");
+    assert.equal(snapshot.failure.code, "READINESS_TIMEOUT");
+    assert.deepEqual(snapshot.checks, []);
+  }
+
+  const states = control.eventStream.history
+    .map(({ event }) => event)
+    .filter((event) => event.kind === "readiness_updated")
+    .map((event) => event.payload.status);
+  assert.deepEqual(states, ["checking", "ready", "checking", "failed"]);
+});

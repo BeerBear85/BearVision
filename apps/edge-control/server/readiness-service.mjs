@@ -10,20 +10,56 @@ export class ControlError extends Error {
 }
 
 export class ReadinessService {
-  constructor({ runCommand }) {
+  constructor({ runCommand, onChange = () => {} }) {
     this.runCommand = runCommand;
+    this.onChange = onChange;
     this.report = null;
   }
 
+  setCurrent(report) {
+    this.report = structuredClone(report);
+    this.onChange(this.current());
+  }
+
+  setFailure(error) {
+    this.setCurrent({
+      readiness_schema_version: "1.0",
+      status: "failed",
+      blocking: true,
+      warning_ids: [],
+      checks: [],
+      failure: {
+        code: error.code ?? "READINESS_FAILED",
+        message: error.message ?? "Hardware readiness failed.",
+        corrective_action: error.correctiveAction ?? null,
+        details: error.details ?? null,
+      },
+    });
+  }
+
   async run() {
-    const report = await this.runCommand();
+    this.setCurrent({
+      readiness_schema_version: "1.0",
+      status: "checking",
+      blocking: true,
+      warning_ids: [],
+      checks: [],
+      failure: null,
+    });
+    let report;
+    try {
+      report = await this.runCommand();
+    } catch (error) {
+      this.setFailure(error);
+      throw error;
+    }
     if (
       report?.readiness_schema_version !== "1.0"
       || typeof report.blocking !== "boolean"
       || !Array.isArray(report.warning_ids)
       || !Array.isArray(report.checks)
     ) {
-      throw new ControlError(
+      const error = new ControlError(
         "READINESS_INVALID",
         "The runtime returned an invalid readiness report.",
         {
@@ -31,8 +67,14 @@ export class ReadinessService {
           correctiveAction: "Review the Python runtime logs and readiness contract.",
         },
       );
+      this.setFailure(error);
+      throw error;
     }
-    this.report = structuredClone(report);
+    this.setCurrent({
+      ...report,
+      status: report.blocking ? "blocked" : "ready",
+      failure: null,
+    });
     return this.current();
   }
 

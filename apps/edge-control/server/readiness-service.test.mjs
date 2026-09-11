@@ -48,3 +48,63 @@ test("hardware start always reruns readiness", async () => {
 
   assert.equal(calls, 2);
 });
+
+test("failed readiness replaces the previous successful report", async () => {
+  let shouldTimeout = false;
+  const timeout = Object.assign(new Error("Readiness timed out"), {
+    code: "READINESS_TIMEOUT",
+    status: 504,
+  });
+  const service = new ReadinessService({
+    runCommand: async () => {
+      if (shouldTimeout) {
+        throw timeout;
+      }
+      return report();
+    },
+  });
+
+  await service.run();
+  shouldTimeout = true;
+  await assert.rejects(() => service.run(), timeout);
+
+  assert.deepEqual(service.current(), {
+    readiness_schema_version: "1.0",
+    status: "failed",
+    blocking: true,
+    warning_ids: [],
+    checks: [],
+    failure: {
+      code: "READINESS_TIMEOUT",
+      message: "Readiness timed out",
+      corrective_action: null,
+      details: null,
+    },
+  });
+});
+
+test("readiness publishes checking and final states", async () => {
+  let finish;
+  const transitions = [];
+  const service = new ReadinessService({
+    runCommand: () => new Promise((resolve) => {
+      finish = resolve;
+    }),
+    onChange: (state) => transitions.push(state.status),
+  });
+
+  const running = service.run();
+  assert.deepEqual(service.current(), {
+    readiness_schema_version: "1.0",
+    status: "checking",
+    blocking: true,
+    warning_ids: [],
+    checks: [],
+    failure: null,
+  });
+
+  finish(report());
+  const result = await running;
+  assert.equal(result.status, "ready");
+  assert.deepEqual(transitions, ["checking", "ready"]);
+});

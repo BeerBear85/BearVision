@@ -269,7 +269,11 @@ export function createEdgeControlServer(options = {}) {
       },
     },
   ));
-  const readiness = options.readiness ?? new ReadinessService({ runCommand: runReadiness });
+  let publishReadinessChange = () => {};
+  const readiness = options.readiness ?? new ReadinessService({
+    runCommand: runReadiness,
+    onChange: (report) => publishReadinessChange(report),
+  });
   const eventStream = options.eventStream ?? new EventStream({ getSnapshot: () => ({
     ...state.snapshot(), readiness: readiness.current(),
   }) });
@@ -278,6 +282,10 @@ export function createEdgeControlServer(options = {}) {
     ...(stateSnapshot == null ? {} : {
       control_snapshot: { ...stateSnapshot, readiness: readiness.current() },
     }),
+  });
+  publishReadinessChange = (report) => publishControlEvent({
+    kind: "readiness_updated",
+    payload: report,
   });
 
   const spawnRuntime = options.spawnRuntime ?? (({ mode, scenario, runId }) => {
@@ -351,7 +359,6 @@ export function createEdgeControlServer(options = {}) {
         });
       } else if (request.method === "POST" && url.pathname === "/api/readiness/run") {
         const report = await readiness.run();
-        publishControlEvent({ kind: "readiness_updated", payload: report });
         writeJson(response, 200, report);
       } else if (
         request.method === "POST"
@@ -422,7 +429,6 @@ export function createEdgeControlServer(options = {}) {
         let report = readiness.current();
         if (body.mode === "hardware") {
           report = await readiness.run();
-          publishControlEvent({ kind: "readiness_updated", payload: report });
         }
         publishControlEvent({ kind: "mode_selected", payload: { mode: body.mode } });
         writeJson(response, 200, { ...snapshot(), readiness: report });

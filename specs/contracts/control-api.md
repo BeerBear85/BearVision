@@ -9,7 +9,7 @@ processing and publication policy.
 ## Run state
 
 `GET /api/health` returns the authoritative snapshot: selected mode, current
-run, ten recent runs and the latest readiness report. An active run records its
+run, ten recent runs and the latest readiness state. An active run records its
 lifecycle stage, current operation, process and stop state, failures, artefacts
 and retained event evidence. Replacement runs carry `restart_of_run_id`; forced
 stops report whether partial artefacts were retained. State is atomically
@@ -36,6 +36,14 @@ persisted below the configured scratch directory.
 Structured errors contain `code`, `error`, `corrective_action`, and `details`.
 Critical readiness failures block hardware start. Each warning must be
 explicitly acknowledged by ID in `acknowledged_warning_ids`.
+
+Readiness in health, readiness and control snapshots is the result of the latest
+attempt, not the latest successful report. Its `status` is `checking`, `ready`,
+`blocked` or `failed`; before the first attempt, it is `not_checked`.
+`checking` and `failed` are blocking states with no cached checks. A failed state
+contains structured `failure` data with the error code, message, corrective
+action and details. Every transition is published as `readiness_updated`,
+including the preflight performed by hardware Start.
 
 ## Python event and command boundary
 

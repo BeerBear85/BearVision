@@ -54,6 +54,7 @@ async function startFixture(options = {}) {
       runGoProDiagnostics: options.runGoProDiagnostics,
     });
     if (!options.useStartupDefault) control.state.selectMode(options.initialMode ?? "simulation");
+    if (options.initialRun) control.state.start(options.initialRun);
   } finally {
     if (previousStopTimeout == null) delete process.env.BEARVISION_STOP_TIMEOUT_MS;
     else process.env.BEARVISION_STOP_TIMEOUT_MS = previousStopTimeout;
@@ -174,6 +175,40 @@ test("the default simulation uses the repository input test video", async ({ pag
       .filter({ hasText: "Monitoring" });
     await expect(monitoringStep).toHaveClass("upcoming");
     await expect(monitoringStep).not.toHaveAttribute("aria-current", "step");
+  } finally {
+    await fixture.close();
+  }
+});
+
+test("hardware startup guidance describes live equipment instead of simulation", async ({ page }) => {
+  const fixture = await startFixture({
+    initialMode: "hardware",
+    initialRun: { mode: "hardware" },
+  });
+  try {
+    await page.goto(fixture.url);
+
+    await expect(page.getByRole("heading", { name: "BearVision is starting" })).toBeVisible();
+    await expect(page.getByText(/Connecting to the GoPro and starting BearTag monitoring/)).toBeVisible();
+    await expect(page.getByText(/input test video|replay starts/i)).toHaveCount(0);
+  } finally {
+    await fixture.close();
+  }
+});
+
+test("operator timestamps use Danish 24-hour formatting", async ({ page }) => {
+  const fixture = await startFixture({
+    runReadiness: async () => readinessReport({ checks: [] }),
+  });
+  try {
+    await page.goto(fixture.url);
+    await page.getByRole("button", { name: "Hardware" }).click();
+
+    const summary = page.getByRole("region", { name: "Readiness summary" });
+    await expect(summary).toContainText("Ready");
+    const checkedAt = await summary.locator("small").innerText();
+    expect(checkedAt).toMatch(/\b\d{2}\.\d{2}\b/);
+    expect(checkedAt).not.toMatch(/\b(?:AM|PM)\b/);
   } finally {
     await fixture.close();
   }
@@ -327,8 +362,11 @@ test("failed GoPro readiness offers layered advanced diagnostics", async ({ page
 });
 
 test("readiness timeout opens a safe path to GoPro diagnostics", async ({ page }) => {
+  let callCount = 0;
   const fixture = await startFixture({
     runReadiness: async () => {
+      callCount += 1;
+      if (callCount === 1) return readinessReport({ checks: [] });
       const error = new Error("Hardware readiness did not finish within 75 seconds.");
       Object.assign(error, {
         code: "READINESS_TIMEOUT",
@@ -355,8 +393,12 @@ test("readiness timeout opens a safe path to GoPro diagnostics", async ({ page }
   try {
     await page.goto(fixture.url);
     await page.getByRole("button", { name: "Hardware" }).click();
+    await page.getByRole("link", { name: /Readiness/ }).click();
+    await page.getByRole("button", { name: "Run readiness" }).click();
 
     await expect(page).toHaveURL(/\/readiness$/);
+    await expect(page.getByRole("heading", { name: "Readiness timed out" })).toBeVisible();
+    await page.reload();
     await expect(page.getByRole("heading", { name: "Readiness timed out" })).toBeVisible();
     const launch = page.getByRole("button", { name: "Run advanced GoPro diagnostics" });
     await expect(launch).toBeVisible();
@@ -683,6 +725,34 @@ test("force stop appears only after graceful stop times out and requires confirm
     await forceStop.click();
 
     await expect(page.getByRole("region", { name: "Recent runs" })).toContainText("Stopped");
+  } finally {
+    await fixture.close();
+  }
+});
+
+test("hardware start shows readiness checking while preflight runs", async ({ page }) => {
+  let calls = 0;
+  let finishStartPreflight;
+  const fixture = await startFixture({
+    runReadiness: async () => {
+      calls += 1;
+      if (calls === 1) return readinessReport({ checks: [] });
+      return new Promise((resolve) => {
+        finishStartPreflight = () => resolve(readinessReport({ checks: [] }));
+      });
+    },
+  });
+  try {
+    await page.goto(fixture.url);
+    await page.getByRole("button", { name: "Hardware" }).click();
+    const summary = page.getByRole("region", { name: "Readiness summary" });
+    await expect(summary).toContainText("Ready");
+    await page.getByRole("button", { name: "Start hardware" }).click();
+    await expect(summary).toContainText("Checking");
+    await expect(page.getByText("Hardware ready", { exact: true })).toHaveCount(0);
+    await expect.poll(() => Boolean(finishStartPreflight)).toBe(true);
+    finishStartPreflight();
+    await expect(page.getByRole("region", { name: "Pipeline" })).toContainText("Monitoring");
   } finally {
     await fixture.close();
   }

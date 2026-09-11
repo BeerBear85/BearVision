@@ -47,7 +47,10 @@ function preferredScenarioName(scenarios) {
     ?? "";
 }
 
-function startupGuidance(scenario) {
+function startupGuidance(mode, scenario) {
+  if (mode === "hardware") {
+    return "Connecting to the GoPro and starting BearTag monitoring. Wait until the status says Running.";
+  }
   if (!scenario?.video_url) return "Preparing the simulation. This usually takes a few seconds.";
   const duration = Number.isFinite(Number(scenario.duration_s))
     ? `${Math.ceil(Number(scenario.duration_s))}-second `
@@ -69,9 +72,10 @@ function formatFileSize(bytes) {
 
 function formatDate(value) {
   if (!value) return "Time unavailable";
-  return new Intl.DateTimeFormat(undefined, {
+  return new Intl.DateTimeFormat("da-DK", {
     dateStyle: "medium",
     timeStyle: "short",
+    hour12: false,
   }).format(new Date(value));
 }
 
@@ -315,8 +319,8 @@ function GoProDiagnostics({ report }) {
 }
 
 function ReadinessPanel({
-  report, acknowledged, onAcknowledge, onRun, busy,
-  timeout, diagnostics, onRunDiagnostics, diagnosticsBusy,
+  report, acknowledged, onAcknowledge, onRun, busy, disabled,
+  failure, diagnostics, onRunDiagnostics, diagnosticsBusy,
 }) {
   const checks = report?.checks ?? [];
   const status = report?.status === "not_checked" ? "not_checked" : report?.blocking ? "blocked" : "ready";
@@ -324,29 +328,31 @@ function ReadinessPanel({
     <section className="readiness-panel panel" aria-labelledby="readiness-heading">
       <div className="panel-title">
         <div><span className="eyebrow">Before hardware starts</span><h2 id="readiness-heading">Hardware readiness</h2></div>
-        <button className="secondary" type="button" onClick={onRun} disabled={busy || diagnosticsBusy}>
+        <button className="secondary" type="button" onClick={onRun} disabled={busy || disabled || diagnosticsBusy}>
           {busy ? "Checking…" : "Run readiness"}
         </button>
       </div>
       {busy && <p className="panel-empty" role="status">Checking the camera, BearTags and required services. Previous results are hidden until this check finishes.</p>}
-      {!busy && status === "not_checked" && !timeout && <p className="panel-empty">Readiness has not been checked.</p>}
-      {!busy && timeout && (
+      {!busy && status === "not_checked" && !failure && <p className="panel-empty">Readiness has not been checked.</p>}
+      {!busy && failure && (
         <section className="readiness-timeout" role="alert" aria-labelledby="readiness-timeout-heading">
           <div>
-            <span className="eyebrow">Check stopped safely</span>
-            <h3 id="readiness-timeout-heading">Readiness timed out</h3>
-            <p>{timeout.message}</p>
-            <p>{timeout.correctiveAction}</p>
-            <small>The full check may be waiting on the camera or another hardware service.</small>
+            <span className="eyebrow">{failure.code === "READINESS_TIMEOUT" ? "Check stopped safely" : "Check failed"}</span>
+            <h3 id="readiness-timeout-heading">{failure.code === "READINESS_TIMEOUT" ? "Readiness timed out" : "Readiness failed"}</h3>
+            <p>{failure.message}</p>
+            {failure.corrective_action && <p>{failure.corrective_action}</p>}
+            {failure.code === "READINESS_TIMEOUT" && <small>The full check may be waiting on the camera or another hardware service.</small>}
           </div>
-          <button
-            className="secondary"
-            type="button"
-            onClick={onRunDiagnostics}
-            disabled={diagnosticsBusy}
-          >
-            {diagnosticsBusy ? "Running diagnostics…" : "Run advanced GoPro diagnostics"}
-          </button>
+          {failure.code === "READINESS_TIMEOUT" && (
+            <button
+              className="secondary"
+              type="button"
+              onClick={onRunDiagnostics}
+              disabled={diagnosticsBusy}
+            >
+              {diagnosticsBusy ? "Running diagnostics…" : "Run advanced GoPro diagnostics"}
+            </button>
+          )}
         </section>
       )}
       {!busy && checks.length > 0 && [
@@ -410,6 +416,8 @@ function ReadinessSummary({ report, busy, disabled, onRun, onOpen }) {
     ? { label: "Checking", tone: "working", detail: "Testing hardware and required services" }
     : !report || report.status === "not_checked"
       ? { label: "Not checked", tone: "idle", detail: "Run readiness before hardware starts" }
+      : report.status === "failed"
+        ? { label: "Check failed", tone: "attention", detail: report.failure?.message ?? "Hardware readiness failed" }
       : report.blocking
         ? { label: "Start blocked", tone: "attention", detail: `${failures} blocking issue${failures === 1 ? "" : "s"}` }
         : warnings > 0
@@ -554,7 +562,6 @@ function App() {
   const [previewVersion, setPreviewVersion] = useState(0);
   const [previewAvailable, setPreviewAvailable] = useState(false);
   const [acknowledgedWarnings, setAcknowledgedWarnings] = useState(new Set());
-  const [readinessFailure, setReadinessFailure] = useState(null);
   const [goproDiagnostics, setGoproDiagnostics] = useState(null);
   const [busyAction, setBusyAction] = useState("");
   const [requestedStopRunId, setRequestedStopRunId] = useState(null);
@@ -743,7 +750,11 @@ function App() {
   }, [hardwareRunning]);
 
   const selected = scenarios.find((scenario) => scenario.name === selectedScenario);
-  const readinessChecking = busyAction === "readiness";
+  const readinessChecking = state.mode === "hardware" && (
+    busyAction === "readiness"
+    || busyAction === "start"
+    || state.readiness?.status === "checking"
+  );
   const connectionState = snapshotReceivedAt == null
     ? "loading"
     : streamConnected ? "connected" : "reconnecting";
@@ -751,7 +762,7 @@ function App() {
     () => deriveOperatorView(state, acknowledgedWarnings, {
       connectionState,
       readinessChecking,
-      startupGuidance: startupGuidance(selected),
+      startupGuidance: startupGuidance(state.mode, selected),
       stopRequested: requestedStopRunId === state.active_run?.run_id,
     }),
     [acknowledgedWarnings, connectionState, readinessChecking, requestedStopRunId, selected, state],
@@ -768,11 +779,22 @@ function App() {
   const filteredEvents = events.filter((event) => showsAtMinimumLogLevel(event, minimumLogLevel));
 
   function showReadinessTimeout(reason) {
-    setReadinessFailure({
-      message: reason.message,
-      correctiveAction: reason.correctiveAction,
+    updateSnapshot({
+      mode: "hardware",
+      readiness: {
+        readiness_schema_version: "1.0",
+        status: "failed",
+        blocking: true,
+        warning_ids: [],
+        checks: [],
+        failure: {
+          code: reason.code,
+          message: reason.message,
+          corrective_action: reason.correctiveAction ?? null,
+          details: reason.details ?? null,
+        },
+      },
     });
-    updateSnapshot({ mode: "hardware", readiness: null });
     navigateTo("readiness");
   }
 
@@ -818,7 +840,6 @@ function App() {
 
   async function chooseMode(mode) {
     setAcknowledgedWarnings(new Set());
-    setReadinessFailure(null);
     setGoproDiagnostics(null);
     await perform("mode", () => request("/api/mode", {
       method: "POST",
@@ -831,7 +852,6 @@ function App() {
 
   async function runReadiness() {
     setAcknowledgedWarnings(new Set());
-    setReadinessFailure(null);
     setGoproDiagnostics(null);
     setBusyAction("readiness");
     setActionNotice(null);
@@ -1085,20 +1105,26 @@ function App() {
                     {busyAction === "start" ? "Starting…" : state.mode === "simulation" ? "Run scenario" : "Start hardware"}
                   </button>
                 )}
-                {!run && state.mode === "hardware" && !state.readiness && (
-                  <button className="primary" disabled={readinessChecking || busyAction === "mode"} onClick={runReadiness}>
-                    {readinessChecking ? "Checking..." : "Run readiness"}
+                {!run && state.mode === "hardware" && readinessChecking && (
+                  <button className="primary" disabled>
+                    Checking...
                   </button>
                 )}
-                {!run && state.mode === "hardware" && state.readiness?.blocking && (
+                {!run && state.mode === "hardware" && !readinessChecking && (!state.readiness || state.readiness.status === "not_checked") && (
+                  <button className="primary" disabled={busyAction === "mode"} onClick={runReadiness}>Run readiness</button>
+                )}
+                {!run && state.mode === "hardware" && !readinessChecking && state.readiness?.status === "failed" && (
+                  <button className="primary" onClick={(event) => navigateTo("readiness", event)}>Review readiness failure</button>
+                )}
+                {!run && state.mode === "hardware" && !readinessChecking && state.readiness?.status !== "failed" && state.readiness?.blocking && (
                   <button className="primary" onClick={(event) => navigateTo("readiness", event)}>Review blocking issues</button>
                 )}
-                {!run && state.mode === "hardware" && !state.readiness?.blocking && missingReadinessWarnings.length > 0 && (
+                {!run && state.mode === "hardware" && !readinessChecking && !state.readiness?.blocking && missingReadinessWarnings.length > 0 && (
                   <button className="primary" onClick={(event) => navigateTo("readiness", event)}>
                     Review readiness warning{missingReadinessWarnings.length === 1 ? "" : "s"}
                   </button>
                 )}
-                {!run && state.mode === "hardware" && state.readiness && !state.readiness.blocking && missingReadinessWarnings.length === 0 && (
+                {!run && state.mode === "hardware" && !readinessChecking && state.readiness && !state.readiness.blocking && missingReadinessWarnings.length === 0 && (
                   <button className="primary" disabled={!operator.canStart || busyAction === "start"} onClick={startRun}>
                     {busyAction === "start" ? "Starting..." : "Start hardware"}
                   </button>
@@ -1250,11 +1276,12 @@ function App() {
                   acknowledged={acknowledgedWarnings}
                   onAcknowledge={acknowledgeWarning}
                   onRun={runReadiness}
-                  timeout={readinessFailure}
+                  failure={state.readiness?.failure ?? null}
                   diagnostics={goproDiagnostics}
                   onRunDiagnostics={runGoproDiagnostics}
                   diagnosticsBusy={busyAction === "gopro-diagnostics"}
-                  busy={busyAction === "readiness" || Boolean(run)}
+                  busy={readinessChecking}
+                  disabled={Boolean(run) || busyAction === "mode"}
                 />
               ) : (
                 <section className="readiness-unavailable panel">
