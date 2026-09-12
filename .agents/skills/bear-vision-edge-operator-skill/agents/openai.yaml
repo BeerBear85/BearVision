@@ -1,0 +1,4 @@
+interface:
+  display_name: "Bear Vision Edge Operator Skill"
+  short_description: "Operatørpersona til UI-feedback og exploratory test"
+  default_prompt: "Brug $bear-vision-edge-operator-skill til at vurdere Edge Control fra kabelparkens operatørperspektiv."

@@ -1,4 +1,0 @@
-interface:
-  display_name: "Bear Vision Video Server Operator"
-  short_description: "Serveroperatørpersona til klip, assignments og brugerdata"
-  default_prompt: "Brug $bear-vision-video-server-operator til at vurdere Bear Vision Video Server fra operatørens perspektiv."
