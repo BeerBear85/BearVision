@@ -25,6 +25,12 @@ test("Server Control contains no Danish UI copy", () => {
   }
 });
 
+test("Server Control uses the repository BearVision logo instead of a text badge", () => {
+  assert.match(uiSource, /import bearVisionLogo from "\.\.\/\.\.\/\.\.\/logo\/Logo\.svg"/);
+  assert.match(uiSource, /<img className="brand-mark" src=\{bearVisionLogo\} alt="" \/>/);
+  assert.equal(uiSource.includes('<span className="brand-mark">BV</span>'), false);
+});
+
 test("Server Control refreshes queue views with the server summary", () => {
   assert.match(uiSource, /function VideoLibrary\(\{ onError, refreshVersion,/);
   assert.match(uiSource, /\[query, status, page, userFilter, refreshVersion, mutationVersion\]/);

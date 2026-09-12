@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
+import bearVisionLogo from "../../../logo/Logo.svg";
 import "./styles.css";
 
 async function api(path, options = {}) {
@@ -489,7 +490,7 @@ function App() {
   function navigate(next) { if (next !== "videos") setVideoUser(""); setView(next); }
   return <div className="app-shell">
     <aside className="sidebar">
-      <div className="brand"><span className="brand-mark">BV</span><span><strong>BearVision</strong><small>Server Control</small></span></div>
+      <div className="brand"><img className="brand-mark" src={bearVisionLogo} alt="" /><span><strong>BearVision</strong><small>Server Control</small></span></div>
       <nav aria-label="Primary navigation">{[["overview", "Overview"], ["videos", "Videos"], ["users", "Users & BearTags"], ["jobs", "Job queue"]].map(([key, label]) => <button key={key} className={view === key ? "active" : ""} onClick={() => navigate(key)}>{label}</button>)}</nav>
       <div className="worker-state"><span className={"worker-dot " + workerStatus} /><span><strong>Worker: {formatState(workerStatus)}</strong><small>{summary?.worker?.updatedAt ? "Updated " + formatDate(summary.worker.updatedAt) : "Awaiting status"}</small></span></div>
     </aside>

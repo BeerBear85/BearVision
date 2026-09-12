@@ -15,7 +15,7 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .brand > span:last-child, .worker-state > span:last-child, .person > span:last-child { display: grid; }
 .brand strong { font-weight: 600; }
 .brand small, .worker-state small { color: #9fb9af; }
-.brand-mark { width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; background: #e5a743; color: #221708; font-weight: 700; }
+.brand-mark { width: 36px; height: 36px; border-radius: 10px; display: block; object-fit: cover; }
 nav { display: grid; gap: 5px; }
 nav button { border: 0; border-radius: 8px; padding: 11px 12px; background: transparent; color: #a8beb6; text-align: left; }
 nav button:hover, nav button.active { background: rgba(255,255,255,.1); color: #fff; }
