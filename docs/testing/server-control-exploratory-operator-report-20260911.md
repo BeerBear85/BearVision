@@ -2,10 +2,11 @@
 
 ## Dokumentstatus
 
-Dette dokument er den versionerede baseline for den gennemførte test af commit
-`bfcc7a6e1fd3db2d71e1b68d357e9e4e4a0c8561`. Nye testkørsler skal oprette en
-ny dateret rapport og henvise til denne baseline frem for at overskrive de
-oprindelige observationer.
+Dette dokument er den versionerede resultatbaseline for den gennemførte test af
+commit `bfcc7a6e1fd3db2d71e1b68d357e9e4e4a0c8561`. Den normative forventning
+findes i [den generelle testspecifikation](bear-vision-video-server-test-specification.md).
+Nye testkørsler skal oprette en ny dateret rapport og henvise til denne baseline
+frem for at overskrive de oprindelige observationer.
 
 Screenshots, testharnesses og captures under
 `temp/server-control-operator-20260911/` er lokale testartefakter, som er
