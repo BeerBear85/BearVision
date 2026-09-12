@@ -87,7 +87,7 @@ class CandidateScore(JobContractModel):
 
 
 class JobResultManifest(JobContractModel):
-    schema_version: Literal[2] = Field(alias="schemaVersion", default=2)
+    schema_version: Literal[2, 3] = Field(alias="schemaVersion", default=3)
     job_id: str = Field(alias="jobId", min_length=1)
     status: Literal["processed", "unresolved", "failed"]
     processed_at: UtcDatetime = Field(alias="processedAt")
@@ -98,6 +98,14 @@ class JobResultManifest(JobContractModel):
     candidates: tuple[CandidateScore, ...] = ()
     reason: str = Field(min_length=1, max_length=1000)
     error_code: str | None = Field(alias="errorCode", default=None)
+    assignment_source: Literal["automatic", "manual"] = Field(
+        alias="assignmentSource", default="automatic"
+    )
+    manually_assigned_at: UtcDatetime | None = Field(
+        alias="manuallyAssignedAt", default=None
+    )
+    replaced_user_id: UUID | None = Field(alias="replacedUserId", default=None)
+    manual_reason: str | None = Field(alias="manualReason", default=None, max_length=500)
 
     @model_validator(mode="after")
     def validate_outcome(self) -> "JobResultManifest":
@@ -107,8 +115,14 @@ class JobResultManifest(JobContractModel):
             self.assignment_id,
         )
         if self.status == "processed":
-            if any(value is None for value in assignment_fields):
-                raise ValueError("processed result requires tag, user and assignment ids")
+            required = assignment_fields if self.assignment_source == "automatic" else assignment_fields[1:]
+            if any(value is None for value in required):
+                message = (
+                    "processed result requires tag, user and assignment ids"
+                    if self.assignment_source == "automatic"
+                    else "processed result requires user and assignment ids"
+                )
+                raise ValueError(message)
             if self.error_code is not None:
                 raise ValueError("processed result must not contain an error code")
         else:
@@ -116,4 +130,10 @@ class JobResultManifest(JobContractModel):
                 raise ValueError("non-processed result must not assign a user")
             if self.error_code is None:
                 raise ValueError("non-processed result requires an error code")
+        manual_fields = (self.manually_assigned_at, self.manual_reason)
+        if self.assignment_source == "manual":
+            if self.schema_version != 3 or any(value is None for value in manual_fields):
+                raise ValueError("manual result requires schema 3, timestamp and reason")
+        elif any(value is not None for value in (*manual_fields, self.replaced_user_id)):
+            raise ValueError("automatic result must not contain manual audit fields")
         return self

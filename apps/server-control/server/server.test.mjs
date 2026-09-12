@@ -70,3 +70,17 @@ test("user media commands always carry the claimed owner", () => {
     userId: "bear@example.com", jobId: "job-1", kind: "video",
   });
 });
+test("correction mutations remain exact thin Python command envelopes", () => {
+  assert.deepEqual(adminRequest("manual-reassign", {
+    jobId: "job-1", userId: "b10e3918-490c-4a3f-859a-e67c12b66680", reason: "Wrong rider",
+  }), {
+    commandSchemaVersion: "1.0", command: "manual-reassign",
+    jobId: "job-1", userId: "b10e3918-490c-4a3f-859a-e67c12b66680", reason: "Wrong rider",
+  });
+  assert.deepEqual(adminRequest("preview-history-change", {
+    assignmentId: "history-1", replacements: [], overrideManualAssignments: false,
+  }), {
+    commandSchemaVersion: "1.0", command: "preview-history-change",
+    assignmentId: "history-1", replacements: [], overrideManualAssignments: false,
+  });
+});

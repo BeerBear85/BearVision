@@ -211,6 +211,7 @@ def test_durable_provider_adapters_share_one_queue_lifecycle() -> None:
         "admin_list_jobs",
         "admin_read",
         "admin_download",
+        "admin_replace_result",
         "publish",
         "acquire_next",
         "read",

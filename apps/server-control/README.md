@@ -34,8 +34,10 @@ Node owns:
 - streaming Python-materialized media with HTTP Range support.
 
 The UI provides an overview, a searchable video browser, job details with score
-evidence, user and BearTag history, assignment preflight validation, and manual
-requeue of unresolved or failed jobs.
+evidence, UUID-preserving user edits, manual clip reassignment, editable BearTag
+history with impact preview, and batch recalculation. Manual assignments are
+protected unless the operator explicitly includes them. Non-deleting actions do
+not request extra confirmation.
 
 Cached media is stored below the configured server `scratch_dir` in
 `admin-media/<job-id>/`. The source file is accepted only after its size and

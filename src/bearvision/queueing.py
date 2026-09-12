@@ -204,6 +204,37 @@ class StoreBackedJobQueue:
             self._store.download, f"{folder}/{filename}", destination
         )
 
+    async def admin_replace_result(
+        self,
+        job_id: str,
+        result: JobResultManifest,
+        user_id: UUID | None = None,
+    ) -> None:
+        """Replace one terminal decision while preserving the complete job package."""
+
+        self._validate_job_id(job_id)
+        validate_result_destination(result, user_id)
+        status, source, _ = await asyncio.to_thread(self._location, job_id)
+        if status not in {"processed", "unresolved"}:
+            raise ValueError("only processed or unresolved jobs can be reassigned")
+        if result.job_id != job_id:
+            raise ValueError("result job id does not match job")
+        destination = (
+            f"processed/{user_storage_folder(user_id)}/{job_id}"
+            if result.status == "processed" and user_id is not None
+            else f"{result.status}/{job_id}"
+        )
+        await asyncio.to_thread(
+            self._store.write,
+            f"{source}/result.json",
+            serialize_result(result),
+            overwrite=True,
+        )
+        if source != destination:
+            if await asyncio.to_thread(self._store.exists, destination, folder=True):
+                raise FileExistsError(destination)
+            await asyncio.to_thread(self._store.move, source, destination)
+
     async def _exists_anywhere(self, job_id: str) -> bool:
         for path in (
             f"input-queue/ready/{job_id}",

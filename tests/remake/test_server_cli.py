@@ -88,11 +88,24 @@ def test_admin_cli_uses_authoritative_registry_and_queue_snapshot(
     assert invoke(
         monkeypatch,
         config,
+        "update-user",
+        userId=user_id,
+        email="renamed-bear@example.com",
+        displayName="Renamed Bear",
+        reason="Operator correction",
+    ) == 0
+    edited_user = json.loads(capsys.readouterr().out)
+    assert edited_user["id"] == user_id
+    assert edited_user["displayName"] == "Renamed Bear"
+
+    assert invoke(
+        monkeypatch,
+        config,
         "list-user-videos",
-        userId=" new-bear@example.com ",
+        userId=" renamed-bear@example.com ",
     ) == 0
     user_videos = json.loads(capsys.readouterr().out)
-    assert user_videos["user"]["email"] == "new-bear@example.com"
+    assert user_videos["user"]["email"] == "renamed-bear@example.com"
     assert user_videos["items"] == []
 
     assert invoke(monkeypatch, config, "list-tags") == 0

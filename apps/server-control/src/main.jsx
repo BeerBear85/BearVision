@@ -30,6 +30,13 @@ function formatDate(value) {
   return value ? dateFormatter.format(new Date(value)) : "—";
 }
 
+function toLocalInput(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+  return local.toISOString().slice(0, 19);
+}
+
 function formatDuration(seconds) {
   if (!Number.isFinite(seconds)) return "—";
   return Math.floor(seconds / 60) + ":" + String(Math.round(seconds % 60)).padStart(2, "0");
@@ -62,6 +69,35 @@ function Modal({ title, description, onClose, children }) {
   </div>;
 }
 
+function ManualAssignmentForm({ job, onClose, onDone, onError }) {
+  const [users, setUsers] = useState([]);
+  const [userId, setUserId] = useState("");
+  const [reason, setReason] = useState("");
+  const [saving, setSaving] = useState(false);
+  useEffect(() => {
+    api("/api/users?pageSize=100").then((data) => setUsers(data.items))
+      .catch((error) => onError(error.message));
+  }, []);
+  const selectedUser = users.find((user) => user.id === userId);
+  async function submit(event) {
+    event.preventDefault(); setSaving(true);
+    try {
+      await api("/api/jobs/" + encodeURIComponent(job.jobId) + "/assignment", {
+        method: "POST", body: JSON.stringify({ userId, reason }),
+      });
+      await onDone(); onClose();
+    } catch (error) { onError(error.message); }
+    finally { setSaving(false); }
+  }
+  return <form onSubmit={submit}>
+    <div className="change-preview"><span>Current user<strong>{job.displayName ?? job.userEmail ?? "Unresolved"}</strong></span><span>→</span><span>New user<strong>{selectedUser?.displayName ?? "Select a user"}</strong></span></div>
+    <label>New user<select required autoFocus value={userId} onChange={(event) => setUserId(event.target.value)}><option value="">Select user</option>{users.filter((user) => user.id !== job.selectedUserId).map((user) => <option value={user.id} key={user.id}>{user.displayName} · {user.email}</option>)}</select></label>
+    <label>Reason<input required maxLength="500" value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Why is this assignment being corrected?" /></label>
+    <p className="field-note">This updates the assignment immediately and keeps the clip media unchanged.</p>
+    <footer className="modal-actions"><button type="button" className="secondary" onClick={onClose}>Cancel</button><button className="primary" disabled={!userId || !reason.trim() || saving}>{saving ? "Saving…" : "Save assignment"}</button></footer>
+  </form>;
+}
+
 function VideoLibrary({ onError, refreshVersion, userFilter = "" }) {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("processed");
@@ -70,6 +106,8 @@ function VideoLibrary({ onError, refreshVersion, userFilter = "" }) {
   const [selected, setSelected] = useState(null);
   const [detail, setDetail] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [reassigning, setReassigning] = useState(false);
+  const [mutationVersion, setMutationVersion] = useState(0);
 
   useEffect(() => {
     const timer = setTimeout(async () => {
@@ -90,13 +128,13 @@ function VideoLibrary({ onError, refreshVersion, userFilter = "" }) {
       finally { setLoading(false); }
     }, 220);
     return () => clearTimeout(timer);
-  }, [query, status, page, userFilter, refreshVersion]);
+  }, [query, status, page, userFilter, refreshVersion, mutationVersion]);
 
   useEffect(() => {
     if (!selected) { setDetail(null); return; }
     api("/api/jobs/" + encodeURIComponent(selected)).then(setDetail)
       .catch((error) => onError(error.message));
-  }, [selected, refreshVersion]);
+  }, [selected, refreshVersion, mutationVersion]);
 
   const candidates = detail?.candidates ?? [];
   return <>
@@ -158,8 +196,12 @@ function VideoLibrary({ onError, refreshVersion, userFilter = "" }) {
             <dt>User email</dt><dd>{detail.userEmail ?? "—"}</dd>
             <dt>User ID</dt><dd>{detail.selectedUserId ?? "—"}</dd>
             <dt>Assignment</dt><dd>{detail.assignmentId ?? "—"}</dd>
-            <dt>Decision</dt><dd>{detail.reason ?? "Awaiting processing"}</dd>
+            <dt>Source</dt><dd>{detail.assignmentSource === "manual" ? "Manual" : "Automatic"}</dd>
+            {detail.replacedUserId && <><dt>Replaced user</dt><dd>{detail.replacedUserId}</dd></>}
+            {detail.manuallyAssignedAt && <><dt>Changed</dt><dd>{formatDate(detail.manuallyAssignedAt)}</dd></>}
+            <dt>Decision</dt><dd>{detail.manualReason ?? detail.reason ?? "Awaiting processing"}</dd>
           </dl>
+          {["processed", "unresolved"].includes(detail.status) && <div className="panel-actions"><button className="primary" onClick={() => setReassigning(true)}>Reassign clip</button></div>}
           {candidates.length > 0 && <section className="evidence"><h3>Candidate evidence</h3>
             {candidates.map((candidate) => <div className="score" key={candidate.bearTagId}>
               <span>{candidate.bearTagId}</span>
@@ -171,6 +213,7 @@ function VideoLibrary({ onError, refreshVersion, userFilter = "" }) {
         </>}
       </aside>
     </div>
+    {reassigning && detail && <Modal title="Reassign clip" description="Review the current and new user before saving. No media is deleted." onClose={() => setReassigning(false)}><ManualAssignmentForm job={detail} onClose={() => setReassigning(false)} onDone={async () => setMutationVersion((value) => value + 1)} onError={onError} /></Modal>}
   </>;
 }
 
@@ -250,6 +293,94 @@ function AssignmentForm({ user, tags, onClose, onDone, onError }) {
   </form>;
 }
 
+function EditUserForm({ user, onClose, onDone, onError }) {
+  const [values, setValues] = useState({ displayName: user.displayName, email: user.email, reason: "Corrected by operator" });
+  async function submit(event) {
+    event.preventDefault();
+    try {
+      await api("/api/users/" + user.id, { method: "PUT", body: JSON.stringify(values) });
+      await onDone(); onClose();
+    } catch (error) { onError(error.message); }
+  }
+  return <form onSubmit={submit}>
+    <label>Name<input required autoFocus value={values.displayName} onChange={(event) => setValues({ ...values, displayName: event.target.value })} /></label>
+    <label>Email<input required type="email" value={values.email} onChange={(event) => setValues({ ...values, email: event.target.value })} /></label>
+    <label>Reason<input required value={values.reason} onChange={(event) => setValues({ ...values, reason: event.target.value })} /></label>
+    <p className="field-note">UUID {user.id} stays unchanged. The previous values are kept in the audit trail.</p>
+    <footer className="modal-actions"><button type="button" className="secondary" onClick={onClose}>Cancel</button><button className="primary">Save user</button></footer>
+  </form>;
+}
+
+function HistoryImpact({ result, title = "Impact preview" }) {
+  if (!result) return null;
+  return <section className="impact"><h3>{title}</h3><div className="impact-counts"><span>Changed <strong>{result.counts.changed}</strong></span><span>Unchanged <strong>{result.counts.unchanged}</strong></span><span>Unresolved <strong>{result.counts.unresolved}</strong></span></div>
+    {result.items.length === 0 && <p className="muted">No previous clips are affected.</p>}
+    {result.items.length > 0 && <div className="table-surface"><table><thead><tr><th>Clip</th><th>Current</th><th>Expected</th></tr></thead><tbody>{result.items.map((item) => <tr key={item.jobId}><td><strong>{item.jobId}</strong>{item.manualProtected && <small className="protected">Manual assignment protected</small>}</td><td>{item.current.displayName ?? "Unresolved"}<small>{formatState(item.current.status)}</small></td><td>{item.expected.displayName ?? "Unresolved"}<small>{formatState(item.expected.status)}</small></td></tr>)}</tbody></table></div>}
+  </section>;
+}
+
+function AssignmentHistoryForm({ assignment, users, onClose, onDone, onError }) {
+  const initial = [{ id: assignment.id, userId: assignment.userId, validFrom: toLocalInput(assignment.validFrom), validTo: toLocalInput(assignment.validTo) }];
+  const [segments, setSegments] = useState(initial);
+  const [reason, setReason] = useState("");
+  const [overrideManualAssignments, setOverrideManualAssignments] = useState(false);
+  const [preview, setPreview] = useState(null);
+  const [result, setResult] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const payload = () => ({
+    assignmentId: assignment.id,
+    overrideManualAssignments,
+    replacements: segments.map((item) => ({
+      ...item, bearTagId: assignment.bearTagId,
+      validFrom: new Date(item.validFrom).toISOString(),
+      validTo: new Date(item.validTo).toISOString(),
+    })),
+  });
+  function update(index, field, value) {
+    setSegments(segments.map((item, itemIndex) => itemIndex === index ? { ...item, [field]: value } : item));
+    setPreview(null); setResult(null);
+  }
+  function split() {
+    if (segments.length !== 1) return;
+    const from = new Date(segments[0].validFrom).getTime();
+    const to = new Date(segments[0].validTo).getTime();
+    const midpoint = toLocalInput(new Date(from + (to - from) / 2).toISOString());
+    setSegments([
+      { ...segments[0], id: assignment.id + ":1", validTo: midpoint },
+      { ...segments[0], id: assignment.id + ":2", validFrom: midpoint },
+    ]);
+    setPreview(null); setResult(null);
+  }
+  async function loadPreview() {
+    setBusy(true);
+    try {
+      setPreview(await api("/api/assignments/history/preview", { method: "POST", body: JSON.stringify(payload()) }));
+      onError("");
+    } catch (error) { setPreview(null); onError(error.message); }
+    finally { setBusy(false); }
+  }
+  async function applyChange() {
+    setBusy(true);
+    try {
+      const applied = await api("/api/assignments/history/apply", { method: "POST", body: JSON.stringify({ ...payload(), reason }) });
+      setResult(applied); setPreview(null); await onDone();
+    } catch (error) { onError(error.message); }
+    finally { setBusy(false); }
+  }
+  if (result) return <><HistoryImpact result={result} title="Recalculation result" /><p className="validation validation-valid">History and all relevant assignments were updated. Clip media was preserved.</p><footer className="modal-actions"><button className="primary" onClick={onClose}>Done</button></footer></>;
+  return <div>
+    <div className="history-summary"><strong>{assignment.bearTagId}</strong><span>{formatDate(assignment.validFrom)} → {formatDate(assignment.validTo)}</span></div>
+    {segments.map((segment, index) => <fieldset key={segment.id}><legend>Interval {index + 1}</legend><label>User<select value={segment.userId} onChange={(event) => update(index, "userId", event.target.value)}>{users.map((user) => <option value={user.id} key={user.id}>{user.displayName} · {user.email}</option>)}</select></label><div className="date-grid"><label>Valid from<input type="datetime-local" step="1" value={segment.validFrom} onChange={(event) => update(index, "validFrom", event.target.value)} /></label><label>Valid until<input type="datetime-local" step="1" value={segment.validTo} onChange={(event) => update(index, "validTo", event.target.value)} /></label></div></fieldset>)}
+    {segments.length === 1 && <button type="button" className="secondary" onClick={split}>Split interval between users</button>}
+    <p className="field-note">The replacement must cover the complete original period with no overlap or gap. Previous history remains in the audit trail.</p>
+    <label className="check-row"><input type="checkbox" checked={overrideManualAssignments} onChange={(event) => { setOverrideManualAssignments(event.target.checked); setPreview(null); }} />Allow automatic recalculation to replace manual assignments</label>
+    <button type="button" className="secondary" onClick={loadPreview} disabled={busy}>{busy ? "Calculating…" : "Preview affected clips"}</button>
+    <HistoryImpact result={preview} />
+    {preview && <label>Reason<input required value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Why is the BearTag history changing?" /></label>}
+    <footer className="modal-actions"><button type="button" className="secondary" onClick={onClose}>Cancel</button><button type="button" className="primary" disabled={!preview || !reason.trim() || busy} onClick={applyChange}>Save and recalculate</button></footer>
+  </div>;
+}
+
 function Users({ onError, onShowVideos }) {
   const [query, setQuery] = useState("");
   const [data, setData] = useState({ items: [], total: 0 });
@@ -286,11 +417,11 @@ function Users({ onError, onShowVideos }) {
       <aside className="user-detail">
         {!selected && <Empty>No user selected.</Empty>}
         {selected && <>
-          <div className="user-heading"><span className="avatar large">{initials(selected.displayName)}</span><div><h2>{selected.displayName}</h2><p>{selected.email}</p><small>{selected.id}</small></div></div>
+          <div className="user-heading"><span className="avatar large">{initials(selected.displayName)}</span><div><h2>{selected.displayName}</h2><p>{selected.email}</p><small>{selected.id}</small></div><button className="secondary small edit-user" onClick={() => setModal("edit-user")}>Edit</button></div>
           <h3>BearTag history</h3>
           {selected.assignments.length === 0 && <p className="muted">No assignments.</p>}
           {selected.assignments.map((item) => <div className={"assignment " + (item.active ? "active" : "")} key={item.id}>
-            <strong>{item.bearTagId}{item.active ? " · active" : ""}</strong><span>{formatDate(item.validFrom)} → {formatDate(item.validTo)}</span>
+            <strong>{item.bearTagId}{item.active ? " · active" : ""}</strong><span>{formatDate(item.validFrom)} → {formatDate(item.validTo)}</span><button className="secondary small" onClick={() => setModal({ type: "history", assignment: item })}>Edit history</button>
           </div>)}
           <div className="panel-actions"><button className="primary" onClick={() => setModal("assignment")}>Assign BearTag</button><button className="secondary" onClick={() => onShowVideos(selected.id)}>Show videos ({selected.processedVideoCount})</button></div>
         </>}
@@ -298,6 +429,8 @@ function Users({ onError, onShowVideos }) {
     </div>
     <section className="tags-section"><div><h2>BearTags</h2><p>{tags.length} registered tags</p></div><div className="tag-list">{tags.map((tag) => <span key={tag.id}>{tag.id}</span>)}</div></section>
     {modal === "user" && <Modal title="Create user" description="The user gets a permanent UUID; email is contact information." onClose={() => setModal(null)}><UserForm onClose={() => setModal(null)} onDone={refresh} onError={onError} /></Modal>}
+    {modal === "edit-user" && selected && <Modal title="Edit user" description="Name and email can change; the permanent UUID does not." onClose={() => setModal(null)}><EditUserForm user={selected} onClose={() => setModal(null)} onDone={refresh} onError={onError} /></Modal>}
+    {modal?.type === "history" && <Modal title="Edit BearTag history" description="Preview every affected clip before saving and recalculating." onClose={() => setModal(null)}><AssignmentHistoryForm assignment={modal.assignment} users={data.items} onClose={() => setModal(null)} onDone={refresh} onError={onError} /></Modal>}
     {modal === "tag" && <Modal title="Create BearTag" description="The BearTag ID must match the physical device." onClose={() => setModal(null)}><TagForm onClose={() => setModal(null)} onDone={refresh} onError={onError} /></Modal>}
     {modal === "assignment" && selected && <Modal title="Assign BearTag" description="The period is checked against the complete assignment history." onClose={() => setModal(null)}><AssignmentForm user={selected} tags={tags} onClose={() => setModal(null)} onDone={refresh} onError={onError} /></Modal>}
   </>;
@@ -314,7 +447,6 @@ function JobQueue({ onError, refreshVersion }) {
   }
   useEffect(() => { refresh(); }, [status, refreshVersion]);
   async function requeue(jobId) {
-    if (!window.confirm("Requeue " + jobId + "?")) return;
     try {
       await api("/api/jobs/" + encodeURIComponent(jobId) + "/requeue", { method: "POST", body: "{}" });
       await refresh();
@@ -322,7 +454,7 @@ function JobQueue({ onError, refreshVersion }) {
   }
   return <>
     <div className="toolbar"><div className="filter-row"><label>Status<select value={status} onChange={(e) => setStatus(e.target.value)}><option value="">All</option>{Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label></div><span className="result-count">{data.total} jobs</span></div>
-    <div className="table-surface"><table><thead><tr><th>Job</th><th>Status</th><th>Captured</th><th>Decision</th><th /></tr></thead><tbody>{data.items.map((job) => <tr key={job.jobId}><td><strong>{job.jobId}</strong></td><td><Status value={job.status} /></td><td>{formatDate(job.captureStartedAt)}</td><td>{job.reason ?? "—"}</td><td>{["failed", "unresolved"].includes(job.status) && <button className="secondary small" onClick={() => requeue(job.jobId)}>Requeue</button>}</td></tr>)}</tbody></table></div>
+    <div className="table-surface"><table><thead><tr><th>Job</th><th>Status</th><th>Rider</th><th>Captured</th><th>Decision</th><th /></tr></thead><tbody>{data.items.map((job) => <tr key={job.jobId}><td><strong>{job.jobId}</strong></td><td><Status value={job.status} /></td><td>{job.displayName ?? job.userEmail ?? "Unassigned"}</td><td>{formatDate(job.captureStartedAt)}</td><td>{job.reason ?? "—"}</td><td>{["failed", "unresolved"].includes(job.status) && <button className="secondary small" onClick={() => requeue(job.jobId)}>Requeue</button>}</td></tr>)}</tbody></table></div>
   </>;
 }
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import datetime, timezone
 import os
 import json
 from pathlib import Path
@@ -104,13 +104,23 @@ class BearTagAssignment(RegistryModel):
         return self
 
 
+class RegistryAuditEntry(RegistryModel):
+    id: str = Field(default_factory=lambda: f"audit-{uuid4().hex}")
+    action: Literal["user-updated", "assignment-history-updated"]
+    recorded_at: UtcDatetime = Field(alias="recordedAt")
+    reason: str = Field(min_length=1, max_length=500)
+    before: dict[str, Any]
+    after: dict[str, Any]
+
+
 class RegistryData(RegistryModel):
     """One immutable identity snapshot used for a complete server decision."""
 
-    schema_version: Literal[2] = Field(alias="schemaVersion", default=2)
+    schema_version: Literal[2, 3] = Field(alias="schemaVersion", default=3)
     users: tuple[UserRecord, ...] = ()
     bear_tags: tuple[BearTagRecord, ...] = Field(alias="bearTags", default=())
     assignments: tuple[BearTagAssignment, ...] = ()
+    audit_trail: tuple[RegistryAuditEntry, ...] = Field(alias="auditTrail", default=())
 
     @model_validator(mode="after")
     def validate_graph(self) -> "RegistryData":
@@ -325,7 +335,7 @@ class FileUserRegistry:
     ) -> MutationResult:
         with _exclusive_file_lock(self.lock_path):
             result, updated = mutation(self.load())
-            validated = RegistryData.model_validate(updated.model_dump())
+            validated = RegistryData.model_validate(updated.model_copy(update={"schema_version": 3}).model_dump())
             self._save(validated)
             return result
 
@@ -338,23 +348,56 @@ class FileUserRegistry:
         return self._mutate(add)
 
     def update_user_email(self, user_id: UUID | str, email: str) -> UserRecord:
+        current = next((user for user in self.load().users if user.id == UUID(str(user_id))), None)
+        if current is None:
+            raise FileNotFoundError("user not found")
+        return self.update_user(
+            user_id,
+            email=email,
+            display_name=current.display_name,
+            reason="Contact email updated",
+        )
+
+    def update_user(
+        self,
+        user_id: UUID | str,
+        *,
+        email: str,
+        display_name: str,
+        reason: str,
+        recorded_at: datetime | None = None,
+    ) -> UserRecord:
         normalized_id = UUID(str(user_id))
+        changed_at = recorded_at or datetime.now(timezone.utc)
 
         def replace(data: RegistryData) -> tuple[UserRecord, RegistryData]:
             replacement: UserRecord | None = None
             users: list[UserRecord] = []
             for user in data.users:
                 if user.id == normalized_id:
-                    replacement = user.model_copy(update={"email": normalize_user_email(email)})
+                    replacement = UserRecord(
+                        id=user.id,
+                        email=normalize_user_email(email),
+                        displayName=display_name.strip(),
+                    )
                     users.append(replacement)
                 else:
                     users.append(user)
             if replacement is None:
                 raise FileNotFoundError("user not found")
-            return replacement, data.model_copy(update={"users": tuple(users)})
+            original = next(item for item in data.users if item.id == normalized_id)
+            audit = RegistryAuditEntry(
+                action="user-updated",
+                recordedAt=changed_at,
+                reason=reason.strip(),
+                before=original.model_dump(mode="json", by_alias=True),
+                after=replacement.model_dump(mode="json", by_alias=True),
+            )
+            return replacement, data.model_copy(
+                update={"users": tuple(users), "audit_trail": (*data.audit_trail, audit)}
+            )
 
         return self._mutate(replace)
-
     def find_user_by_email(self, email: str) -> UserRecord | None:
         normalized = normalize_user_email(email)
         return next((user for user in self.load().users if user.email == normalized), None)
@@ -380,10 +423,95 @@ class FileUserRegistry:
 
         return assignment, self._with_assignment(self.load(), assignment)
 
+    def preview_assignment_replacement(
+        self,
+        assignment_id: str,
+        replacements: tuple[BearTagAssignment, ...],
+    ) -> tuple[BearTagAssignment, RegistryData]:
+        data = self.load()
+        original = next((item for item in data.assignments if item.id == assignment_id), None)
+        if original is None:
+            raise FileNotFoundError("BearTag interval not found")
+        return original, self._replacement_data(data, original, replacements)
+
+    def replace_assignment(
+        self,
+        assignment_id: str,
+        replacements: tuple[BearTagAssignment, ...],
+        *,
+        reason: str,
+        recorded_at: datetime | None = None,
+    ) -> tuple[BearTagAssignment, ...]:
+        changed_at = recorded_at or datetime.now(timezone.utc)
+
+        def replace(data: RegistryData) -> tuple[tuple[BearTagAssignment, ...], RegistryData]:
+            original = next((item for item in data.assignments if item.id == assignment_id), None)
+            if original is None:
+                raise FileNotFoundError("BearTag interval not found")
+            proposed = self._replacement_data(data, original, replacements)
+            audit = RegistryAuditEntry(
+                action="assignment-history-updated",
+                recordedAt=changed_at,
+                reason=reason.strip(),
+                before={"assignments": [original.model_dump(mode="json", by_alias=True)]},
+                after={"assignments": [item.model_dump(mode="json", by_alias=True) for item in replacements]},
+            )
+            return replacements, proposed.model_copy(
+                update={"audit_trail": (*data.audit_trail, audit)}
+            )
+
+        return self._mutate(replace)
+
+    @staticmethod
+    def _replacement_data(
+        data: RegistryData,
+        original: BearTagAssignment,
+        replacements: tuple[BearTagAssignment, ...],
+    ) -> RegistryData:
+        if not replacements:
+            raise ValueError("Keep at least one interval; history is not deleted implicitly.")
+        ordered = tuple(sorted(replacements, key=lambda item: item.valid_from))
+        if any(item.bear_tag_id != original.bear_tag_id for item in ordered):
+            raise ValueError("All replacement intervals must use the same BearTag.")
+        if ordered[0].valid_from != original.valid_from or ordered[-1].valid_to != original.valid_to:
+            raise ValueError("The edited intervals must cover the complete original period.")
+        for previous, current in zip(ordered, ordered[1:]):
+            if current.valid_from < previous.valid_to:
+                raise ValueError("The edited intervals overlap. Move a boundary so each time belongs to one user.")
+            if current.valid_from > previous.valid_to:
+                raise ValueError("The edited intervals leave a gap. Join the adjacent boundaries.")
+        remaining = tuple(item for item in data.assignments if item.id != original.id)
+        try:
+            return RegistryData.model_validate(
+                data.model_copy(update={"assignments": (*remaining, *ordered)}).model_dump()
+            )
+        except Exception as exc:
+            if "overlapping assignments" in str(exc):
+                raise ValueError(
+                    f"This period overlaps existing history for BearTag {original.bear_tag_id}."
+                ) from None
+            raise
+
     @staticmethod
     def _with_assignment(
         data: RegistryData, assignment: BearTagAssignment
     ) -> RegistryData:
+        conflict = next(
+            (
+                item
+                for item in data.assignments
+                if item.bear_tag_id == assignment.bear_tag_id
+                and item.valid_from < assignment.valid_to
+                and assignment.valid_from < item.valid_to
+            ),
+            None,
+        )
+        if conflict is not None:
+            raise ValueError(
+                f"This period creates overlapping assignments for BearTag "
+                f"{assignment.bear_tag_id}. It conflicts with "
+                f"{conflict.valid_from.isoformat()} to {conflict.valid_to.isoformat()}."
+            )
         updated = data.model_copy(update={"assignments": (*data.assignments, assignment)})
         return RegistryData.model_validate(updated.model_dump())
 

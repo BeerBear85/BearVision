@@ -166,7 +166,7 @@ async function handle(request, response) {
       writeJson(response, 200, await runPython("list-tags"));
       return;
     }
-    const body = request.method === "POST" ? await readJson(request) : {};
+    const body = ["POST", "PUT"].includes(request.method) ? await readJson(request) : {};
     if (request.method === "POST" && url.pathname === "/api/users") {
       writeJson(response, 201, await runPython("create-user", body)); return;
     }
@@ -179,6 +179,13 @@ async function handle(request, response) {
       }));
       return;
     }
+    const userEdit = url.pathname.match(/^\/api\/users\/([0-9a-fA-F-]{36})$/);
+    if (request.method === "PUT" && userEdit) {
+      writeJson(response, 200, await runPython("update-user", {
+        ...body, userId: userEdit[1],
+      }));
+      return;
+    }
     if (request.method === "POST" && url.pathname === "/api/beartags") {
       writeJson(response, 201, await runPython("create-tag", body)); return;
     }
@@ -187,6 +194,19 @@ async function handle(request, response) {
     }
     if (request.method === "POST" && url.pathname === "/api/assignments/validate") {
       writeJson(response, 200, await runPython("validate-assignment", body)); return;
+    }
+    if (request.method === "POST" && url.pathname === "/api/assignments/history/preview") {
+      writeJson(response, 200, await runPython("preview-history-change", body)); return;
+    }
+    if (request.method === "POST" && url.pathname === "/api/assignments/history/apply") {
+      writeJson(response, 200, await runPython("apply-history-change", body)); return;
+    }
+    const reassign = url.pathname.match(/^\/api\/jobs\/([A-Za-z0-9._:-]+)\/assignment$/);
+    if (request.method === "POST" && reassign) {
+      writeJson(response, 200, await runPython("manual-reassign", {
+        ...body, jobId: reassign[1],
+      }));
+      return;
     }
     const requeue = url.pathname.match(/^\/api\/jobs\/([A-Za-z0-9._:-]+)\/requeue$/);
     if (request.method === "POST" && requeue) {

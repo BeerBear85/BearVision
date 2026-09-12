@@ -20,7 +20,8 @@ checksum before scoring.
 
 Terminal jobs contain `result.json` with status, processing time, algorithm
 version, selected tag, stable `selectedUserId` UUID and assignment when
-applicable, every candidate score, reason and error code. Result files use
-`schemaVersion: 2`; email is not part of the transport contract. Processed jobs
+applicable, every candidate score, reason and error code. New result files use
+`schemaVersion: 3` and add assignment source plus manual-assignment audit fields;
+schema-version-2 results remain readable. Email is not part of the transport contract. Processed jobs
 are stored under `processed/user_<uuid>/<job-id>`. READY-less folders are
 ignored and `jobId` is the idempotency key.

@@ -27,7 +27,16 @@ test("Server Control contains no Danish UI copy", () => {
 
 test("Server Control refreshes queue views with the server summary", () => {
   assert.match(uiSource, /function VideoLibrary\(\{ onError, refreshVersion,/);
-  assert.match(uiSource, /\[query, status, page, userFilter, refreshVersion\]/);
+  assert.match(uiSource, /\[query, status, page, userFilter, refreshVersion, mutationVersion\]/);
   assert.match(uiSource, /function JobQueue\(\{ onError, refreshVersion \}\)/);
   assert.match(uiSource, /\[status, refreshVersion\]/);
+});
+test("non-deleting operator actions do not ask for extra confirmation", () => {
+  assert.equal(uiSource.includes("window.confirm"), false);
+  assert.match(uiSource, /Reassign clip/);
+  assert.match(uiSource, /Save and recalculate/);
+});
+test("Job queue exposes the assigned rider after corrections", () => {
+  assert.match(uiSource, /<th>Rider<\/th>/);
+  assert.match(uiSource, /job\.displayName \?\? job\.userEmail \?\? "Unassigned"/);
 });

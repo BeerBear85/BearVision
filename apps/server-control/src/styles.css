@@ -152,3 +152,26 @@ tbody tr:last-child td { border-bottom: 0; }
   .date-grid { grid-template-columns: 1fr; }
   th:nth-child(2), td:nth-child(2) { display: none; }
 }
+.change-preview { display: grid; grid-template-columns: 1fr auto 1fr; gap: 12px; align-items: center; padding: 13px; margin-bottom: 14px; border-radius: 8px; background: #edf2ef; }
+.change-preview span { display: grid; gap: 3px; color: #66746f; font-size: 12px; }
+.change-preview strong { color: #18211e; font-size: 14px; }
+.edit-user { margin-left: auto; }
+.assignment button { justify-self: start; margin-top: 5px; }
+.modal fieldset { margin: 12px 0; border: 1px solid #d8e1dd; border-radius: 8px; padding: 12px; }
+.modal legend { color: #52615c; font-size: 13px; font-weight: 600; }
+.history-summary { display: grid; gap: 3px; padding: 11px; margin-bottom: 12px; background: #edf2ef; border-radius: 8px; }
+.history-summary span { color: #66746f; font-size: 13px; }
+.check-row { display: flex; grid-template-columns: auto 1fr; align-items: center; gap: 8px; margin: 14px 0; color: #24302c; }
+.check-row input { min-height: auto; }
+.impact { margin: 18px 0; }
+.impact h3 { font-size: 15px; margin: 0 0 9px; }
+.impact-counts { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+.impact-counts span { padding: 6px 9px; border-radius: 7px; background: #edf2ef; font-size: 12px; }
+.modal { overflow-x: hidden; }
+.modal form, .modal fieldset, .modal label { min-width: 0; }
+.modal input, .modal select { width: 100%; min-width: 0; }
+.modal .table-surface { max-width: 100%; }
+.impact table { font-size: 12px; table-layout: fixed; }
+.impact th, .impact td { overflow-wrap: anywhere; }
+.impact td small { display: block; color: #66746f; margin-top: 2px; }
+.impact .protected { color: #895600; }

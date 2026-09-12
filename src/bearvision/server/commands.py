@@ -18,6 +18,7 @@ from bearvision.contracts import CandidateScore, EdgeJobManifest, JobResultManif
 from bearvision.ports import ManagedJobQueue
 
 from .admin import AdminCatalog, AdminMediaService, UserVideoCatalog
+from .corrections import AssignmentCorrectionService
 from .registry import (
     BearTagAssignment,
     BearTagRecord,
@@ -109,6 +110,14 @@ class UpdateUserEmailCommand(CommandModel):
     email: str = Field(min_length=1)
 
 
+class UpdateUserCommand(CommandModel):
+    command: Literal["update-user"]
+    user_id: UUID
+    email: str = Field(min_length=1)
+    display_name: str = Field(min_length=1)
+    reason: str = Field(min_length=1, max_length=500)
+
+
 class CreateTagCommand(CommandModel):
     command: Literal["create-tag"]
     id: str = Field(min_length=1)
@@ -144,6 +153,45 @@ class RequeueCommand(CommandModel):
     job_id: str = Field(min_length=1)
 
 
+class ReplacementAssignment(ProcessModel):
+    id: str = Field(min_length=1)
+    user_id: UUID
+    bear_tag_id: str = Field(min_length=1)
+    valid_from: datetime
+    valid_to: datetime
+
+    def assignment(self) -> BearTagAssignment:
+        return BearTagAssignment(
+            id=self.id,
+            userId=self.user_id,
+            bearTagId=self.bear_tag_id,
+            validFrom=self.valid_from,
+            validTo=self.valid_to,
+        )
+
+
+class HistoryChangeCommand(CommandModel):
+    assignment_id: str = Field(min_length=1)
+    replacements: tuple[ReplacementAssignment, ...] = Field(min_length=1)
+    override_manual_assignments: bool = False
+
+
+class PreviewHistoryChangeCommand(HistoryChangeCommand):
+    command: Literal["preview-history-change"]
+
+
+class ApplyHistoryChangeCommand(HistoryChangeCommand):
+    command: Literal["apply-history-change"]
+    reason: str = Field(min_length=1, max_length=500)
+
+
+class ManualReassignCommand(CommandModel):
+    command: Literal["manual-reassign"]
+    job_id: str = Field(min_length=1)
+    user_id: UUID
+    reason: str = Field(min_length=1, max_length=500)
+
+
 ServerCommand = Annotated[
     SnapshotCommand
     | SummaryCommand
@@ -157,10 +205,14 @@ ServerCommand = Annotated[
     | MaterializeUserMediaCommand
     | CreateUserCommand
     | UpdateUserEmailCommand
+    | UpdateUserCommand
     | CreateTagCommand
     | CreateAssignmentCommand
     | ValidateAssignmentCommand
-    | RequeueCommand,
+    | RequeueCommand
+    | PreviewHistoryChangeCommand
+    | ApplyHistoryChangeCommand
+    | ManualReassignCommand,
     Field(discriminator="command"),
 ]
 COMMAND_ADAPTER: TypeAdapter[ServerCommand] = TypeAdapter(ServerCommand)
@@ -301,6 +353,7 @@ CommandResult = (
     | BearTagRecord
     | BearTagAssignment
     | JobResultManifest
+    | dict[str, Any]
     | None
 )
 
@@ -427,6 +480,13 @@ class ServerCommandModule:
             return self.registry.create_user(command.email, command.display_name)
         if isinstance(command, UpdateUserEmailCommand):
             return self.registry.update_user_email(command.user_id, command.email)
+        if isinstance(command, UpdateUserCommand):
+            return self.registry.update_user(
+                command.user_id,
+                email=command.email,
+                display_name=command.display_name,
+                reason=command.reason,
+            )
         if isinstance(command, CreateTagCommand):
             return self.registry.create_bear_tag(command.id)
         if isinstance(command, CreateAssignmentCommand):
@@ -436,6 +496,28 @@ class ServerCommandModule:
             return AssignmentValidationReadModel(assignment=assignment)
         if isinstance(command, RequeueCommand):
             return RequeueReadModel(requeued=await self.queue.requeue(command.job_id))
+        corrections = AssignmentCorrectionService(
+            self.queue, self.registry, self.config.assignment
+        )
+        if isinstance(command, ManualReassignCommand):
+            return await corrections.manual_reassign(
+                command.job_id, command.user_id, command.reason
+            )
+        if isinstance(command, ApplyHistoryChangeCommand):
+            replacements = tuple(item.assignment() for item in command.replacements)
+            return await corrections.apply_history_change(
+                command.assignment_id,
+                replacements,
+                reason=command.reason,
+                override_manual_assignments=command.override_manual_assignments,
+            )
+        if isinstance(command, PreviewHistoryChangeCommand):
+            replacements = tuple(item.assignment() for item in command.replacements)
+            return await corrections.preview_history_change(
+                command.assignment_id,
+                replacements,
+                override_manual_assignments=command.override_manual_assignments,
+            )
         if isinstance(command, RunOnceCommand):
             return await ServerWorker(
                 self.queue,
@@ -447,5 +529,9 @@ class ServerCommandModule:
 
 
 def serialize_result(result: CommandResult) -> str:
-    payload = result.model_dump(mode="json", by_alias=True) if result is not None else None
+    payload = (
+        result.model_dump(mode="json", by_alias=True)
+        if isinstance(result, BaseModel)
+        else result
+    )
     return json.dumps(payload, separators=(",", ":"))
