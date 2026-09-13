@@ -4,6 +4,8 @@ import { createServer } from "node:http";
 import { dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { withAdminBasicAuth } from "./admin-basic-auth.mjs";
+
 const here = dirname(fileURLToPath(import.meta.url));
 export const appRoot = resolve(here, "..");
 export const repoRoot = resolve(appRoot, "..", "..");
@@ -19,7 +21,12 @@ const mimeTypes = {
   ".css": "text/css; charset=utf-8",
   ".html": "text/html; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
+  ".svg": "image/svg+xml",
 };
+
+export function staticContentType(path) {
+  return mimeTypes[extname(path).toLowerCase()] ?? "application/octet-stream";
+}
 
 export function pythonCommand() {
   if (process.env.BEARVISION_PYTHON) return process.env.BEARVISION_PYTHON;
@@ -33,10 +40,19 @@ export function adminRequest(command, body = {}) {
   return { ...body, commandSchemaVersion: "1.0", command };
 }
 
+export function pythonEnvironment(env = process.env) {
+  const childEnvironment = { ...env };
+  delete childEnvironment.BEARVISION_ADMIN_USERNAME;
+  delete childEnvironment.BEARVISION_ADMIN_PASSWORD;
+  return childEnvironment;
+}
+
 function runPython(command, body) {
   return new Promise((resolvePromise, reject) => {
     const args = ["-m", "bearvision.server.cli", "--config", configPath, "execute"];
-    const child = spawn(pythonCommand(), args, { cwd: repoRoot, windowsHide: true });
+    const child = spawn(pythonCommand(), args, {
+      cwd: repoRoot, windowsHide: true, env: pythonEnvironment(),
+    });
     let stdout = "";
     let stderr = "";
     child.stdout.on("data", (chunk) => { stdout += chunk; });
@@ -119,7 +135,7 @@ function serveStatic(request, response) {
   const candidate = resolve(distRoot, relative);
   const path = candidate.startsWith(distRoot) && existsSync(candidate) && statSync(candidate).isFile()
     ? candidate : join(distRoot, "index.html");
-  response.writeHead(200, { "content-type": mimeTypes[extname(path)] ?? "application/octet-stream" });
+  response.writeHead(200, { "content-type": staticContentType(path) });
   createReadStream(path).pipe(response);
 }
 
@@ -219,6 +235,10 @@ async function handle(request, response) {
   }
 }
 
+export function createAdminHandler(env) {
+  return withAdminBasicAuth(handle, env);
+}
+
 function requestUserEmail(request) {
   const value = request.headers["x-bearvision-email"];
   if (typeof value !== "string" || !value.trim()) {
@@ -227,7 +247,7 @@ function requestUserEmail(request) {
   return value.trim();
 }
 
-async function handleApp(request, response) {
+export async function handleApp(request, response) {
   const url = new URL(request.url, "http://localhost");
   try {
     if (request.method === "GET" && url.pathname === "/api/app/health") {
@@ -263,13 +283,16 @@ async function handleApp(request, response) {
 
 function startWorker() {
   const args = ["-m", "bearvision.server.cli", "--config", configPath, "worker"];
-  worker = spawn(pythonCommand(), args, { cwd: repoRoot, windowsHide: true, stdio: "inherit" });
+  worker = spawn(pythonCommand(), args, {
+    cwd: repoRoot, windowsHide: true, stdio: "inherit", env: pythonEnvironment(),
+  });
   worker.on("exit", () => { worker = null; });
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  const adminHandler = createAdminHandler(process.env);
   startWorker();
-  const adminServer = createServer(handle);
+  const adminServer = createServer(adminHandler);
   const appServer = createServer(handleApp);
   adminServer.listen(port, host, () => {
     console.log(`BearVision Server Control: http://${host}:${port}`);

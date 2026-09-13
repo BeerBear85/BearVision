@@ -4,6 +4,9 @@ Status: prototype.
 
 The Android API is a separate read-only listener on `0.0.0.0:4321`. The
 administrative interface remains bound to `127.0.0.1:4320`.
+Server Control Basic authentication applies only to the administrative listener;
+`BEARVISION_ADMIN_USERNAME` and `BEARVISION_ADMIN_PASSWORD` are not required by
+Android requests and are not an Android authentication mechanism.
 
 Every user-specific request carries the claimed normalized email in the
 `X-BearVision-Email` header. There is no proof of ownership in this prototype,

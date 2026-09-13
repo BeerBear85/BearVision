@@ -119,10 +119,17 @@ latest-frame-wins buffering to avoid accumulated latency.
 
 Run the local server worker/admin GUI:
 
-```bash
+```powershell
 cd apps/server-control
 corepack pnpm install
 corepack pnpm build
+$env:BEARVISION_ADMIN_USERNAME = "admin"
+$generatedAdminPassword = [Convert]::ToBase64String(
+  [Security.Cryptography.RandomNumberGenerator]::GetBytes(32)
+)
+$env:BEARVISION_ADMIN_PASSWORD = $generatedAdminPassword
+$generatedAdminPassword | Set-Clipboard
+Remove-Variable generatedAdminPassword
 corepack pnpm serve
 ```
 
@@ -130,8 +137,12 @@ To consume packages emitted by Edge Control simulation, set
 `BEARVISION_SERVER_CONFIG=config/server.local.yaml` before starting Server
 Control. Production continues to use `config/server.yaml` and Box.
 
-Open `http://127.0.0.1:4320`. It binds only to loopback. The admin UI includes
-a paginated video library, assignment evidence, queue operations and
+Open `http://127.0.0.1:4320` and use the configured username plus the generated
+password copied to the clipboard. Both variables are mandatory. Keep the
+password unique and random, and never store it in YAML, a repository `.env`, or
+a command-line argument. Rotation requires replacing the password environment
+variable and restarting Server Control. It binds only to loopback. The admin UI
+includes a paginated video library, assignment evidence, queue operations and
 user/BearTag history. Node remains a thin HTTP and process shell: Python owns
 the read models, registry validation, Box downloads, checksum verification and
 FFmpeg thumbnail generation. Node only streams cached media with HTTP byte

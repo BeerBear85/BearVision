@@ -5,6 +5,26 @@ Status: implemented for the local-only administration service.
 The API is bound to `127.0.0.1`. It is not a public Edge/server interface; Edge
 and the server continue to communicate only through Box.
 
+## Authentication
+
+The complete listener, including the UI, static assets, admin API, thumbnails
+and video streams, requires exactly one syntactically valid HTTP Basic
+`Authorization` header. Credentials come from the mandatory process environment
+variables `BEARVISION_ADMIN_USERNAME` and `BEARVISION_ADMIN_PASSWORD`. Invalid
+configuration stops Server Control before the Python worker or either HTTP
+listener starts. The credentials are not passed to Python processes.
+
+Missing, invalid or incorrect credentials return:
+
+- status `401`;
+- `WWW-Authenticate: Basic realm="BearVision Server Control", charset="UTF-8"`;
+- `Cache-Control: no-store`;
+- JSON body `{"error":"authentication required"}`.
+
+Every endpoint below can return this `401`. Successful response bodies, status
+codes and request formats are otherwise unchanged. The separate Android API on
+port `4321` does not use these administrator credentials.
+
 ## Read endpoints
 
 - `GET /api/summary` returns worker state and queue counts.
