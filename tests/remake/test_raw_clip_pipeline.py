@@ -1,9 +1,17 @@
 import asyncio
 from datetime import datetime, timedelta, timezone
 import json
+import logging
 from pathlib import Path
 
-from bearvision.contracts import BoundingBox, MediaAsset, PersonDetection
+from bearvision.contracts import (
+    BoundingBox,
+    MediaAsset,
+    PersonDetection,
+    TagObservation,
+    Vector3,
+)
+from bearvision.config import EdgeBearTagFilterConfig
 from bearvision.edge import BearVisionOrchestrator
 from bearvision.edge.raw_clip_pipeline import RawClipJobContext, RawClipPipeline
 from bearvision.ports import (
@@ -95,6 +103,201 @@ def test_submit_persists_only_metadata_and_keeps_raw_video_in_place(tmp_path: Pa
     asyncio.run(exercise())
 
 
+def test_submit_retains_clip_without_qualifying_bear_tag(tmp_path: Path, caplog) -> None:
+    async def exercise() -> None:
+        capture_dir = tmp_path / "captures"
+        capture_dir.mkdir()
+        raw_path = capture_dir / "raw.mp4"
+        pipeline = RawClipPipeline(
+            capture_dir=capture_dir,
+            clock=VirtualClock(NOW),
+            clip_processor=None,
+            job_queue=InMemoryJobQueue(),
+            edge_device_id="edge-test",
+            bear_tag_filter=EdgeBearTagFilterConfig(),
+        )
+        await pipeline.start()
+        caplog.set_level(logging.INFO, logger="bearvision.edge.raw_clip_pipeline")
+
+        summary = await pipeline.submit(
+            captured_clip(raw_path),
+            RawClipJobContext(
+                capture_started_at_utc=NOW + timedelta(seconds=10),
+                capture_ended_at_utc=NOW + timedelta(seconds=15),
+                observations=(),
+            ),
+        )
+        await pipeline.wait_until_idle()
+
+        assert summary.status == "retained"
+        assert raw_path.is_file()
+        metadata = json.loads(
+            (capture_dir / ".raw-clip-queue/retained/capture-frame-1.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        decision = json.loads(caplog.records[-1].message)
+        assert metadata["status"] == "retained"
+        assert metadata["upload_status"] == "retained"
+        assert decision["reason"] == (
+            "no registered BearTag passes whole-clip observation, motion and RSSI gates"
+        )
+        assert decision["retainedClipCount"] == 1
+        assert pipeline.snapshot().counts == {
+            "queued": 0,
+            "processing": 0,
+            "failed": 0,
+            "completed": 0,
+        }
+        await pipeline.stop()
+
+    asyncio.run(exercise())
+
+
+def test_submit_accepts_unknown_tag_at_edge_thresholds_and_logs_evidence(
+    tmp_path: Path, caplog
+) -> None:
+    async def exercise() -> None:
+        capture_dir = tmp_path / "captures"
+        capture_dir.mkdir()
+        queue = InMemoryJobQueue()
+        pipeline = RawClipPipeline(
+            capture_dir=capture_dir,
+            clock=VirtualClock(NOW),
+            clip_processor=None,
+            job_queue=queue,
+            edge_device_id="edge-test",
+            bear_tag_filter=EdgeBearTagFilterConfig(),
+        )
+        await pipeline.start()
+        observations = tuple(
+            TagObservation(
+                tag_id="BearTag-unknown",
+                observed_at_utc=NOW + timedelta(seconds=at_s),
+                observed_at_monotonic_s=at_s,
+                rssi_dbm=-100,
+                acceleration_mps2=Vector3(x=0, y=0, z=10.5),
+            )
+            for at_s in (11, 14)
+        )
+        caplog.set_level(logging.INFO, logger="bearvision.edge.raw_clip_pipeline")
+
+        summary = await pipeline.submit(
+            captured_clip(capture_dir / "raw.mp4"),
+            RawClipJobContext(
+                capture_started_at_utc=NOW + timedelta(seconds=10),
+                capture_ended_at_utc=NOW + timedelta(seconds=15),
+                observations=observations,
+            ),
+        )
+        await pipeline.wait_until_idle()
+
+        decision = json.loads(caplog.records[-1].message)
+        assert summary.status == "queued"
+        assert "capture-frame-1" in queue.packages
+        assert decision["decision"] == "accepted"
+        assert decision["candidateBearTagIds"] == ["BearTag-unknown"]
+        assert decision["thresholds"] == {
+            "minimumMotionDeltaMps2": 0.5,
+            "minimumObservationCount": 2,
+            "minimumRssiDbm": -110,
+        }
+        assert decision["evidence"][0]["bearTagId"] == "BearTag-unknown"
+        await pipeline.stop()
+
+    asyncio.run(exercise())
+
+
+def test_submit_retains_clip_when_bear_tag_filter_fails(tmp_path: Path, caplog) -> None:
+    async def exercise() -> None:
+        capture_dir = tmp_path / "captures"
+        capture_dir.mkdir()
+        raw_path = capture_dir / "raw.mp4"
+        invalid_policy = EdgeBearTagFilterConfig.model_construct(
+            minimum_motion_delta_mps2=0.5,
+            motion_full_scale_mps2=0.5,
+        )
+        pipeline = RawClipPipeline(
+            capture_dir=capture_dir,
+            clock=VirtualClock(NOW),
+            clip_processor=None,
+            job_queue=InMemoryJobQueue(),
+            edge_device_id="edge-test",
+            bear_tag_filter=invalid_policy,
+        )
+        await pipeline.start()
+        caplog.set_level(logging.ERROR, logger="bearvision.edge.raw_clip_pipeline")
+
+        summary = await pipeline.submit(
+            captured_clip(raw_path),
+            RawClipJobContext(
+                capture_started_at_utc=NOW + timedelta(seconds=10),
+                capture_ended_at_utc=NOW + timedelta(seconds=15),
+                observations=(),
+            ),
+        )
+        await pipeline.wait_until_idle()
+
+        decision = json.loads(caplog.records[-1].message)
+        assert summary.status == "retained"
+        assert raw_path.is_file()
+        assert decision["decision"] == "retained"
+        assert decision["reason"] == "BearTag filter failed closed"
+        assert "motion_full_scale_mps2" in decision["error"]
+        await pipeline.stop()
+
+    asyncio.run(exercise())
+
+
+def test_submit_accepts_multiple_qualifying_tags_without_selecting_winner(
+    tmp_path: Path, caplog
+) -> None:
+    async def exercise() -> None:
+        capture_dir = tmp_path / "captures"
+        capture_dir.mkdir()
+        queue = InMemoryJobQueue()
+        pipeline = RawClipPipeline(
+            capture_dir=capture_dir,
+            clock=VirtualClock(NOW),
+            clip_processor=None,
+            job_queue=queue,
+            edge_device_id="edge-test",
+            bear_tag_filter=EdgeBearTagFilterConfig(),
+        )
+        await pipeline.start()
+        observations = tuple(
+            TagObservation(
+                tag_id=tag_id,
+                observed_at_utc=NOW + timedelta(seconds=at_s),
+                observed_at_monotonic_s=at_s,
+                rssi_dbm=-100,
+                acceleration_mps2=Vector3(x=0, y=0, z=10.5),
+            )
+            for tag_id in ("BearTag-a", "BearTag-b")
+            for at_s in (11, 14)
+        )
+        caplog.set_level(logging.INFO, logger="bearvision.edge.raw_clip_pipeline")
+
+        summary = await pipeline.submit(
+            captured_clip(capture_dir / "raw.mp4"),
+            RawClipJobContext(
+                capture_started_at_utc=NOW + timedelta(seconds=10),
+                capture_ended_at_utc=NOW + timedelta(seconds=15),
+                observations=observations,
+            ),
+        )
+        await pipeline.wait_until_idle()
+
+        decision = json.loads(caplog.records[-1].message)
+        assert summary.status == "queued"
+        assert "capture-frame-1" in queue.packages
+        assert decision["selectionStatus"] == "ambiguous"
+        assert decision["candidateBearTagIds"] == ["BearTag-a", "BearTag-b"]
+        await pipeline.stop()
+
+    asyncio.run(exercise())
+
+
 def test_one_worker_processes_jobs_in_persisted_fifo_order(tmp_path: Path) -> None:
     async def exercise() -> None:
         class RecordingProcessor:
@@ -176,9 +379,7 @@ def test_job_failure_is_persisted_and_worker_continues_with_next_job(tmp_path: P
         assert snapshot.counts["failed"] == 1
         assert snapshot.counts["completed"] == 1
         failed = json.loads(
-            (capture_dir / ".raw-clip-queue/failed/capture-one.json").read_text(
-                encoding="utf-8"
-            )
+            (capture_dir / ".raw-clip-queue/failed/capture-one.json").read_text(encoding="utf-8")
         )
         assert failed["failed_step"] == "processing"
         assert failed["latest_failure_id"] == "failure-capture-one-processing-1"

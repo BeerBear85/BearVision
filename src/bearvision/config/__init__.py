@@ -2,6 +2,7 @@
 
 from .models import (
     AssignmentConfig,
+    EdgeBearTagFilterConfig,
     EdgeConfig,
     ServerConfig,
     VirtualCameramanConfig,
@@ -11,6 +12,7 @@ from .models import (
 
 __all__ = [
     "AssignmentConfig",
+    "EdgeBearTagFilterConfig",
     "EdgeConfig",
     "ServerConfig",
     "VirtualCameramanConfig",

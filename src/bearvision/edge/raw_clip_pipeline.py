@@ -8,6 +8,7 @@ from contextlib import suppress
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 import json
+import logging
 import os
 from pathlib import Path
 from typing import Any, Literal
@@ -20,13 +21,24 @@ from bearvision.contracts import (
     RuntimeEventKind,
     TagObservation,
 )
+from bearvision.config import EdgeBearTagFilterConfig
+from bearvision.domain import ALGORITHM_VERSION, select_bear_tag
 from bearvision.ports import CapturedClip, CapturedMedia, ClipProcessor, Clock, JobQueue
 
 from .job_package import build_edge_job
 
 
+logger = logging.getLogger(__name__)
+
+
 RawClipJobStatus = Literal[
-    "queued", "processing", "packaging", "uploading", "failed", "completed"
+    "queued",
+    "processing",
+    "packaging",
+    "uploading",
+    "failed",
+    "completed",
+    "retained",
 ]
 
 
@@ -75,7 +87,7 @@ class RawClipQueueSnapshot:
 class RawClipPipeline:
     """Own raw-clip persistence and background work behind one small interface."""
 
-    _STATUSES = ("queued", "processing", "failed", "completed")
+    _STATUSES = ("queued", "processing", "failed", "completed", "retained")
 
     def __init__(
         self,
@@ -86,6 +98,7 @@ class RawClipPipeline:
         job_queue: JobQueue,
         edge_device_id: str,
         upload_enabled: bool = True,
+        bear_tag_filter: EdgeBearTagFilterConfig | None = None,
         event_sink: Callable[[RuntimeEventKind, dict[str, Any], float], None] | None = None,
     ) -> None:
         self.capture_dir = Path(capture_dir).resolve()
@@ -95,6 +108,7 @@ class RawClipPipeline:
         self.job_queue = job_queue
         self.edge_device_id = edge_device_id
         self.upload_enabled = upload_enabled
+        self.bear_tag_filter = bear_tag_filter
         self.event_sink = event_sink
         self._queue: asyncio.PriorityQueue[tuple[str, str]] = asyncio.PriorityQueue()
         self._worker: asyncio.Task[None] | None = None
@@ -147,9 +161,12 @@ class RawClipPipeline:
             raise ValueError("raw clip filename does not match its media asset")
         if raw_path.stat().st_size != media.asset.size_bytes:
             raise ValueError("raw clip size does not match its media asset")
-        target = self._path("queued", captured_clip.request_id)
         if any(self._path(status, captured_clip.request_id).exists() for status in self._STATUSES):
             return self._summary(self._load_existing(captured_clip.request_id))
+        status, filter_log, filter_log_level = self._bear_tag_filter_decision(
+            captured_clip, context
+        )
+        target = self._path(status, captured_clip.request_id)
         now = self.clock.utc_now()
         record: dict[str, Any] = {
             "raw_clip_job_schema_version": "1.0",
@@ -157,7 +174,7 @@ class RawClipPipeline:
             "request_id": captured_clip.request_id,
             "queued_at_utc": now.isoformat(),
             "state_changed_at_utc": now.isoformat(),
-            "status": "queued",
+            "status": status,
             "processing_attempts": 0,
             "raw_filename": raw_path.name,
             "raw_media": media.asset.model_dump(mode="json"),
@@ -171,7 +188,13 @@ class RawClipPipeline:
             "tracking_filename": None,
             "trim_offset_s": None,
             "processed_duration_s": None,
-            "upload_status": "pending" if self.upload_enabled else "disabled",
+            "upload_status": (
+                "retained"
+                if status == "retained"
+                else "pending"
+                if self.upload_enabled
+                else "disabled"
+            ),
             "object_key": None,
             "latest_failure_id": None,
             "failed_step": None,
@@ -179,9 +202,81 @@ class RawClipPipeline:
             "retry_checkpoint": "processing",
         }
         self._atomic_write(target, record)
-        self._emit_job(record)
-        await self._queue.put((record["queued_at_utc"], captured_clip.request_id))
+        if filter_log is not None:
+            filter_log["retainedClipCount"] = sum(
+                1 for _ in (self.queue_dir / "retained").glob("*.json")
+            )
+            logger.log(
+                filter_log_level,
+                json.dumps(filter_log, separators=(",", ":"), sort_keys=True),
+            )
+        if status == "queued":
+            self._emit_job(record)
+            await self._queue.put((record["queued_at_utc"], captured_clip.request_id))
         return self._summary(record)
+
+    def _bear_tag_filter_decision(
+        self, captured_clip: CapturedClip, context: RawClipJobContext
+    ) -> tuple[RawClipJobStatus, dict[str, Any] | None, int]:
+        policy = self.bear_tag_filter
+        if policy is None:
+            return "queued", None, logging.INFO
+        common = {
+            "algorithmVersion": ALGORITHM_VERSION,
+            "clipEndMonotonicS": captured_clip.actual_window.end_monotonic_s,
+            "clipStartMonotonicS": captured_clip.actual_window.start_monotonic_s,
+            "event": "edge_bear_tag_filter_decision",
+            "jobId": captured_clip.request_id,
+            "thresholds": {
+                "minimumMotionDeltaMps2": policy.minimum_motion_delta_mps2,
+                "minimumObservationCount": policy.minimum_observation_count,
+                "minimumRssiDbm": policy.minimum_rssi_dbm,
+            },
+        }
+        try:
+            selection = select_bear_tag(
+                context.observations,
+                {item.tag_id for item in context.observations},
+                clip_start_monotonic_s=captured_clip.actual_window.start_monotonic_s,
+                clip_end_monotonic_s=captured_clip.actual_window.end_monotonic_s,
+                minimum_observation_count=policy.minimum_observation_count,
+                minimum_motion_delta_mps2=policy.minimum_motion_delta_mps2,
+                motion_full_scale_mps2=policy.motion_full_scale_mps2,
+                minimum_rssi_dbm=policy.minimum_rssi_dbm,
+                rssi_full_scale_dbm=policy.rssi_full_scale_dbm,
+                motion_weight=policy.motion_weight,
+                rssi_weight=policy.rssi_weight,
+                minimum_score_margin=policy.minimum_score_margin,
+            )
+        except Exception as exc:
+            return (
+                "retained",
+                {
+                    **common,
+                    "candidateBearTagIds": [],
+                    "decision": "retained",
+                    "error": str(exc),
+                    "evidence": [],
+                    "reason": "BearTag filter failed closed",
+                    "selectionStatus": "error",
+                },
+                logging.ERROR,
+            )
+        status: RawClipJobStatus = "queued" if selection.candidate_tag_ids else "retained"
+        return (
+            status,
+            {
+                **common,
+                "candidateBearTagIds": list(selection.candidate_tag_ids),
+                "decision": "accepted" if status == "queued" else "retained",
+                "evidence": [
+                    item.model_dump(mode="json", by_alias=True) for item in selection.evidence
+                ],
+                "reason": selection.reason,
+                "selectionStatus": selection.status.value,
+            },
+            logging.INFO,
+        )
 
     async def retry(self, failure_id: str) -> None:
         if not self._accepting:
@@ -192,9 +287,7 @@ class RawClipPipeline:
                 continue
             record["technical_error"] = None
             record["failed_step"] = None
-            self._transition_record(
-                record, path, "queued", destination_group="queued"
-            )
+            self._transition_record(record, path, "queued", destination_group="queued")
             await self._queue.put((record["queued_at_utc"], record["job_id"]))
             return
         raise ValueError(f"failure is unknown or no longer retryable: {failure_id}")
@@ -206,9 +299,7 @@ class RawClipPipeline:
             await self._queue.join()
             return
         idle = asyncio.create_task(self._queue.join())
-        done, _ = await asyncio.wait(
-            {idle, worker}, return_when=asyncio.FIRST_COMPLETED
-        )
+        done, _ = await asyncio.wait({idle, worker}, return_when=asyncio.FIRST_COMPLETED)
         if worker in done:
             idle.cancel()
             with suppress(asyncio.CancelledError):
@@ -247,13 +338,16 @@ class RawClipPipeline:
         counts = {status: 0 for status in self._STATUSES}
         for record in records:
             status = str(record["status"])
+            if status == "retained":
+                continue
             counts["processing" if status in {"packaging", "uploading"} else status] += 1
+        counts.pop("retained")
         queued = sorted(
             (record for record in records if record["status"] == "queued"),
             key=lambda item: (item["queued_at_utc"], item["job_id"]),
         )
         recent = sorted(
-            records,
+            (record for record in records if record["status"] != "retained"),
             key=lambda item: (item["state_changed_at_utc"], item["job_id"]),
             reverse=True,
         )[:20]
@@ -313,16 +407,13 @@ class RawClipPipeline:
             record["processed_duration_s"] = prepared.duration_s
             for event in prepared.trace_events:
                 if event.kind == "virtual_cameraman_completed":
-                    record["debug_video_filename"] = event.payload.get(
-                        "debug_video_filename"
-                    )
+                    record["debug_video_filename"] = event.payload.get("debug_video_filename")
                     record["tracking_filename"] = event.payload.get("tracking_filename")
                 self._emit(
                     event.kind,
                     event.payload,
                     (
-                        float(record["actual_window"]["start_monotonic_s"])
-                        + event.source_offset_s
+                        float(record["actual_window"]["start_monotonic_s"]) + event.source_offset_s
                         if event.source_offset_s is not None
                         else self.clock.monotonic()
                     ),
@@ -370,16 +461,13 @@ class RawClipPipeline:
                 },
                 self.clock.monotonic(),
             )
-        self._transition_record(
-            record, current_path, "completed", destination_group="completed"
-        )
+        self._transition_record(record, current_path, "completed", destination_group="completed")
         self._emit_resolution(record)
 
     async def _resume_upload(self, record: dict[str, Any], current_path: Path) -> None:
         manifest = EdgeJobManifest.model_validate(record["manifest"])
         job_observations = tuple(
-            BearTagJobObservation.model_validate(item)
-            for item in record["job_observations"]
+            BearTagJobObservation.model_validate(item) for item in record["job_observations"]
         )
         processed = record.get("processed_media")
         asset = (
@@ -406,9 +494,7 @@ class RawClipPipeline:
             },
             self.clock.monotonic(),
         )
-        self._transition_record(
-            record, current_path, "completed", destination_group="completed"
-        )
+        self._transition_record(record, current_path, "completed", destination_group="completed")
         self._emit_resolution(record)
 
     def _path(self, status: str, job_id: str) -> Path:
@@ -503,9 +589,7 @@ class RawClipPipeline:
                         "uploading" if previous_status == "uploading" else "processing"
                     )
                 elif group == "completed":
-                    record["upload_status"] = (
-                        "completed" if self.upload_enabled else "disabled"
-                    )
+                    record["upload_status"] = "completed" if self.upload_enabled else "disabled"
                 self._atomic_write(path, record)
 
     def _validate_persisted_raw(self, record: dict[str, Any]) -> None:
@@ -518,9 +602,7 @@ class RawClipPipeline:
         if raw_path.stat().st_size != asset.size_bytes:
             raise ValueError("raw clip size does not match persisted media metadata")
 
-    def _fail_queued_validation(
-        self, record: dict[str, Any], error: Exception
-    ) -> None:
+    def _fail_queued_validation(self, record: dict[str, Any], error: Exception) -> None:
         record["status"] = "queued"
         record["failed_step"] = "validation"
         record["technical_error"] = str(error)
@@ -541,9 +623,7 @@ class RawClipPipeline:
             {
                 "failure_id": record["latest_failure_id"],
                 "operation_id": f"{record['job_id']}:{failed_step}",
-                "stage": (
-                    "post_processing" if failed_step == "processing" else failed_step
-                ),
+                "stage": ("post_processing" if failed_step == "processing" else failed_step),
                 "component": (
                     "raw_clip_storage"
                     if validation_failure
@@ -590,10 +670,11 @@ class RawClipPipeline:
         summary = self._summary(record)
         snapshot = self.snapshot()
         current_job = snapshot.current_job
-        if (
-            summary.job_id == current_job
-            and summary.status not in {"processing", "packaging", "uploading"}
-        ):
+        if summary.job_id == current_job and summary.status not in {
+            "processing",
+            "packaging",
+            "uploading",
+        }:
             current_job = None
         self._emit(
             "clip_job_updated",

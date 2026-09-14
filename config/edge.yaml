@@ -16,6 +16,15 @@ virtual_cameraman:
   output_width_px: 960
   output_height_px: 540
   output_crf: 18
+bear_tag_filter:
+  minimum_observation_count: 2
+  minimum_motion_delta_mps2: 0.5
+  motion_full_scale_mps2: 12.0
+  minimum_rssi_dbm: -110
+  rssi_full_scale_dbm: -40
+  motion_weight: 0.7
+  rssi_weight: 0.3
+  minimum_score_margin: 0.12
 detection:
   enabled: true
   model: yolov8n

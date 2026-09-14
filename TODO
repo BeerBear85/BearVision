@@ -1,6 +1,8 @@
 # BearVision 3 open work
 
 - Calibrate BearTag motion/RSSI thresholds from labelled field clips.
+- Define age/capacity retention and cleanup for Edge clips rejected by the
+  BearTag pre-processing filter.
 - Run end-to-end hardware tests with GoPro preview, capture, BLE and Box.
 - Benchmark each selected Windows or Linux Edge computer with GoPro preview, YOLO and BLE active together.
 - Build one synchronized scenario bundle from an existing test video, detections and approximately 10 Hz BearTag data.

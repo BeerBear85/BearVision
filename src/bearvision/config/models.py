@@ -23,9 +23,7 @@ class ClipExtractionConfig(StrictConfigModel):
     engine: Literal["ffmpeg"] = "ffmpeg"
     video_codec: Literal["libx264"] = "libx264"
     audio_codec: Literal["aac"] = "aac"
-    preset: Literal["ultrafast", "superfast", "veryfast", "faster", "fast", "medium"] = (
-        "veryfast"
-    )
+    preset: Literal["ultrafast", "superfast", "veryfast", "faster", "fast", "medium"] = "veryfast"
     crf: int = Field(default=20, ge=0, le=51)
 
 
@@ -82,6 +80,13 @@ class AssignmentConfig(StrictConfigModel):
         return self
 
 
+class EdgeBearTagFilterConfig(AssignmentConfig):
+    """Permissive whole-clip BearTag gate applied before Edge processing."""
+
+    minimum_motion_delta_mps2: float = Field(default=0.5, ge=0, le=100)
+    minimum_rssi_dbm: int = Field(default=-110, ge=-127, le=20)
+
+
 class PerformanceConfig(StrictConfigModel):
     max_fps: int = Field(default=30, ge=1, le=120)
     buffer_drain: bool = True
@@ -131,9 +136,8 @@ class EdgeConfig(StrictConfigModel):
     config_kind: Literal["bearvision-edge"]
     recording: RecordingConfig = Field(default_factory=RecordingConfig)
     clip_extraction: ClipExtractionConfig = Field(default_factory=ClipExtractionConfig)
-    virtual_cameraman: VirtualCameramanConfig = Field(
-        default_factory=VirtualCameramanConfig
-    )
+    virtual_cameraman: VirtualCameramanConfig = Field(default_factory=VirtualCameramanConfig)
+    bear_tag_filter: EdgeBearTagFilterConfig = Field(default_factory=EdgeBearTagFilterConfig)
     detection: DetectionConfig = Field(default_factory=DetectionConfig)
     performance: PerformanceConfig = Field(default_factory=PerformanceConfig)
     error_recovery: ErrorRecoveryConfig = Field(default_factory=ErrorRecoveryConfig)

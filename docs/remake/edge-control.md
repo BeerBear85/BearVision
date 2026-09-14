@@ -118,6 +118,17 @@ disk-backed SD card. It exposes GoPro-style `100GOPRO/GX01xxxx.MP4` media,
 which the production `GoProCameraAdapter` lists and downloads to the Edge
 capture directory. The preview source remains unchanged.
 
+Hardware execution applies the shared `beartag-fusion-1.0` whole-clip algorithm
+before Virtual Cameraman processing. Every observed BearTag ID is eligible; Edge
+does not consult the server registry or choose the final rider. A clip proceeds
+when at least one tag has two observations, mean acceleration delta of at least
+`0.5 m/s²` and median RSSI of at least `-110 dBm` across the actual camera window,
+including pre-roll and post-roll. Otherwise the unchanged raw clip and retained
+metadata stay on Edge for debugging, with no processing or upload. Each decision
+is emitted as one structured `edge_bear_tag_filter_decision` JSON log line with
+the algorithm version, interval, thresholds, BearTag IDs, evidence and reason.
+Filter errors fail closed and retain the raw clip.
+
 Before upload, the virtual-cameraman processor runs person detection across the
 whole extracted clip. A forward two-dimensional position/velocity Kalman pass
 performs normalized-innovation gating, and a Rauch--Tung--Striebel backward pass
@@ -177,6 +188,8 @@ scenario selector and can be replayed manually like any other video scenario.
   and uses latest-frame-wins buffering to prevent latency accumulation.
 - Edge Control has no authentication; do not expose port 4310 outside a trusted
   local network.
+- Retained raw clips currently have no age- or capacity-based cleanup policy.
+  Production operations must monitor capture storage until retention is defined.
 
 Automatic component retries are disabled in the active Edge configuration.
 Edge Control must surface the first failure and let the operator choose a safe
