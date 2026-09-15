@@ -22,6 +22,13 @@ so the API is suitable only for non-sensitive test data on a trusted LAN.
 The list response contains only the registered display name and public video
 metadata. Media is returned only if the processed job belongs to the email in
 the request header. Video responses support HTTP byte ranges for seeking.
+Each video item contains `jobId`, `status: processed`, capture timestamps,
+duration and public video metadata. Assignment evidence, manifests, audit data
+and administrative fields are not exposed.
+
+Validation errors are returned as short public messages. Raw validation
+objects, local paths, stack traces and documentation links are never returned
+by this listener. Unsupported mutation methods and routes return not found.
 
 The LAN listener can be overridden with `BEARVISION_APP_HOST` and
 `BEARVISION_APP_PORT`.

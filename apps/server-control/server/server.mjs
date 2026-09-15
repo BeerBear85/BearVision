@@ -103,6 +103,20 @@ export function mediaRange(range, size) {
   return { start, end, partial: true };
 }
 
+export function publicAppError(error) {
+  const message = String(error?.message ?? "");
+  if (message === "x-bearvision-email header is required") {
+    return { status: 400, body: { error: message } };
+  }
+  if (message === "user not found" || message === "video not found for user") {
+    return { status: 404, body: { error: "video not found for user" } };
+  }
+  if (/validation error|invalid|page size|greater than or equal/i.test(message)) {
+    return { status: 400, body: { error: "invalid request" } };
+  }
+  return { status: 503, body: { error: "the video service is unavailable" } };
+}
+
 function serveMedia(request, response, media) {
   const file = resolve(media.path);
   if (!existsSync(file) || !statSync(file).isFile()) {
@@ -277,7 +291,8 @@ export async function handleApp(request, response) {
     }
     writeJson(response, 404, { error: "not found" });
   } catch (error) {
-    writeJson(response, 400, { error: error.message });
+    const mapped = publicAppError(error);
+    writeJson(response, mapped.status, mapped.body);
   }
 }
 

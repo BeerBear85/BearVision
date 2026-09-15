@@ -122,8 +122,23 @@ def test_user_catalog_exposes_only_public_video_fields(tmp_path: Path) -> None:
     }
     assert result["total"] == 1
     assert result["items"][0]["jobId"] == "job-20260813-001"
+    assert result["items"][0]["status"] == "processed"
     assert "selectedUserEmail" not in result["items"][0]
     assert "selectedBearTagId" not in result["items"][0]
+    assert "candidates" not in result["items"][0]
+    assert "manifest" not in result["items"][0]
+
+
+def test_user_catalog_does_not_list_another_users_videos(tmp_path: Path) -> None:
+    queue, registry, _ = asyncio.run(processed_fixture(tmp_path))
+    registry.create_user("other@example.com", "Other Rider")
+
+    result = asyncio.run(
+        UserVideoCatalog(queue, registry).list_videos("other@example.com")
+    )
+
+    assert result["items"] == []
+    assert result["total"] == 0
 
 
 def test_user_media_rejects_a_job_owned_by_someone_else(tmp_path: Path) -> None:

@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { adminRequest, appHost, appPort, host, mediaRange } from "./server.mjs";
+import {
+  adminRequest, appHost, appPort, host, mediaRange, publicAppError,
+} from "./server.mjs";
 
 test("server is restricted to loopback", () => {
   assert.equal(host, "127.0.0.1");
@@ -69,6 +71,17 @@ test("user media commands always carry the claimed owner", () => {
     commandSchemaVersion: "1.0", command: "materialize-user-media",
     userId: "bear@example.com", jobId: "job-1", kind: "video",
   });
+});
+
+test("public app errors never expose raw validation details", () => {
+  assert.deepEqual(
+    publicAppError(new Error("1 validation error for UserVideosReadModel\nhttps://errors.pydantic.dev/x")),
+    { status: 400, body: { error: "invalid request" } },
+  );
+  assert.deepEqual(
+    publicAppError(new Error("video not found for user")),
+    { status: 404, body: { error: "video not found for user" } },
+  );
 });
 test("correction mutations remain exact thin Python command envelopes", () => {
   assert.deepEqual(adminRequest("manual-reassign", {

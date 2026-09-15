@@ -316,7 +316,7 @@ class TagListReadModel(ProcessModel):
 
 class UserVideosReadModel(ProcessModel):
     user: UserRecord
-    items: tuple[JobReadModel, ...]
+    items: tuple["UserVideoReadModel", ...]
     page: int
     page_size: int
     total: int
@@ -327,6 +327,16 @@ class MediaReadModel(ProcessModel):
     path: Path
     content_type: str
     size_bytes: int
+
+
+class UserVideoReadModel(ProcessModel):
+    job_id: str
+    status: Literal["processed"]
+    capture_started_at: datetime | None = None
+    capture_ended_at: datetime | None = None
+    created_at: datetime | None = None
+    duration_seconds: float | None = None
+    video: JobVideo | None = None
 
 
 class AssignmentValidationReadModel(ProcessModel):

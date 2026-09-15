@@ -279,6 +279,7 @@ class UserVideoCatalog:
                 key: item[key]
                 for key in (
                     "jobId",
+                    "status",
                     "captureStartedAt",
                     "captureEndedAt",
                     "createdAt",
