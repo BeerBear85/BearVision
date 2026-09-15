@@ -20,6 +20,11 @@ last_used_config.ini
 
 .claude/settings.local.json
 temp/*
+.tmp/
+
+# Local operator reports
+/docs/testing/*operator-report*.md
+
 .test-temp/
 .codex-pytest-*/
 data/server/user-registry.json
