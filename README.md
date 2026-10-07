@@ -1,6 +1,6 @@
 # BearVision 3
 
-<img width="1536" height="1024" alt="9969" src="https://github.com/user-attachments/assets/a901bea6-47bf-4872-a893-082b7138ee87" />
+<img width="1536" height="1024" alt="9970" src="https://github.com/user-attachments/assets/5c037de4-f4e7-4d00-8894-1bf7336519a9" />
 
 
 BearVision creates hands-free wakeboard clips. Vision detects a person and
