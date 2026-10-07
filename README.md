@@ -1,5 +1,8 @@
 # BearVision 3
 
+<img width="1536" height="1024" alt="9969" src="https://github.com/user-attachments/assets/a901bea6-47bf-4872-a893-082b7138ee87" />
+
+
 BearVision creates hands-free wakeboard clips. Vision detects a person and
 starts a fixed-duration GoPro clip. Edge publishes an anonymous Box job with the
 reduced clip and all whole-clip BearTag observations. A Python server worker
